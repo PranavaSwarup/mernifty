@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: hyperpulse-mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: hyperpulse
+    volumes:
+      - mongo-data:/data/db
+
+  hyperpulse:
+    build: .
+    container_name: hyperpulse-app
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      MONGODB_URI: mongodb://mongodb:27017/hyperpulse
+      NODE_ENV: production
+      SIMULATOR_ENABLED: "true"
+      BATCH_INTERVAL_MS: 500
+      BATCH_SIZE: 200
+    depends_on:
+      - mongodb
+
+volumes:
+  mongo-data:

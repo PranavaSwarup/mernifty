@@ -21,6 +21,7 @@ export async function fetchJson(endpoint, options = {}) {
 }
 
 export const api = {
+  fetchJson,
   // Telemetry
   getStats: () => fetchJson('/api/telemetry/stats'),
   getHistory: (params = {}) => {

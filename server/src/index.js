@@ -14,6 +14,7 @@ import deviceRoutes from './routes/deviceRoutes.js';
 import alertRoutes from './routes/alertRoutes.js';
 import simulatorRoutes from './routes/simulatorRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import copilotRoutes from './routes/copilotRoutes.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -53,6 +54,7 @@ app.use('/api/devices', deviceRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/simulator', simulatorRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/copilot', copilotRoutes);
 
 // Fallback to client index.html for SPA routing
 app.get('*', (req, res) => {

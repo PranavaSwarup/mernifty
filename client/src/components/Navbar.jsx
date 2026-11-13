@@ -1,15 +1,34 @@
 import React from 'react';
-import { Activity, Radio, Shield, Pause, Play, Cpu, MapPin, Database, Zap, BookOpen, Layers } from 'lucide-react';
+import {
+  Activity,
+  Radio,
+  Shield,
+  Pause,
+  Play,
+  Cpu,
+  MapPin,
+  Database,
+  Zap,
+  BookOpen,
+  Users,
+  Terminal,
+  Globe,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 
 export function Navbar({ activeTab, setActiveTab }) {
-  const { isConnected, stats, isPaused, togglePause, clientLatency } = useSocket();
+  const { isConnected, stats, isPaused, togglePause, clientLatency, soundEnabled, setSoundEnabled } = useSocket();
   const { user } = useAuth();
 
   const tabs = [
     { id: 'dashboard', label: 'Live Operations', icon: Activity },
     { id: 'map', label: 'Fleet Geo-Tracker', icon: MapPin },
+    { id: 'topology', label: 'Global Edge Mesh', icon: Globe },
+    { id: 'multiclient', label: 'Multi-Client Sync', icon: Users },
+    { id: 'inspector', label: 'Stream Inspector', icon: Terminal },
     { id: 'historical', label: 'Historical Analytics', icon: Database },
     { id: 'simulator', label: 'Chaos & Stress Lab', icon: Zap },
     { id: 'benchmarks', label: 'Engine Telemetry', icon: Cpu },
@@ -31,7 +50,7 @@ export function Navbar({ activeTab, setActiveTab }) {
                 HyperPulse
               </span>
               <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                v1.0 MERN
+                v1.2 PRO
               </span>
             </div>
             <p className="text-[11px] text-slate-400 hidden sm:block">
@@ -41,7 +60,7 @@ export function Navbar({ activeTab, setActiveTab }) {
         </div>
 
         {/* Navigation Tabs */}
-        <nav className="hidden md:flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+        <nav className="hidden xl:flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -49,7 +68,7 @@ export function Navbar({ activeTab, setActiveTab }) {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
                   isActive
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm shadow-emerald-500/20'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -62,8 +81,21 @@ export function Navbar({ activeTab, setActiveTab }) {
           })}
         </nav>
 
-        {/* Live Metrics & Stream Controls */}
+        {/* Live Metrics & Controls */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Audio Chime Toggle */}
+          <button
+            onClick={() => setSoundEnabled((prev) => !prev)}
+            title={soundEnabled ? 'Mute anomaly alarms' : 'Enable audio alarms'}
+            className={`p-1.5 rounded-lg border text-xs transition-colors ${
+              soundEnabled
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : 'bg-slate-800/60 border-slate-700/60 text-slate-500'
+            }`}
+          >
+            {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+          </button>
+
           {/* Pause / Resume Live Stream */}
           <button
             onClick={togglePause}
@@ -75,7 +107,7 @@ export function Navbar({ activeTab, setActiveTab }) {
             }`}
           >
             {isPaused ? <Play className="w-3.5 h-3.5 fill-current" /> : <Pause className="w-3.5 h-3.5 fill-current" />}
-            <span className="hidden sm:inline">{isPaused ? 'RESUME STREAM' : 'PAUSE'}</span>
+            <span className="hidden sm:inline">{isPaused ? 'RESUME' : 'PAUSE'}</span>
           </button>
 
           {/* Ingest Rate Ticker */}
@@ -99,8 +131,8 @@ export function Navbar({ activeTab, setActiveTab }) {
         </div>
       </div>
 
-      {/* Mobile Tab Bar */}
-      <div className="flex md:hidden items-center justify-between gap-1 overflow-x-auto pt-2 pb-1 border-t border-slate-800/50 mt-2">
+      {/* Overflow / Mobile Tab Bar */}
+      <div className="flex xl:hidden items-center gap-1 overflow-x-auto pt-2 pb-1 border-t border-slate-800/50 mt-2">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -108,11 +140,11 @@ export function Navbar({ activeTab, setActiveTab }) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap ${
                 isActive ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-slate-400'
               }`}
             >
-              <Icon className="w-3 h-3" />
+              <Icon className="w-3.5 h-3.5" />
               {tab.label}
             </button>
           );

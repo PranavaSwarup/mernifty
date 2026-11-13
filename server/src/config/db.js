@@ -10,6 +10,7 @@ export async function connectDB() {
     await mongoose.connect(config.mongoUri, {
       serverSelectionTimeoutMS: 3000,
       connectTimeoutMS: 3000,
+      socketTimeoutMS: 45000,
     });
     console.log('[DB] Successfully connected to MongoDB server.');
     return;
@@ -21,15 +22,30 @@ export async function connectDB() {
   // Option 2: Fallback to MongoMemoryServer
   try {
     const { MongoMemoryServer } = await import('mongodb-memory-server');
-    mongodInstance = await MongoMemoryServer.create();
+    mongodInstance = await MongoMemoryServer.create({
+      instance: {
+        dbName: 'hyperpulse',
+      },
+    });
     const uri = mongodInstance.getUri();
     console.log(`[DB] MongoMemoryServer started successfully at ${uri}`);
-    await mongoose.connect(uri);
+    await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 60000,
+    });
     console.log('[DB] Connected to in-memory MongoDB database.');
   } catch (memErr) {
     console.error('[DB] MongoMemoryServer initialization error:', memErr.message);
     console.warn('[DB] Continuing with memory store fallback if needed.');
   }
+
+  // Handle Mongoose connection events
+  mongoose.connection.on('disconnected', () => {
+    console.warn('[DB] Mongoose disconnected. Auto-reconnecting...');
+  });
+  mongoose.connection.on('error', (err) => {
+    console.error('[DB] Mongoose connection error:', err.message);
+  });
 }
 
 export async function disconnectDB() {

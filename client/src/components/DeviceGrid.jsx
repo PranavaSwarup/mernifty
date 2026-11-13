@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Server, Truck, Wind, Search, Filter, ShieldCheck, AlertCircle, ExternalLink, Activity } from 'lucide-react';
+import { Server, Truck, Wind, Search, Filter, ShieldCheck, AlertCircle, ExternalLink, Activity, Sparkles } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 
-export function DeviceGrid({ devices = [], onSelectDevice }) {
+export function DeviceGrid({ devices = [], onSelectDevice, onOpenCopilot }) {
   const { latestByDevice } = useSocket();
   const [filterCategory, setFilterCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -218,10 +218,24 @@ export function DeviceGrid({ devices = [], onSelectDevice }) {
                 )}
               </div>
 
-              {/* View Deep-Dive pill on hover */}
-              <div className="mt-2.5 flex items-center justify-end text-[10px] text-slate-400 group-hover:text-emerald-400 font-semibold gap-1">
-                <span>Inspect Stream</span>
-                <ExternalLink className="w-3 h-3" />
+              {/* Actions Footer */}
+              <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px]">
+                {onOpenCopilot && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenCopilot(dev);
+                    }}
+                    className="flex items-center gap-1 text-purple-400 hover:text-purple-300 font-bold px-2 py-0.5 rounded bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 transition-colors"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>AI Copilot</span>
+                  </button>
+                )}
+                <div className="flex items-center text-slate-400 group-hover:text-emerald-400 font-semibold gap-1 ml-auto">
+                  <span>Waveform</span>
+                  <ExternalLink className="w-3 h-3" />
+                </div>
               </div>
             </div>
           );

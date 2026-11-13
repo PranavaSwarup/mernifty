@@ -12,12 +12,17 @@ import { HistoricalAnalytics } from './components/HistoricalAnalytics';
 import { SimulatorControls } from './components/SimulatorControls';
 import { PerformanceBenchmark } from './components/PerformanceBenchmark';
 import { ArchitectureView } from './components/ArchitectureView';
+import { MultiClientSyncView } from './components/MultiClientSyncView';
+import { TerminalStreamInspector } from './components/TerminalStreamInspector';
+import { NetworkTopologyView } from './components/NetworkTopologyView';
+import { CopilotModal } from './components/CopilotModal';
 import { api } from './services/api';
 
 function MainApp() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [devices, setDevices] = useState([]);
   const [selectedDevice, setSelectedDevice] = useState(null);
+  const [copilotDevice, setCopilotDevice] = useState(null);
   const [alertsList, setAlertsList] = useState([]);
   const { alerts } = useSocket();
 
@@ -84,15 +89,22 @@ function MainApp() {
               </div>
             </div>
 
-            {/* Monitored Nodes Matrix */}
+            {/* Monitored Nodes Matrix with 1-Click AI Copilot */}
             <DeviceGrid
               devices={devices}
               onSelectDevice={(dev) => setSelectedDevice(dev)}
+              onOpenCopilot={(dev) => setCopilotDevice(dev)}
             />
           </>
         )}
 
         {activeTab === 'map' && <FleetMapView devices={devices} />}
+
+        {activeTab === 'topology' && <NetworkTopologyView devices={devices} />}
+
+        {activeTab === 'multiclient' && <MultiClientSyncView />}
+
+        {activeTab === 'inspector' && <TerminalStreamInspector />}
 
         {activeTab === 'historical' && <HistoricalAnalytics devices={devices} />}
 
@@ -103,11 +115,23 @@ function MainApp() {
         {activeTab === 'architecture' && <ArchitectureView />}
       </main>
 
-      {/* Deep-Dive Device Modal */}
+      {/* Deep-Dive Waveform Modal */}
       {selectedDevice && (
         <DeviceDetailModal
           device={selectedDevice}
           onClose={() => setSelectedDevice(null)}
+        />
+      )}
+
+      {/* AI Telemetry Copilot & Root-Cause Remediation Modal */}
+      {copilotDevice && (
+        <CopilotModal
+          device={copilotDevice}
+          onClose={() => setCopilotDevice(null)}
+          onRemediated={() => {
+            loadDevices();
+            loadAlerts();
+          }}
         />
       )}
 
@@ -118,11 +142,11 @@ function MainApp() {
           <div className="flex items-center gap-4 text-slate-400">
             <span>Node.js + Express.js</span>
             <span>•</span>
-            <span>MongoDB Ingestion Pipeline</span>
+            <span>MongoDB Write-Behind Ingestion</span>
             <span>•</span>
-            <span>React.js</span>
+            <span>React.js + Vite</span>
             <span>•</span>
-            <span>Socket.IO Real-time</span>
+            <span>Socket.IO Selective Rooms</span>
           </div>
         </div>
       </footer>

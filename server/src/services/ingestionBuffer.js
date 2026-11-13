@@ -122,22 +122,27 @@ class IngestionBuffer {
         },
       }));
 
-      // Execute in parallel
-      await Promise.all([
-        Telemetry.bulkWrite(telemetryOps, { ordered: false }).catch((err) => {
-          // Ignore duplicate key errors in bulk write
-          if (err.code !== 11000) {
-            console.error('[IngestBuffer] Bulk write error for Telemetry:', err.message);
-          }
-        }),
-        Device.bulkWrite(deviceOps, { ordered: false }).catch((err) => {
-          console.error('[IngestBuffer] Bulk write error for Device:', err.message);
-        }),
+      // Execute in parallel with resilient error handling
+      const results = await Promise.allSettled([
+        Telemetry.bulkWrite(telemetryOps, { ordered: false }),
+        Device.bulkWrite(deviceOps, { ordered: false }),
       ]);
 
-      metricsService.recordPersist(batch.length);
+      let writeSuccess = false;
+      for (const res of results) {
+        if (res.status === 'fulfilled') {
+          writeSuccess = true;
+        } else if (res.reason && res.reason.code !== 11000) {
+          // Log non-duplicate errors
+          console.warn('[IngestBuffer] Bulk write notice:', res.reason.message || res.reason);
+        }
+      }
+
+      if (writeSuccess) {
+        metricsService.recordPersist(batch.length);
+      }
     } catch (err) {
-      console.error('[IngestBuffer] Flush fatal error:', err);
+      console.warn('[IngestBuffer] Batch persistence notice:', err.message);
     } finally {
       this.isFlushing = false;
       // If items accumulated while flushing, trigger another flush

@@ -12,7 +12,8 @@
     "dev": "npx concurrently \"npm run server\" \"npm run client\"",
     "build": "cd client && npm run build",
     "test:ingest": "node scripts/standalone-producer.js",
-    "test:stress": "node scripts/stress-test.js"
+    "test:stress": "node scripts/stress-test.js",
+    "test": "npm --prefix server test"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
