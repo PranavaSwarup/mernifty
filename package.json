@@ -1,0 +1,20 @@
+{
+  "name": "mernify-hyperpulse",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "HyperPulse: Real-Time High-Throughput Streams & Telemetry Monitoring Platform (MERN + Socket.IO)",
+  "scripts": {
+    "install:server": "cd server && npm install",
+    "install:client": "cd client && npm install",
+    "install:all": "npm run install:server && npm run install:client",
+    "server": "cd server && npm start",
+    "client": "cd client && npm run dev",
+    "dev": "npx concurrently \"npm run server\" \"npm run client\"",
+    "build": "cd client && npm run build",
+    "test:ingest": "node scripts/standalone-producer.js",
+    "test:stress": "node scripts/stress-test.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
