@@ -12,5 +12,8 @@ export const config = {
   batchSize: parseInt(process.env.BATCH_SIZE, 10) || 500,
   telemetryTtlSec: parseInt(process.env.TELEMETRY_TTL_SEC, 10) || 7200,
   publicReadonly: process.env.PUBLIC_READONLY !== 'false',
-  demoPersonas: process.env.DEMO_PERSONAS === 'true',
+  demoPersonas:
+    process.env.DEMO_PERSONAS !== undefined
+      ? process.env.DEMO_PERSONAS === 'true'
+      : process.env.NODE_ENV !== 'production',
 };

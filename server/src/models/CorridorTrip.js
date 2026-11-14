@@ -27,3 +27,4 @@ const CorridorTripSchema = new mongoose.Schema(
 );
 
 export const CorridorTrip = mongoose.model('CorridorTrip', CorridorTripSchema);
+

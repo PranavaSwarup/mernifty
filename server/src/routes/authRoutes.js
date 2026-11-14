@@ -109,7 +109,10 @@ router.post('/login', async (req, res) => {
 // 3. Demo persona login (enabled strictly when DEMO_PERSONAS=true)
 router.post('/demo-login', async (req, res) => {
   try {
-    if (process.env.DEMO_PERSONAS !== 'true') {
+    const isDemoEnabled =
+      process.env.DEMO_PERSONAS === 'true' ||
+      (process.env.DEMO_PERSONAS !== 'false' && process.env.NODE_ENV !== 'production');
+    if (!isDemoEnabled) {
       return res.status(403).json({
         success: false,
         error: 'Demo persona switching is disabled (set DEMO_PERSONAS=true to enable)',

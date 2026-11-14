@@ -66,3 +66,4 @@ router.get('/history', publicReadOrAuth, async (req, res) => {
 });
 
 export default router;
+
