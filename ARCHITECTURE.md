@@ -210,3 +210,34 @@ Measuring true `server emit -> client render` latency across separate machines c
 2. The client estimates clock offset $\theta = \frac{(t_1 - t_0) + (t_2 - t_3)}{2}$ using a rolling median of the 7 most recent pongs to reject transient jitter.
 3. Each outbound Wire v1 frame carries server emit epoch `et`. After `hotStore.applyBatch(...)` commits to React's external store, a `requestAnimationFrame` callback captures post-paint timestamp `t_render` and computes `e2eMs = max(0, t_render - (et - offset))`.
 4. Every 5 seconds, `SocketContext` emits bounded samples and summary percentiles on `client:latency`, which the server records into the `client_e2e_ms{room}` OTel histogram.
+
+---
+
+## 8. Traffic Physics Self-Consistency, Calibration & Controlled Study
+
+### Exact Approach Saturation ($v/c$) & Segment Speed Derivation
+All approach-level speed, delay, and status indicators derive from unified corridor physics over a fixed approach control segment of length $L_{\text{seg}} = 400\text{ m}$ (`APPROACH_SEGMENT_LENGTH_M` in `server/src/sim/network.js`) with free-flow speed $v_{\text{free}} = 40\text{ km/h}$ (`FREE_FLOW_SPEED_KMPH`) and jam crawl floor $v_{\min} = 3\text{ km/h}$ (`MIN_SPEED_KMPH`):
+
+$$v/c = \frac{\lambda_i}{S_i \cdot \text{incidentFactor}_i \cdot \text{weatherCap} \cdot g_{\text{eff},i}}$$
+
+- **Arrival rate ($\lambda_i$)**: Rolling 60-second exogenous + upstream platoon arrival count divided by 60 s (`rollingSum / 60`).
+- **Realised effective green ratio ($g_{\text{eff},i}$)**: Taken from `RealisedTimingTracker.getSummary().alignedGreenSharePct[i] / 100` (falling back to rolling `greenSharePct` over the 300 s window when an acyclic controller skips a phase, or planned `split / cycle` during the first 20 s warmup; aligns to full all-phase rotations when cyclic to eliminate partial-cycle aliasing). Clamped to $[0.05, 0.90]$.
+- **Segment travel-time speed ($v_i$)**: Estimates per-vehicle control and overflow delay on top of $400\text{ m}$ free-flow traversal time ($t_{\text{free}} = 400 / (40 / 3.6) = 36\text{ s}$):
+  - **HCM uniform red delay**: $d_1 = 0.5 \cdot C \cdot \frac{(1 - g_{\text{eff},i})^2}{1 - \min(0.95, v/c \cdot g_{\text{eff},i})}$
+  - **BPR overflow penalty**: $d_2 = 0.35 \cdot C \cdot (\max(0, v/c - 0.85))^{1.8}$
+  - **Little's Law queue wait**: $Q_i / \max(0.05, \text{effCap}_i)$ (weighted when $\lambda_i$ is low so lingering queues clear accurately)
+  - Resulting segment speed $v_i = \max(3, \min(\frac{400}{(t_{\text{free}} + d_{\text{ctrl}}) / 3.6}, v_{\text{storage}}))$ is bounded above by both segment traversal speed and storage-collapse Greenshields speed, so $v/c \ge 1.0$ or growing queues cannot coexist with contradictory free-flow speeds.
+
+### Multi-Factor Status Classification
+Both backend telemetry normalization (`classifyTrafficStatus` in `server/src/sim/network.js`) and UI classification (`classifyJunctionStatus` in `client/src/utils/semantics.jsx`) enforce consistent saturation thresholds:
+1. **`critical`** (`Incident` / `Emergency`): Active stalled vehicle or emergency responder preemption.
+2. **`gridlock`** (`Gridlock`): $\text{maxQueueM} > 180$, $\text{avgSpeedKmph} < 10$, $\text{avgDelaySec} \ge 65$, or severe sustained overload ($v/c \ge 2.0$ with $\text{maxQueueM} \ge 60$).
+3. **`congested`** (`Heavy`): $\text{maxQueueM} > 120$, $\text{avgSpeedKmph} < 15$, $v/c \ge 1.0$, or $\text{avgDelaySec} \ge 35$. Sustaining $v/c \ge 1.0$ can never classify as `healthy` (`Flow`).
+4. **`warning`** (`Heavy`): $\text{maxQueueM} > 85$, $\text{avgSpeedKmph} < 20$, $v/c \ge 0.85$, or $\text{avgDelaySec} \ge 22$.
+5. **`healthy`** (`Flow`): Otherwise.
+
+### Honest PM-Peak Calibration & Empirical Benchmark Findings
+- **External Reference Calibration**: TomTom's Bengaluru Traffic Index reports citywide average speeds near **16.6 km/h** overall and **13.9 km/h** during peak rush hours (~13.2 km/h evening peak). Under the calibrated `pm-peak` preset (`18:30 IST`, effective `0.30x` network scale = `BASE_DEMAND_SCALE 0.25 * 1.20`), MetroPulse BLR produces a network arterial mean speed starting near **17.8 km/h** (14–21 km/h across the 12 corridors) and settling around **~16.5 km/h** over sustained peak flow.
+- **Controlled Empirical Study (`npm run study` — 1,200 CRN Episodes, 30 Cells × 10 Seeds × 1800 s)**:
+  - **Moderate / Undersaturated & Disrupted Regimes**: Normalized capacity-aware Max-Pressure (`max-pressure-ca`) achieves statistically significant delay reductions vs offline `fixed-tod` in **11/15** stationary cells (up to `-11.1%` at `am-peak @ 0.25`, `-3.3%` at `pm-peak @ 0.25`) and **11/15** disrupted `surge_incident` cells (up to `-45.6%` delay). EWMA `webster` wins **2/15** heavy-AM stationary cells (up to `-8.0%`) and **12/15** disrupted cells under asymmetric surges.
+  - **Stationary Heavy PM-Peak Saturation (`0.30–0.35`)**: Offline Webster-tuned `fixed-tod` retains the lowest delay (`70.84 s/veh` at `pm-peak @ 0.35`), beating raw Max-Pressure (`133.82 s/veh`, `+88.9%`) and `max-pressure-ca` (`105.86 s/veh`, `+49.4%`) because long 150 s cycles avoid 4 s intergreen switch losses when all phases remain near capacity. The live counterfactual badge (`Delay vs baseline: +x%` / `-x%`) reports both wins and losses honestly against the paired fixed-time shadow baseline.

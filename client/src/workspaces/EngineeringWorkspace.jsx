@@ -530,7 +530,7 @@ export function EngineeringWorkspace({ devices = [] }) {
       {/* Sticky Section Anchor Navigation */}
       <nav
         aria-label="Engineering sections"
-        className="sticky top-[52px] z-30 console-panel px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-sm"
+        className="sticky top-[77px] z-30 console-panel px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-sm"
       >
         <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
           {[
@@ -557,7 +557,7 @@ export function EngineeringWorkspace({ devices = [] }) {
       </nav>
 
       {/* SECTION 1: OpenTelemetry Trace Waterfall & Histogram Percentiles */}
-      <section id="eng-otel" className="scroll-mt-[104px] console-panel p-4 space-y-4">
+      <section id="eng-otel" className="scroll-mt-[128px] console-panel p-4 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-hairline">
           <div>
             <h2 className="text-xs font-semibold text-ink-primary">
@@ -778,7 +778,7 @@ export function EngineeringWorkspace({ devices = [] }) {
       </section>
 
       {/* SECTION 2: Wire v1 Inspector + Integrity & Cursor Resume */}
-      <section id="eng-wire" className="scroll-mt-16 grid grid-cols-1 xl:grid-cols-12 gap-4">
+      <section id="eng-wire" className="scroll-mt-[128px] grid grid-cols-1 xl:grid-cols-12 gap-4">
         <WireStreamTap wireComp={wireComp} isPaused={isPaused} togglePause={togglePause} />
 
         {/* Integrity & 10s Disconnect Resume Demo */}
@@ -882,7 +882,7 @@ export function EngineeringWorkspace({ devices = [] }) {
       </section>
 
       {/* SECTION 3: 30-Cell Controlled Study Matrix (Honesty rule #4) */}
-      <section id="eng-study" className="scroll-mt-16 console-panel p-4 space-y-3">
+      <section id="eng-study" className="scroll-mt-[128px] console-panel p-4 space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h2 className="text-xs font-semibold text-ink-primary">
@@ -1005,7 +1005,7 @@ export function EngineeringWorkspace({ devices = [] }) {
       </section>
 
       {/* SECTION 4: Load Benchmark Accounting + 10s Live Probe */}
-      <section id="eng-bench" className="scroll-mt-16 console-panel p-4 space-y-3">
+      <section id="eng-bench" className="scroll-mt-[128px] console-panel p-4 space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-xs font-semibold text-ink-primary">
@@ -1140,7 +1140,7 @@ export function EngineeringWorkspace({ devices = [] }) {
       </section>
 
       {/* SECTION 5: Scenario Presets, Chaos Lab & Simulator Controls */}
-      <section id="eng-chaos" className="scroll-mt-[104px] console-panel p-4 space-y-4">
+      <section id="eng-chaos" className="scroll-mt-[128px] console-panel p-4 space-y-4">
         {/* Realistic Bengaluru Scenario Presets + Admin Speed Controls */}
         <div className="pb-3 border-b border-hairline space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1294,7 +1294,7 @@ export function EngineeringWorkspace({ devices = [] }) {
       </section>
 
       {/* SECTION 6: System Architecture Diagram */}
-      <section id="eng-arch" className="scroll-mt-[104px] console-panel p-4 space-y-2">
+      <section id="eng-arch" className="scroll-mt-[128px] console-panel p-4 space-y-2">
         <h2 className="text-xs font-semibold text-ink-primary">
           Implemented System Architecture
         </h2>

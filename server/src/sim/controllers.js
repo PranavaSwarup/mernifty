@@ -105,12 +105,14 @@ class RealisedTimingTracker {
 
     this.slices = []; // { startSec, endSec, phaseIndex, inIntergreen }
     this.episodes = []; // completed green episodes: { phaseIndex, durationSec, endSec }
-    this.cycleLengths = []; // { durationSec, endSec }
+    this.cycleLengths = []; // { startSec, durationSec, endSec, fullCoverage }
     this._activeEpisodeStart = 0;
     this._activePhase = null;
     this._activeInIntergreen = false;
     this._lastCycleStartSec = null;
     this._sawNonZeroPhase = false;
+    this._cyclePhasesMask = 0;
+    this._cycleEpisodeCount = 0;
     this._lastNowSec = null;
   }
 
@@ -120,6 +122,8 @@ class RealisedTimingTracker {
       this._activeInIntergreen = inIntergreen;
       this._activeEpisodeStart = nowSec;
       this._lastCycleStartSec = phaseIndex === 0 && !inIntergreen ? nowSec : null;
+      this._cyclePhasesMask = !inIntergreen && phaseIndex >= 0 && phaseIndex < 30 ? 1 << phaseIndex : 0;
+      this._cycleEpisodeCount = !inIntergreen && phaseIndex === 0 ? 1 : 0;
       this._lastNowSec = nowSec;
       return;
     }
@@ -154,16 +158,31 @@ class RealisedTimingTracker {
       this._activeEpisodeStart = nowSec;
       if (phaseIndex === 0 && this._sawNonZeroPhase) {
         if (this._lastCycleStartSec !== null) {
+          const fullMask = this.numPhases > 0 && this.numPhases <= 30 ? (1 << this.numPhases) - 1 : 0;
           this.cycleLengths.push({
+            startSec: this._lastCycleStartSec,
             durationSec: nowSec - this._lastCycleStartSec,
             endSec: nowSec,
+            fullCoverage:
+              fullMask > 0 &&
+              (this._cyclePhasesMask & fullMask) === fullMask &&
+              this._cycleEpisodeCount === this.numPhases,
           });
         }
         this._lastCycleStartSec = nowSec;
         this._sawNonZeroPhase = false;
+        this._cyclePhasesMask = 1 << 0;
+        this._cycleEpisodeCount = 1;
       } else if (phaseIndex === 0 && this._lastCycleStartSec === null) {
         this._lastCycleStartSec = nowSec;
+        this._cyclePhasesMask = 1 << 0;
+        this._cycleEpisodeCount = 1;
+      } else if (phaseIndex >= 0 && phaseIndex < 30 && this._lastCycleStartSec !== null) {
+        this._cyclePhasesMask |= 1 << phaseIndex;
+        this._cycleEpisodeCount += 1;
       }
+    } else if (!inIntergreen && phaseIndex >= 0 && phaseIndex < 30 && this._lastCycleStartSec !== null) {
+      this._cyclePhasesMask |= 1 << phaseIndex;
     }
 
     this._activePhase = phaseIndex;
@@ -185,17 +204,43 @@ class RealisedTimingTracker {
 
   getSummary(nowSec) {
     const cutoff = nowSec - this.windowSec;
+    const earliestSliceStart = this.slices.length > 0 ? this.slices[0].startSec : nowSec;
+    // Align green-share accounting to full completed cycles covering all phases when available
+    const validCycles = this.cycleLengths.filter(
+      (c) =>
+        c.fullCoverage &&
+        c.startSec !== undefined &&
+        c.startSec >= earliestSliceStart &&
+        c.endSec > cutoff
+    );
+    const hasCompletedCycles = validCycles.length > 0 && nowSec - validCycles[validCycles.length - 1].endSec < 180;
+    const shareStart = hasCompletedCycles ? validCycles[0].startSec : cutoff;
+    const shareEnd = hasCompletedCycles ? validCycles[validCycles.length - 1].endSec : nowSec;
+
     const greenSec = new Array(this.numPhases).fill(0);
+    const alignedGreenSec = new Array(this.numPhases).fill(0);
     let totalObserved = 0;
+    let alignedObserved = 0;
 
     for (let i = 0; i < this.slices.length; i++) {
       const sl = this.slices[i];
       const clampedStart = Math.max(sl.startSec, cutoff);
       const dur = Math.max(0, sl.endSec - clampedStart);
-      if (dur <= 0) continue;
-      totalObserved += dur;
-      if (!sl.inIntergreen && sl.phaseIndex >= 0 && sl.phaseIndex < this.numPhases) {
-        greenSec[sl.phaseIndex] += dur;
+      if (dur > 0) {
+        totalObserved += dur;
+        if (!sl.inIntergreen && sl.phaseIndex >= 0 && sl.phaseIndex < this.numPhases) {
+          greenSec[sl.phaseIndex] += dur;
+        }
+      }
+
+      const aStart = Math.max(sl.startSec, shareStart);
+      const aEnd = Math.min(sl.endSec, shareEnd);
+      const aDur = Math.max(0, aEnd - aStart);
+      if (aDur > 0) {
+        alignedObserved += aDur;
+        if (!sl.inIntergreen && sl.phaseIndex >= 0 && sl.phaseIndex < this.numPhases) {
+          alignedGreenSec[sl.phaseIndex] += aDur;
+        }
       }
     }
 
@@ -231,6 +276,11 @@ class RealisedTimingTracker {
     const greenSharePct = greenSec.map((g) =>
       totalObserved > 0 ? Number(((g / totalObserved) * 100).toFixed(1)) : 0
     );
+    const ratioDenom = hasCompletedCycles && alignedObserved > 0 ? alignedObserved : totalObserved;
+    const ratioNums = hasCompletedCycles && alignedObserved > 0 ? alignedGreenSec : greenSec;
+    const alignedGreenSharePct = ratioNums.map((g) =>
+      ratioDenom > 0 ? Number(((g / ratioDenom) * 100).toFixed(1)) : 0
+    );
 
     return {
       windowSec: this.windowSec,
@@ -239,6 +289,7 @@ class RealisedTimingTracker {
       splits,
       greenSec: greenSec.map((g) => Number(g.toFixed(1))),
       greenSharePct,
+      alignedGreenSharePct,
       phaseSwitches: totalEpisodes,
     };
   }
@@ -253,6 +304,8 @@ class RealisedTimingTracker {
     copy._activeInIntergreen = this._activeInIntergreen;
     copy._lastCycleStartSec = this._lastCycleStartSec;
     copy._sawNonZeroPhase = this._sawNonZeroPhase;
+    copy._cyclePhasesMask = this._cyclePhasesMask;
+    copy._cycleEpisodeCount = this._cycleEpisodeCount;
     copy._lastNowSec = this._lastNowSec;
     return copy;
   }
@@ -460,8 +513,9 @@ export class WebsterController {
       (a) => a.saturationFlowPerSec ?? (a.lanes || 2) * this.s0
     );
 
+    const initFactor = options.initialDemandFactor ?? 1;
     this.ewmaFlows = approaches.map((a) =>
-      options.zeroInitFlows ? 0 : (a.baseDemandPerSec ?? 0)
+      options.zeroInitFlows ? 0 : (a.baseDemandPerSec ?? 0) * initFactor
     );
 
     const initialPlan = this._computePlanFromEwma();
@@ -932,8 +986,9 @@ export class AutoSupervisoryController {
       (a) => a.saturationFlowPerSec ?? (a.lanes || 2) * this.s0
     );
     this.storageCaps = approaches.map((a) => a.storageCapVeh ?? 150);
+    const initFactor = options.initialDemandFactor ?? 1;
     this.ewmaFlows = approaches.map((a) =>
-      options.zeroInitFlows ? 0 : (a.baseDemandPerSec ?? 0)
+      options.zeroInitFlows ? 0 : (a.baseDemandPerSec ?? 0) * initFactor
     );
 
     this.delegates = {

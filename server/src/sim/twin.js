@@ -155,11 +155,16 @@ export class CounterfactualPair {
       const delaySavedVehHours = delaySavedVehSec / 3600;
       const delayReductionPct =
         b.kpi.delayVehSec > 0 ? (delaySavedVehSec / b.kpi.delayVehSec) * 100 : 0;
+      const jDelayDeltaVsBaselinePct =
+        b.kpi.avgDelayPerVehSec > 0
+          ? ((l.kpi.avgDelayPerVehSec - b.kpi.avgDelayPerVehSec) / b.kpi.avgDelayPerVehSec) * 100
+          : 0;
 
       byJunction[id] = {
         delaySavedVehSec: Number(delaySavedVehSec.toFixed(2)),
         delaySavedVehHours: Number(delaySavedVehHours.toFixed(4)),
         delayReductionPct: Number(delayReductionPct.toFixed(2)),
+        delayDeltaVsBaselinePct: Number(jDelayDeltaVsBaselinePct.toFixed(2)),
         live: {
           controller: l.control.controller,
           delayVehSec: l.kpi.delayVehSec,
@@ -185,6 +190,12 @@ export class CounterfactualPair {
     const totalDelayReductionPct =
       baseSnap.network.totalDelayVehSec > 0
         ? (totalDelaySavedVehSec / baseSnap.network.totalDelayVehSec) * 100
+        : 0;
+    const delayDeltaVsBaselinePct =
+      baseSnap.network.avgDelayPerVehSec > 0
+        ? ((liveSnap.network.avgDelayPerVehSec - baseSnap.network.avgDelayPerVehSec) /
+            baseSnap.network.avgDelayPerVehSec) *
+          100
         : 0;
 
     const completedLiveTimes = [];
@@ -215,6 +226,7 @@ export class CounterfactualPair {
       delaySavedVehHours: Number(totalDelaySavedVehHours.toFixed(4)),
       delaySavedVehSec: Number(totalDelaySavedVehSec.toFixed(2)),
       delayReductionPct: Number(totalDelayReductionPct.toFixed(2)),
+      delayDeltaVsBaselinePct: Number(delayDeltaVsBaselinePct.toFixed(2)),
       live: {
         totalDelayVehSec: liveSnap.network.totalDelayVehSec,
         totalDelayVehHours: liveSnap.network.totalDelayVehHours,

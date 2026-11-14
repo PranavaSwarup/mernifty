@@ -451,17 +451,13 @@ export function NetworkWorkspace({
       }
     }
 
-    // 1. Corridor links colored by downstream/mean congestion state
+    // 1. Corridor links colored by bottleneck (worst directional speed) per undirected segment
     linkLayerRef.current.clearLayers();
-    const seenPairs = new Set();
+    const corridorGroups = new Map();
     for (const lnk of simState?.corridors || []) {
       const fromPos = posById.get(lnk.fromJunction);
       const toPos = posById.get(lnk.toJunction);
       if (!fromPos || !toPos) continue;
-      const pairKey = [lnk.fromJunction, lnk.toJunction].sort().join('::');
-      if (seenPairs.has(pairKey)) continue;
-      seenPairs.add(pairKey);
-
       const jFrom = junctionById.get(lnk.fromJunction);
       const jTo = junctionById.get(lnk.toJunction);
       const showBoth =
@@ -471,22 +467,45 @@ export function NetworkWorkspace({
         jTo?.zoneId === selectedZone;
       if (!showBoth) continue;
 
+      const pairKey = [lnk.fromJunction, lnk.toJunction].sort().join('::');
       const jToSpd = Number(jTo?.metrics?.avgSpeedKmph ?? jTo?.avgSpeedKmph);
       const jFromSpd = Number(jFrom?.metrics?.avgSpeedKmph ?? jFrom?.avgSpeedKmph);
       const fallbackSpeed = Number.isFinite(jToSpd) ? jToSpd : jFromSpd;
       const linkSpeed = Number.isFinite(Number(lnk.speedKmph)) ? Number(lnk.speedKmph) : fallbackSpeed;
-      const speedStyle = classifyLinkSpeed(linkSpeed, isDark);
-      const spdLabel = Number.isFinite(linkSpeed) ? `${fmtNum(linkSpeed, 1)} km/h` : speedStyle.label;
-      const vcLabel = Number.isFinite(Number(lnk.vOverC)) ? ` · v/c ${fmtNum(lnk.vOverC, 2)}` : '';
+      const linkVc = Number.isFinite(Number(lnk.vOverC)) ? Number(lnk.vOverC) : 0;
 
-      L.polyline([fromPos, toPos], {
+      const entry = corridorGroups.get(pairKey) || {
+        fromPos,
+        toPos,
+        corridor: lnk.corridor,
+        worstSpeed: Infinity,
+        worstVc: 0,
+        dirs: [],
+      };
+      if (linkSpeed < entry.worstSpeed || (linkSpeed === entry.worstSpeed && linkVc > entry.worstVc)) {
+        entry.worstSpeed = linkSpeed;
+        entry.worstVc = linkVc;
+      }
+      entry.dirs.push(
+        `${jFrom?.name || lnk.fromJunction} → ${jTo?.name || lnk.toJunction}: ${
+          Number.isFinite(linkSpeed) ? `${fmtNum(linkSpeed, 1)} km/h` : '—'
+        }${linkVc > 0 ? ` (v/c ${fmtNum(linkVc, 2)})` : ''}`
+      );
+      corridorGroups.set(pairKey, entry);
+    }
+
+    for (const group of corridorGroups.values()) {
+      const linkSpeed = Number.isFinite(group.worstSpeed) ? group.worstSpeed : 25;
+      const speedStyle = classifyLinkSpeed(linkSpeed, isDark);
+
+      L.polyline([group.fromPos, group.toPos], {
         color: speedStyle.hex,
         weight: speedStyle.weight,
         dashArray: speedStyle.dashArray,
         opacity: speedStyle.opacity,
       })
         .bindTooltip(
-          `${lnk.corridor}: ${jFrom?.name || lnk.fromJunction} <-> ${jTo?.name || lnk.toJunction} · ${spdLabel}${vcLabel}`,
+          `${group.corridor} · ${group.dirs.join(' | ')}`,
           {
             className: 'mp-tooltip',
             sticky: true,
@@ -871,29 +890,41 @@ export function NetworkWorkspace({
 
         {/* Counterfactual Panel (Honesty rule #2: Required fixed-time reference framing) */}
         <section className="p-3.5 border-b border-hairline space-y-2.5">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <h2 className="text-xs font-semibold text-ink-primary">Adaptive vs Fixed-Time</h2>
-              <p className="text-[11px] text-ink-muted">
-                vs Webster-tuned fixed-time plan, same simulated arrivals
-              </p>
-            </div>
-            {activeCf?.delayReductionPct !== undefined && (
-              <span
-                className={`px-2 py-0.5 rounded border font-mono tabular-nums text-[11px] font-semibold whitespace-nowrap shrink-0 ${
-                  activeCf.delayReductionPct >= 0
-                    ? 'border-signal-flow/40 bg-signal-flow/15 text-signal-flow'
-                    : 'border-signal-heavy/40 bg-signal-heavy/15 text-signal-heavy'
-                }`}
-              >
-                {fmtSigned(activeCf.delayReductionPct, 1, '%')} delay
-              </span>
-            )}
-          </div>
+          {(() => {
+            const liveAvg = Number(activeCf?.live?.avgDelayPerVehSec);
+            const baseAvg = Number(activeCf?.baseline?.avgDelayPerVehSec);
+            const delayDeltaPct =
+              Number.isFinite(liveAvg) && Number.isFinite(baseAvg) && baseAvg > 0
+                ? ((liveAvg - baseAvg) / baseAvg) * 100
+                : null;
+            return (
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h2 className="text-xs font-semibold text-ink-primary">Adaptive vs Fixed-Time</h2>
+                  <p className="text-[11px] text-ink-muted">
+                    vs Webster-tuned fixed-time plan, same simulated arrivals
+                  </p>
+                </div>
+                {delayDeltaPct !== null && (
+                  <span
+                    data-testid="cf-delay-delta-badge"
+                    title="Negative = live adaptive delay is lower than shadow fixed-time baseline"
+                    className={`px-2 py-0.5 rounded border font-mono tabular-nums text-[11px] font-semibold whitespace-nowrap shrink-0 ${
+                      delayDeltaPct <= 0
+                        ? 'border-signal-flow/40 bg-signal-flow/15 text-signal-flow'
+                        : 'border-signal-heavy/40 bg-signal-heavy/15 text-signal-heavy'
+                    }`}
+                  >
+                    Delay vs baseline: {fmtSigned(delayDeltaPct, 1, '%')}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="console-inset px-2.5 py-2">
-              <div className="text-[10px] text-ink-muted">Cumulative saved</div>
+              <div className="text-[10px] text-ink-muted">Delay saved</div>
               <div className="font-mono tabular-nums text-sm font-semibold text-ink-primary mt-0.5">
                 {activeCf?.delaySavedVehHours !== undefined
                   ? `${fmtSigned(activeCf.delaySavedVehHours, 2)} veh·h`

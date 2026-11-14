@@ -8,8 +8,12 @@
  * - Saturation flow: s0 = 1800 PCU/h/lane = 0.5 veh/s/lane -> S_i = 0.5 * lanes_i
  * - Effective vehicle length (BLR two-wheeler-heavy mix): L_eff = 5.5 m/veh
  *     queueLengthM = (Q_i * 5.5) / lanes_i
- * - Approach speed (modified Greenshields):
- *     v_i = v_min + (v_free - v_min) * (1 - min(1, Q_i / Q_max_i))^1.5
+ * - Approach saturation & speed (segment travel time over L_seg = 400 m):
+ *     v/c = lambda_i / (S_i * capFactor_i * weatherCap * g_eff_i)
+ *     where g_eff_i uses rolling realised greenSharePct / 100 once observed.
+ *     controlDelayEst = HCM uniform delay + BPR overflow delay + Little's Law queue wait
+ *     segmentTimeSec = L_seg / v_free_mps + controlDelayEst
+ *     speed_i = max(v_min, min(400m / segmentTimeSec * 3.6, storageCollapseSpeed))
  *     with v_free = 40 km/h, v_min = 3 km/h.
  * - Rolling 60s flow metric (`vehiclesPerMin`):
  *     Measured approach arrivals (external + upstream link arrivals) over the last 60s
@@ -23,6 +27,7 @@ import { createRng, deriveSeed } from './rng.js';
 import { demandFactor } from './demand.js';
 import {
   DEFAULT_NETWORK,
+  APPROACH_SEGMENT_LENGTH_M,
   EFFECTIVE_VEH_LENGTH_M,
   FREE_FLOW_SPEED_KMPH,
   MIN_SPEED_KMPH,
@@ -35,6 +40,10 @@ import {
 } from './controllers.js';
 
 export const EMERGENCY_WEAVING_SPEED_KMPH = 12;
+
+function clampNum(val, min, max) {
+  return Math.max(min, Math.min(max, val));
+}
 
 export class TrafficWorld {
   /**
@@ -118,6 +127,8 @@ export class TrafficWorld {
 
     // Seeded independent RNG stream per approach (guarantees Common Random Numbers across twins)
     this.approachRngs = new Array(totalApproaches);
+    this.approachJunctionIdx = new Int32Array(totalApproaches);
+    this.approachLocalIdx = new Int32Array(totalApproaches);
 
     for (let j = 0; j < this.numJunctions; j++) {
       const junc = this.junctions[j];
@@ -125,6 +136,8 @@ export class TrafficWorld {
       for (let a = 0; a < junc.approaches.length; a++) {
         const flatIdx = offset + a;
         const app = junc.approaches[a];
+        this.approachJunctionIdx[flatIdx] = j;
+        this.approachLocalIdx[flatIdx] = a;
         this.lanes[flatIdx] = app.lanes;
         this.saturationFlowPerSec[flatIdx] = app.saturationFlowPerSec;
         this.storageCapVeh[flatIdx] = app.storageCapVeh;
@@ -218,10 +231,17 @@ export class TrafficWorld {
       };
 
       if (!_skipControllers) {
+        const initialDemandFactor = Math.max(
+          0.5,
+          demandFactor(this.startTimeMs) * this.demandScale * 0.76
+        );
         this.controllers[j] =
           typeof controllerFactory === 'function'
             ? controllerFactory(junc)
-            : createController(controllerFactory, junc, { startTimeMs: this.startTimeMs });
+            : createController(controllerFactory, junc, {
+                startTimeMs: this.startTimeMs,
+                initialDemandFactor,
+              });
         this.lastDecisions[j] = this.controllers[j].decide(this.junctionStates[j], 0);
       }
     }
@@ -256,6 +276,7 @@ export class TrafficWorld {
       network: this.network,
       startTime: this.startTimeMs,
       dtSec: this.dtSec,
+      demandScale: this.demandScale,
       prewarmLinks: false,
       _skipControllers: true,
     });
@@ -619,12 +640,91 @@ export class TrafficWorld {
     return agent;
   }
 
-  _approachSpeedKmph(flatIdx) {
+  _computeApproachKinematics(flatIdx) {
+    const jIdx = this.approachJunctionIdx[flatIdx];
+    const a = this.approachLocalIdx[flatIdx];
+    const junc = this.junctions[jIdx];
+    const count = this.junctionApproachCounts[jIdx];
+    const appCfg = junc.approaches[a];
+    const decision = this.lastDecisions?.[jIdx] || null;
+
+    const windowScale =
+      this.elapsedSec > 0 && this.elapsedSec < 60 ? 60 / this.elapsedSec : 1;
+    const vehiclesPerMin = Math.round(this.rollingSum[flatIdx] * windowScale);
+    const arrivalVehPerSec = (this.rollingSum[flatIdx] * windowScale) / 60;
+
+    const greenTimeSec = decision?.splits?.[a] ?? appCfg.greenSplitSec ?? 30;
+    const fallbackGreenRatio =
+      decision && decision.cycleSec > 0
+        ? greenTimeSec / decision.cycleSec
+        : 1 / Math.max(1, count);
+    const realised = decision?.realised;
+    const shareArray = realised?.alignedGreenSharePct ?? realised?.greenSharePct;
+    const hasAlignedShare =
+      realised &&
+      realised.observedSec >= 20 &&
+      Array.isArray(shareArray) &&
+      (realised.phaseSwitches >= count || realised.observedSec >= 60);
+    const effectiveGreenRatio = hasAlignedShare
+      ? clampNum(shareArray[a] / 100, 0.05, 0.9)
+      : realised && realised.observedSec >= 20 && Array.isArray(realised.greenSec)
+        ? clampNum(realised.greenSec[a] / realised.observedSec, 0.05, 0.9)
+        : clampNum(fallbackGreenRatio, 0.05, 0.9);
+
+    const effCapVehPerSec =
+      this.saturationFlowPerSec[flatIdx] *
+      this.capacityFactor[flatIdx] *
+      this.weather.capacityFactor *
+      effectiveGreenRatio;
+
+    const rawVOverC = effCapVehPerSec > 0 ? arrivalVehPerSec / effCapVehPerSec : 3.0;
+    const vOverC = Math.min(3.0, rawVOverC);
+
+    // Urban segment (400m) travel time speed: cruise time + HCM uniform/overflow delay & Little's Law queue wait
+    const cycleEffSec =
+      realised && realised.cycleSec > 0
+        ? realised.cycleSec
+        : decision && decision.cycleSec > 0
+          ? decision.cycleSec
+          : 90;
+    const xSat = Math.min(0.98, Math.max(0, vOverC));
+    const uniformDenom = Math.max(0.15, 1 - xSat * effectiveGreenRatio);
+    const dUniformSec =
+      (0.5 * cycleEffSec * Math.pow(1 - effectiveGreenRatio, 2)) / uniformDenom;
+    const dOverflowSec = 45 * Math.max(0, rawVOverC - 0.85);
     const q = this.queueVeh[flatIdx];
+    const dQueueSec = q / Math.max(0.04, effCapVehPerSec);
+    const controlDelayEstSec = Math.max(dUniformSec + dOverflowSec, dQueueSec);
+
+    const weatherMaxSpeed = FREE_FLOW_SPEED_KMPH * this.weather.speedFactor;
+    const freeFlowMps = Math.max(MIN_SPEED_KMPH / 3.6, weatherMaxSpeed / 3.6);
+    const tFreeSec = APPROACH_SEGMENT_LENGTH_M / freeFlowMps;
+    const travelTimeSpeed = (APPROACH_SEGMENT_LENGTH_M / (tFreeSec + controlDelayEstSec)) * 3.6;
+
+    // Storage-bay Greenshields collapse guard as queue approaches physical spillover capacity
     const qMax = this.storageCapVeh[flatIdx];
     const occ = qMax > 0 ? Math.min(1, q / qMax) : 0;
-    const baseSpeed = MIN_SPEED_KMPH + (FREE_FLOW_SPEED_KMPH - MIN_SPEED_KMPH) * Math.pow(1 - occ, 1.5);
-    return baseSpeed * this.weather.speedFactor;
+    const storageCollapseSpeed =
+      (MIN_SPEED_KMPH + (FREE_FLOW_SPEED_KMPH - MIN_SPEED_KMPH) * Math.pow(1 - occ, 1.5)) *
+      this.weather.speedFactor;
+
+    const speedKmph = clampNum(
+      Math.min(travelTimeSpeed, storageCollapseSpeed),
+      MIN_SPEED_KMPH,
+      weatherMaxSpeed
+    );
+
+    return {
+      vehiclesPerMin,
+      greenTimeSec,
+      effectiveGreenRatio,
+      vOverC,
+      speedKmph,
+    };
+  }
+
+  _approachSpeedKmph(flatIdx) {
+    return this._computeApproachKinematics(flatIdx).speedKmph;
   }
 
   /**
@@ -969,11 +1069,6 @@ export class TrafficWorld {
     const offset = this.junctionApproachOffsets[jIdx];
     const count = this.junctionApproachCounts[jIdx];
 
-    const windowScale =
-      this.elapsedSec > 0 && this.elapsedSec < 60
-        ? 60 / this.elapsedSec
-        : 1;
-
     let totalFlowVehiclesPerMin = 0;
     let maxQueueLengthM = 0;
     let sumSpeed = 0;
@@ -992,12 +1087,13 @@ export class TrafficWorld {
 
       const q = this.queueVeh[flatIdx];
       const qLenM = (q * EFFECTIVE_VEH_LENGTH_M) / this.lanes[flatIdx];
-      const speedKmph = this._approachSpeedKmph(flatIdx);
-      const vehiclesPerMin = Math.round(this.rollingSum[flatIdx] * windowScale);
+      const kin = this._computeApproachKinematics(flatIdx);
+      const speedKmph = kin.speedKmph;
+      const vehiclesPerMin = kin.vehiclesPerMin;
 
       const isGreen = !decision.inIntergreen && a === decision.phaseIndex;
       const signal = isGreen ? 'green' : decision.inIntergreen && a === decision.phaseIndex ? 'amber' : 'red';
-      const greenTimeSec = decision.splits[a] ?? appCfg.greenSplitSec ?? 30;
+      const greenTimeSec = kin.greenTimeSec;
 
       if (this.incidents.has(flatIdx)) {
         stalledVehicleDetected = true;
@@ -1011,14 +1107,7 @@ export class TrafficWorld {
       jThroughputVeh += this.totalDeparted[flatIdx];
       jArrivedVeh += this.totalArrived[flatIdx];
 
-      const greenShare = decision.cycleSec > 0 ? greenTimeSec / decision.cycleSec : 0.25;
-      const approachCapVehPerSec =
-        this.saturationFlowPerSec[flatIdx] *
-        this.capacityFactor[flatIdx] *
-        this.weather.capacityFactor *
-        greenShare;
-      const arrivalVehPerSec = (this.rollingSum[flatIdx] * windowScale) / 60;
-      const vOverC = approachCapVehPerSec > 0 ? arrivalVehPerSec / approachCapVehPerSec : 1.5;
+      const vOverC = kin.vOverC;
       if (vOverC > maxSatRatio) maxSatRatio = vOverC;
 
       const storageRatio = this.storageCapVeh[flatIdx] > 0 ? Math.min(1, q / this.storageCapVeh[flatIdx]) : 0;
@@ -1034,7 +1123,8 @@ export class TrafficWorld {
         avgSpeedKmph: Number(speedKmph.toFixed(1)),
         signal,
         greenTimeSec,
-        vOverC: Number(Math.min(3.0, vOverC).toFixed(3)),
+        effectiveGreenRatio: Number(kin.effectiveGreenRatio.toFixed(3)),
+        vOverC: Number(vOverC.toFixed(3)),
         storageRatio: Number(storageRatio.toFixed(3)),
       };
     }

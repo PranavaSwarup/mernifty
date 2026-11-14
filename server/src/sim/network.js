@@ -27,6 +27,7 @@ import { computeWebsterPlan } from './controllers.js';
 export const ROAD_TORTUOSITY_FACTOR = 1.3;
 export const FREE_FLOW_SPEED_KMPH = 40;
 export const MIN_SPEED_KMPH = 3;
+export const APPROACH_SEGMENT_LENGTH_M = 400; // Representative signalized arterial approach segment (m)
 export const EFFECTIVE_VEH_LENGTH_M = 5.5; // PCU-equivalent length for BLR two-wheeler-heavy mix
 export const SATURATION_PER_LANE_VEH_PER_SEC = 0.5; // 1800 PCU/h/lane
 export const BASE_DEMAND_SCALE = 0.25;
@@ -257,6 +258,38 @@ export function buildNetwork(optionsOrDevices = {}, rawLinksArg = RAW_CORRIDOR_L
     junctionMap,
     demandScale,
   };
+}
+
+/**
+ * Classify junction status from combined queue, speed, v/c saturation, and delay
+ * so undersaturated queues cannot mask v/c >= 1.0 oversaturation.
+ */
+export function classifyTrafficStatus(trafficData = {}) {
+  if (trafficData.stalledVehicleDetected || trafficData.ambulanceDetected) {
+    return 'critical';
+  }
+  const q = Number(trafficData.maxQueueLengthM ?? 0);
+  const spd = Number(trafficData.avgSpeedKmph ?? FREE_FLOW_SPEED_KMPH);
+  const vc = Number(
+    trafficData.kpi?.degreeOfSaturation ??
+      trafficData.degreeOfSaturation ??
+      trafficData.vOverC ??
+      0
+  );
+  const delay = Number(
+    trafficData.kpi?.avgDelayPerVehSec ?? trafficData.avgDelayPerVehSec ?? 0
+  );
+
+  if (q > 180 || spd < 10 || delay >= 65 || (vc >= 2.0 && q >= 60)) {
+    return 'gridlock';
+  }
+  if (q > 120 || spd < 15 || vc >= 1.0 || delay >= 35) {
+    return 'congested';
+  }
+  if (q > 85 || spd < 20 || vc >= 0.85 || delay >= 22) {
+    return 'warning';
+  }
+  return 'healthy';
 }
 
 export const DEFAULT_NETWORK = buildNetwork();

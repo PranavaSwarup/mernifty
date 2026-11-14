@@ -12,8 +12,10 @@ import { demandFactor } from '../src/sim/demand.js';
 import {
   buildNetwork,
   DEFAULT_NETWORK,
+  APPROACH_SEGMENT_LENGTH_M,
   FREE_FLOW_SPEED_KMPH,
   MIN_SPEED_KMPH,
+  classifyTrafficStatus,
 } from '../src/sim/network.js';
 import { TrafficWorld, EMERGENCY_WEAVING_SPEED_KMPH } from '../src/sim/engine.js';
 import { CounterfactualPair } from '../src/sim/twin.js';
@@ -890,4 +892,109 @@ test('18. Scenario presets & SIM_START resolution: PM/Monsoon/Stall CRN alignmen
   simulatorService.stepPhysics();
   assert.strictEqual(simulatorService.pair.live.snapshot('JNC-BLR-001').stalledVehicleDetected, true);
   assert.strictEqual(simulatorService.pair.baseline.snapshot('JNC-BLR-001').stalledVehicleDetected, true);
+});
+
+test('19. Counterfactual sign consistency: delayDeltaVsBaselinePct matches (live - base) / base * 100 and delaySavedVehHours matches base - live', () => {
+  // Regime A: lighter midday demand where Max-Pressure reduces average delay (< 0% delta, > 0 saved veh-h)
+  const betterPair = new CounterfactualPair({
+    seed: 101,
+    startTime: '2026-11-14T08:00:00.000Z', // 13:30 IST midday
+    liveControllerFactory: 'max-pressure-ca',
+  });
+  for (let i = 0; i < 600; i++) betterPair.step();
+  const betterCmp = betterPair.comparison();
+  assert.ok(
+    betterCmp.live.avgDelayPerVehSec < betterCmp.baseline.avgDelayPerVehSec,
+    `Expected midday MP-CA live delay (${betterCmp.live.avgDelayPerVehSec}) < baseline (${betterCmp.baseline.avgDelayPerVehSec})`
+  );
+  const expectedBetterPct =
+    ((betterCmp.live.avgDelayPerVehSec - betterCmp.baseline.avgDelayPerVehSec) /
+      betterCmp.baseline.avgDelayPerVehSec) *
+    100;
+  assert.ok(
+    betterCmp.delayDeltaVsBaselinePct < 0,
+    `Lower live delay must yield negative delayDeltaVsBaselinePct, got ${betterCmp.delayDeltaVsBaselinePct}`
+  );
+  assert.ok(
+    Math.abs(betterCmp.delayDeltaVsBaselinePct - expectedBetterPct) < 0.05,
+    `Expected ${expectedBetterPct.toFixed(2)}%, got ${betterCmp.delayDeltaVsBaselinePct}`
+  );
+  assert.ok(
+    betterCmp.delaySavedVehHours > 0,
+    `Lower cumulative live delay must give positive delaySavedVehHours, got ${betterCmp.delaySavedVehHours}`
+  );
+
+  // Regime B: saturated PM Peak where fixed-naive / poorer timing increases delay (> 0% delta, < 0 saved veh-h)
+  const worsePair = new CounterfactualPair({
+    seed: 101,
+    startTime: EVENING_PEAK_START,
+    demandScale: 1.35,
+    liveControllerFactory: 'max-pressure',
+  });
+  for (let i = 0; i < 600; i++) worsePair.step();
+  const worseCmp = worsePair.comparison();
+  assert.ok(
+    worseCmp.live.avgDelayPerVehSec > worseCmp.baseline.avgDelayPerVehSec,
+    `Expected oversaturated raw MP live delay (${worseCmp.live.avgDelayPerVehSec}) > baseline (${worseCmp.baseline.avgDelayPerVehSec})`
+  );
+  assert.ok(
+    worseCmp.delayDeltaVsBaselinePct > 0,
+    `Higher live delay must yield positive delayDeltaVsBaselinePct, got ${worseCmp.delayDeltaVsBaselinePct}`
+  );
+  assert.ok(
+    worseCmp.delaySavedVehHours < 0,
+    `Higher cumulative live delay must give negative delaySavedVehHours, got ${worseCmp.delaySavedVehHours}`
+  );
+});
+
+test('20. Physics & status self-consistency: v/c, 400m segment speed, heavy status when v/c >= 1.0, and ORR stall congestion', () => {
+  assert.strictEqual(APPROACH_SEGMENT_LENGTH_M, 400);
+  // Status classifier must never return healthy when degreeOfSaturation >= 1.0
+  const overSatStatus = classifyTrafficStatus({
+    maxQueueLengthM: 25,
+    avgSpeedKmph: 28,
+    kpi: { degreeOfSaturation: 1.25, avgDelayPerVehSec: 20 },
+  });
+  assert.strictEqual(overSatStatus, 'congested');
+
+  // Verify approach speed bounds and v/c vs status alignment across PM Peak
+  simulatorService.applyScenario('pm-peak', { actor: 'test-suite' });
+  const pmState = simulatorService.getState();
+  const pmMeanSpeed =
+    pmState.junctions.reduce((acc, j) => acc + j.avgSpeedKmph, 0) / pmState.junctions.length;
+  assert.ok(
+    pmMeanSpeed >= 12 && pmMeanSpeed <= 23,
+    `Calibrated PM peak network speed (${pmMeanSpeed.toFixed(1)} km/h) should lie in realistic Bengaluru range`
+  );
+  for (const j of pmState.junctions) {
+    if (j.kpi.degreeOfSaturation >= 1.0) {
+      assert.notStrictEqual(
+        j.status,
+        'healthy',
+        `Junction ${j.junctionId} has v/c=${j.kpi.degreeOfSaturation} >= 1.0 so status must not be healthy`
+      );
+    }
+    for (const app of j.approaches) {
+      assert.ok(
+        app.avgSpeedKmph >= MIN_SPEED_KMPH && app.avgSpeedKmph <= FREE_FLOW_SPEED_KMPH,
+        `Approach speed ${app.avgSpeedKmph} out of bounds`
+      );
+    }
+  }
+
+  // Verify PM + Silk Board stall slows Silk Board ORR approach & upstream link LNK-005-001 within 120 sim-sec
+  simulatorService.applyScenario('pm-stalled-silkboard', { actor: 'test-suite' });
+  for (let i = 0; i < 90; i++) simulatorService.stepPhysics();
+  const afterStall = simulatorService.getState();
+  const sb = afterStall.junctions.find((j) => j.junctionId === 'JNC-BLR-001');
+  const orrInLink = afterStall.corridors.find((c) => c.id === 'LNK-005-001');
+  assert.strictEqual(sb.status, 'critical');
+  assert.ok(
+    sb.approaches[1].vOverC >= 1.8 && sb.approaches[1].avgSpeedKmph <= 8,
+    `Silk Board stalled ORR approach should saturate & slow sharply (got v/c=${sb.approaches[1].vOverC}, spd=${sb.approaches[1].avgSpeedKmph})`
+  );
+  assert.ok(
+    orrInLink && orrInLink.speedKmph <= 12,
+    `Upstream corridor Bellandur -> Silk Board (LNK-005-001) should slow <= 12 km/h within 2 sim-minutes (got ${orrInLink?.speedKmph})`
+  );
 });

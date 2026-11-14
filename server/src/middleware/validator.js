@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { z } from 'zod';
 import { INITIAL_DEVICES } from '../sim/junctions.data.js';
+import { classifyTrafficStatus } from '../sim/network.js';
 import { recordRejected, withSyncSpan } from '../telemetry/instruments.js';
 
 export const JUNCTION_CATALOGUE = new Map(
@@ -205,16 +206,8 @@ export function normalizeTrafficEvent(raw) {
     ...(v.metrics && typeof v.metrics === 'object' ? v.metrics : {}),
   };
 
-  let status = v.status ?? 'healthy';
-  if (stalledVehicleDetected || ambulanceDetected) {
-    status = 'critical';
-  } else if (enrichedData.maxQueueLengthM > 180 || enrichedData.avgSpeedKmph < 7) {
-    status = 'gridlock';
-  } else if (enrichedData.maxQueueLengthM > 120 || enrichedData.avgSpeedKmph < 12) {
-    status = 'congested';
-  } else if (enrichedData.maxQueueLengthM > 85) {
-    status = 'warning';
-  }
+  const derivedStatus = classifyTrafficStatus(enrichedData);
+  const status = derivedStatus !== 'healthy' ? derivedStatus : (v.status ?? 'healthy');
 
   return {
     eventId,

@@ -5,7 +5,7 @@ import { anomalyEngine } from './anomalyEngine.js';
 import { socketService } from './socketService.js';
 import { metricsService } from './metricsService.js';
 import { INITIAL_DEVICES } from '../sim/junctions.data.js';
-import { DEFAULT_NETWORK } from '../sim/network.js';
+import { DEFAULT_NETWORK, classifyTrafficStatus } from '../sim/network.js';
 import { CounterfactualPair } from '../sim/twin.js';
 import { getIstHour, getTodPeriod } from '../sim/demand.js';
 import { loadStudyPolicy } from '../sim/studyPolicy.js';
@@ -47,7 +47,7 @@ export const SCENARIO_PRESETS = [
     label: 'PM peak',
     title: 'PM Peak (18:30 IST)',
     istClock: '18:30',
-    demandScale: 1.28,
+    demandScale: 1.2,
     chaos: null,
     description: 'Evening IT corridor rush across Silk Board, ORR & Marathahalli (18:30 IST).',
   },
@@ -65,22 +65,24 @@ export const SCENARIO_PRESETS = [
     label: 'PM + Silk Board stall',
     title: 'PM Peak + Silk Board Stall',
     istClock: '18:30',
-    demandScale: 1.28,
+    demandScale: 1.2,
     chaos: {
       type: 'stalled',
       junctionId: 'JNC-BLR-001',
-      approachIdx: 0,
-      multiplier: 3.0,
-      durationSec: 180,
+      approachIdx: 1,
+      multiplier: 4.0,
+      capacityFactor: 0.15,
+      durationSec: 300,
     },
-    description: '18:30 IST evening rush with a stalled vehicle blocking Hosur Rd (from south) at Silk Board.',
+    description:
+      '18:30 IST evening rush with a stalled heavy vehicle blocking ORR (from east / Bellandur) at Silk Board (0.15x lane capacity).',
   },
   {
     id: 'monsoon-pm-peak',
     label: 'Monsoon PM peak',
     title: 'Monsoon + PM Peak',
     istClock: '18:30',
-    demandScale: 1.28,
+    demandScale: 1.2,
     chaos: {
       type: 'monsoon',
       junctionId: 'JNC-BLR-001',
@@ -144,7 +146,7 @@ export function resolveInitialSimStart(rawSpec = process.env.SIM_START || 'auto'
       presetId: 'pm-peak',
       label: 'PM peak',
       note: null,
-      demandScale: 1.28,
+      demandScale: 1.2,
     };
   }
   if (nowH >= 11.5 && nowH < 17) {
@@ -161,7 +163,7 @@ export function resolveInitialSimStart(rawSpec = process.env.SIM_START || 'auto'
     presetId: 'pm-peak',
     label: 'PM peak',
     note: 'off-peak wall-clock fallback',
-    demandScale: 1.28,
+    demandScale: 1.2,
   };
 }
 
@@ -325,7 +327,11 @@ class SimulatorService {
             'stalledVehicle',
             preset.chaos.multiplier,
             preset.chaos.durationSec,
-            { stalled: true, approachIdx: preset.chaos.approachIdx }
+            {
+              stalled: true,
+              approachIdx: preset.chaos.approachIdx,
+              capacityFactor: preset.chaos.capacityFactor,
+            }
           );
         } else if (preset.chaos?.type === 'monsoon') {
           this.injectChaos(
@@ -701,7 +707,9 @@ class SimulatorService {
 
     // 2. Stalled vehicle / broken-down bus -> lane capacity reduction incident
     if (flags.stalled || metric === 'stalledVehicle') {
-      const capFactor = clamp(1 / Math.max(1.5, safeMult), 0.15, 0.55);
+      const capFactor = Number.isFinite(Number(flags.capacityFactor))
+        ? clamp(Number(flags.capacityFactor), 0.1, 0.6)
+        : clamp(1 / Math.max(1.5, safeMult), 0.15, 0.55);
       const approachIdx = Number.isInteger(flags.approachIdx) ? flags.approachIdx : 0;
       this.pair.injectIncident(junctionId, approachIdx, {
         type: 'stalled',
@@ -899,19 +907,7 @@ class SimulatorService {
   }
 
   determineStatus(trafficData) {
-    if (trafficData.stalledVehicleDetected || trafficData.ambulanceDetected) {
-      return 'critical';
-    }
-    if (trafficData.maxQueueLengthM > 180 || trafficData.avgSpeedKmph < 7) {
-      return 'gridlock';
-    }
-    if (trafficData.maxQueueLengthM > 120 || trafficData.avgSpeedKmph < 12) {
-      return 'congested';
-    }
-    if (trafficData.maxQueueLengthM > 85) {
-      return 'warning';
-    }
-    return 'healthy';
+    return classifyTrafficStatus(trafficData);
   }
 
   getStatus() {
@@ -958,6 +954,7 @@ class SimulatorService {
         congestionScore: jSnap.congestionScore,
         maxQueueLengthM: jSnap.maxQueueLengthM,
         avgSpeedKmph: jSnap.avgSpeedKmph,
+        status: this.determineStatus(jSnap),
       };
     });
 
@@ -1003,20 +1000,12 @@ class SimulatorService {
             : toApp?.avgSpeedKmph ?? fromApp?.avgSpeedKmph ?? 32;
         const vc = Math.max(0, Number(toApp?.vOverC || 0));
         const qLen = Math.max(0, Number(toApp?.queueLengthM || 0));
-        const hasStallOnTarget = Boolean(toJ?.stalledVehicleDetected);
-        const isPrimaryStallApproach =
-          hasStallOnTarget && (qLen > 24 || l.toApproachIdx === 0);
-        const effectiveVc = isPrimaryStallApproach
-          ? Math.max(vc, 2.45)
-          : hasStallOnTarget
-            ? Math.max(vc, 1.45)
-            : vc;
         const bprFactor =
-          1 + 0.26 * Math.pow(Math.min(2.6, effectiveVc), 2.3) + Math.min(1.6, qLen / 70);
+          1 + 0.26 * Math.pow(Math.min(2.8, vc), 2.3) + Math.min(1.8, qLen / 65);
         const weatherCap = world.weather?.speedFactor ?? 1;
         const traversalKmph = (40 / bprFactor) * weatherCap;
-        const speedKmph = Number(clamp(Math.min(approachBaseKmph, traversalKmph), 4.5, 40).toFixed(1));
-        const vOverC = Number(Math.max(toApp?.vOverC || 0, fromApp?.vOverC || 0).toFixed(2));
+        const speedKmph = Number(clamp(Math.min(approachBaseKmph, traversalKmph), 3, 40).toFixed(1));
+        const vOverC = Number(vc.toFixed(2));
         return {
           id: l.id,
           corridor: l.corridor,

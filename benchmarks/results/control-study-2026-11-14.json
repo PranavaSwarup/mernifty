@@ -1,8 +1,8 @@
 {
   "study": "controlled-signal-evaluation",
   "date": "2026-11-14",
-  "generatedAt": "2026-11-14T14:07:48.283Z",
-  "runtimeSec": 183.85,
+  "generatedAt": "2026-11-14T18:15:26.118Z",
+  "runtimeSec": 169.89,
   "networkSummary": {
     "junctions": 12,
     "links": 35
@@ -111,37 +111,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 26.35,
-            "sd": 1.505,
-            "ci95Low": 25.274,
-            "ci95High": 27.426,
+            "mean": 26.342,
+            "sd": 1.504,
+            "ci95Low": 25.266,
+            "ci95High": 27.417,
             "ci95HalfWidth": 1.076
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 22.709,
-            "sd": 0.362,
-            "ci95Low": 22.45,
-            "ci95High": 22.968,
-            "ci95HalfWidth": 0.259
+            "mean": 22.737,
+            "sd": 0.356,
+            "ci95Low": 22.482,
+            "ci95High": 22.992,
+            "ci95HalfWidth": 0.255
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 9678.576,
-            "sd": 137.803,
-            "ci95Low": 9579.996,
-            "ci95High": 9777.156,
-            "ci95HalfWidth": 98.58
+            "mean": 9674.718,
+            "sd": 135.597,
+            "ci95Low": 9577.716,
+            "ci95High": 9771.72,
+            "ci95HalfWidth": 97.002
           },
           "congestionScore": {
             "n": 10,
-            "mean": 24.767,
-            "sd": 1.633,
-            "ci95Low": 23.598,
-            "ci95High": 25.935,
-            "ci95HalfWidth": 1.168
+            "mean": 26.233,
+            "sd": 1.762,
+            "ci95Low": 24.973,
+            "ci95High": 27.494,
+            "ci95HalfWidth": 1.261
           }
         },
         "max-pressure": {
@@ -163,11 +163,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 24.167,
-            "sd": 1.813,
-            "ci95Low": 22.87,
-            "ci95High": 25.464,
-            "ci95HalfWidth": 1.297
+            "mean": 29.267,
+            "sd": 2.397,
+            "ci95Low": 27.552,
+            "ci95High": 30.982,
+            "ci95HalfWidth": 1.715
           }
         },
         "max-pressure-ca": {
@@ -189,11 +189,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 24.208,
-            "sd": 1.42,
-            "ci95Low": 23.193,
-            "ci95High": 25.224,
-            "ci95HalfWidth": 1.016
+            "mean": 28.142,
+            "sd": 1.97,
+            "ci95Low": 26.733,
+            "ci95High": 29.551,
+            "ci95HalfWidth": 1.409
           }
         }
       },
@@ -201,25 +201,25 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 0.463,
-            "sd": 0.293,
-            "ci95Low": 0.254,
-            "ci95High": 0.672,
-            "ci95HalfWidth": 0.209,
-            "pctVsBaseline": 2.08,
-            "winsOutOfN": 1,
+            "mean": 0.491,
+            "sd": 0.307,
+            "ci95Low": 0.271,
+            "ci95High": 0.711,
+            "ci95HalfWidth": 0.22,
+            "pctVsBaseline": 2.21,
+            "winsOutOfN": 0,
             "significant": "worse"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 10.212,
-            "sd": 12.743,
-            "ci95Low": 1.096,
-            "ci95High": 19.328,
-            "ci95HalfWidth": 9.116,
-            "pctVsBaseline": 0.11,
+            "mean": 6.354,
+            "sd": 12.445,
+            "ci95Low": -2.549,
+            "ci95High": 15.257,
+            "ci95HalfWidth": 8.903,
+            "pctVsBaseline": 0.07,
             "winsOutOfN": 7,
-            "significant": "better"
+            "significant": "indistinguishable"
           }
         },
         "max-pressure": {
@@ -303,37 +303,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 27.033,
-            "sd": 1.684,
-            "ci95Low": 25.828,
-            "ci95High": 28.238,
-            "ci95HalfWidth": 1.205
+            "mean": 27.017,
+            "sd": 1.692,
+            "ci95Low": 25.806,
+            "ci95High": 28.227,
+            "ci95HalfWidth": 1.211
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 25.112,
-            "sd": 1.551,
-            "ci95Low": 24.003,
-            "ci95High": 26.221,
-            "ci95HalfWidth": 1.109
+            "mean": 25.071,
+            "sd": 1.511,
+            "ci95Low": 23.99,
+            "ci95High": 26.152,
+            "ci95HalfWidth": 1.081
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 9987.543,
-            "sd": 179.906,
-            "ci95Low": 9858.843,
-            "ci95High": 10116.243,
-            "ci95HalfWidth": 128.7
+            "mean": 9985.979,
+            "sd": 178.043,
+            "ci95Low": 9858.612,
+            "ci95High": 10113.346,
+            "ci95HalfWidth": 127.367
           },
           "congestionScore": {
             "n": 10,
-            "mean": 25.533,
-            "sd": 2.12,
-            "ci95Low": 24.017,
-            "ci95High": 27.05,
-            "ci95HalfWidth": 1.517
+            "mean": 26.35,
+            "sd": 1.719,
+            "ci95Low": 25.121,
+            "ci95High": 27.579,
+            "ci95HalfWidth": 1.229
           }
         },
         "max-pressure": {
@@ -355,11 +355,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 23.917,
-            "sd": 1.886,
-            "ci95Low": 22.567,
-            "ci95High": 25.266,
-            "ci95HalfWidth": 1.349
+            "mean": 28.758,
+            "sd": 1.997,
+            "ci95Low": 27.33,
+            "ci95High": 30.187,
+            "ci95HalfWidth": 1.429
           }
         },
         "max-pressure-ca": {
@@ -381,11 +381,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 24.383,
-            "sd": 1.591,
-            "ci95Low": 23.245,
-            "ci95High": 25.522,
-            "ci95HalfWidth": 1.138
+            "mean": 28.35,
+            "sd": 1.611,
+            "ci95Low": 27.198,
+            "ci95High": 29.502,
+            "ci95HalfWidth": 1.152
           }
         }
       },
@@ -393,23 +393,23 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -6.893,
-            "sd": 4.376,
-            "ci95Low": -10.024,
-            "ci95High": -3.762,
-            "ci95HalfWidth": 3.131,
-            "pctVsBaseline": -21.54,
+            "mean": -6.934,
+            "sd": 4.364,
+            "ci95Low": -10.056,
+            "ci95High": -3.812,
+            "ci95HalfWidth": 3.122,
+            "pctVsBaseline": -21.67,
             "winsOutOfN": 9,
             "significant": "better"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 56.794,
-            "sd": 48.893,
-            "ci95Low": 21.817,
-            "ci95High": 91.771,
-            "ci95HalfWidth": 34.977,
-            "pctVsBaseline": 0.57,
+            "mean": 55.23,
+            "sd": 46.653,
+            "ci95Low": 21.856,
+            "ci95High": 88.604,
+            "ci95HalfWidth": 33.374,
+            "pctVsBaseline": 0.56,
             "winsOutOfN": 10,
             "significant": "better"
           }
@@ -505,27 +505,27 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 21.706,
-            "sd": 0.248,
-            "ci95Low": 21.529,
-            "ci95High": 21.883,
-            "ci95HalfWidth": 0.177
+            "mean": 21.739,
+            "sd": 0.341,
+            "ci95Low": 21.495,
+            "ci95High": 21.983,
+            "ci95HalfWidth": 0.244
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 5611.163,
-            "sd": 80.677,
-            "ci95Low": 5553.449,
-            "ci95High": 5668.877,
-            "ci95HalfWidth": 57.714
+            "mean": 5612.548,
+            "sd": 80.371,
+            "ci95Low": 5555.053,
+            "ci95High": 5670.043,
+            "ci95HalfWidth": 57.495
           },
           "congestionScore": {
             "n": 10,
-            "mean": 15.258,
-            "sd": 1.451,
-            "ci95Low": 14.22,
-            "ci95High": 16.296,
-            "ci95HalfWidth": 1.038
+            "mean": 16.217,
+            "sd": 2.331,
+            "ci95Low": 14.549,
+            "ci95High": 17.884,
+            "ci95HalfWidth": 1.668
           }
         },
         "max-pressure": {
@@ -547,11 +547,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 14.608,
-            "sd": 1.481,
-            "ci95Low": 13.549,
-            "ci95High": 15.668,
-            "ci95HalfWidth": 1.059
+            "mean": 18.733,
+            "sd": 3.203,
+            "ci95Low": 16.442,
+            "ci95High": 21.024,
+            "ci95HalfWidth": 2.291
           }
         },
         "max-pressure-ca": {
@@ -573,11 +573,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 14.917,
-            "sd": 2,
-            "ci95Low": 13.486,
-            "ci95High": 16.347,
-            "ci95HalfWidth": 1.431
+            "mean": 18.117,
+            "sd": 1.719,
+            "ci95Low": 16.887,
+            "ci95High": 19.346,
+            "ci95HalfWidth": 1.23
           }
         }
       },
@@ -585,24 +585,24 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 0.444,
-            "sd": 0.361,
-            "ci95Low": 0.186,
-            "ci95High": 0.702,
-            "ci95HalfWidth": 0.258,
-            "pctVsBaseline": 2.09,
+            "mean": 0.477,
+            "sd": 0.454,
+            "ci95Low": 0.152,
+            "ci95High": 0.802,
+            "ci95HalfWidth": 0.325,
+            "pctVsBaseline": 2.24,
             "winsOutOfN": 1,
             "significant": "worse"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 2.649,
-            "sd": 7.664,
-            "ci95Low": -2.834,
-            "ci95High": 8.132,
-            "ci95HalfWidth": 5.483,
-            "pctVsBaseline": 0.05,
-            "winsOutOfN": 6,
+            "mean": 4.034,
+            "sd": 7.975,
+            "ci95Low": -1.671,
+            "ci95High": 9.739,
+            "ci95HalfWidth": 5.705,
+            "pctVsBaseline": 0.07,
+            "winsOutOfN": 7,
             "significant": "indistinguishable"
           }
         },
@@ -687,37 +687,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 16.2,
-            "sd": 1.514,
-            "ci95Low": 15.117,
-            "ci95High": 17.283,
-            "ci95HalfWidth": 1.083
+            "mean": 16.192,
+            "sd": 1.515,
+            "ci95Low": 15.108,
+            "ci95High": 17.276,
+            "ci95HalfWidth": 1.084
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 22.193,
-            "sd": 0.286,
-            "ci95Low": 21.989,
-            "ci95High": 22.397,
-            "ci95HalfWidth": 0.204
+            "mean": 22.224,
+            "sd": 0.464,
+            "ci95Low": 21.892,
+            "ci95High": 22.556,
+            "ci95HalfWidth": 0.332
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 5806.631,
-            "sd": 129.919,
-            "ci95Low": 5713.691,
-            "ci95High": 5899.571,
-            "ci95HalfWidth": 92.94
+            "mean": 5809.259,
+            "sd": 129.772,
+            "ci95Low": 5716.424,
+            "ci95High": 5902.094,
+            "ci95HalfWidth": 92.835
           },
           "congestionScore": {
             "n": 10,
-            "mean": 15.842,
-            "sd": 1.342,
-            "ci95Low": 14.881,
-            "ci95High": 16.802,
-            "ci95HalfWidth": 0.96
+            "mean": 16.658,
+            "sd": 2.098,
+            "ci95Low": 15.157,
+            "ci95High": 18.159,
+            "ci95HalfWidth": 1.501
           }
         },
         "max-pressure": {
@@ -739,11 +739,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 14.525,
-            "sd": 1.326,
-            "ci95Low": 13.577,
-            "ci95High": 15.473,
-            "ci95HalfWidth": 0.948
+            "mean": 19,
+            "sd": 2.075,
+            "ci95Low": 17.515,
+            "ci95High": 20.485,
+            "ci95HalfWidth": 1.485
           }
         },
         "max-pressure-ca": {
@@ -765,11 +765,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 15.092,
-            "sd": 2.219,
-            "ci95Low": 13.505,
-            "ci95High": 16.679,
-            "ci95HalfWidth": 1.587
+            "mean": 18.925,
+            "sd": 2.288,
+            "ci95Low": 17.288,
+            "ci95High": 20.562,
+            "ci95HalfWidth": 1.637
           }
         }
       },
@@ -777,24 +777,24 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 0.519,
-            "sd": 0.467,
-            "ci95Low": 0.185,
-            "ci95High": 0.853,
-            "ci95HalfWidth": 0.334,
-            "pctVsBaseline": 2.39,
-            "winsOutOfN": 1,
+            "mean": 0.55,
+            "sd": 0.574,
+            "ci95Low": 0.139,
+            "ci95High": 0.961,
+            "ci95HalfWidth": 0.411,
+            "pctVsBaseline": 2.54,
+            "winsOutOfN": 2,
             "significant": "worse"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": -1.942,
-            "sd": 7.067,
-            "ci95Low": -6.998,
-            "ci95High": 3.114,
-            "ci95HalfWidth": 5.056,
-            "pctVsBaseline": -0.03,
-            "winsOutOfN": 3,
+            "mean": 0.686,
+            "sd": 5.336,
+            "ci95Low": -3.131,
+            "ci95High": 4.503,
+            "ci95HalfWidth": 3.817,
+            "pctVsBaseline": 0.01,
+            "winsOutOfN": 5,
             "significant": "indistinguishable"
           }
         },
@@ -879,37 +879,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 27.817,
-            "sd": 2.143,
-            "ci95Low": 26.283,
-            "ci95High": 29.35,
-            "ci95HalfWidth": 1.533
+            "mean": 27.783,
+            "sd": 2.137,
+            "ci95Low": 26.254,
+            "ci95High": 29.312,
+            "ci95HalfWidth": 1.529
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 23.048,
-            "sd": 0.182,
-            "ci95Low": 22.918,
-            "ci95High": 23.178,
-            "ci95HalfWidth": 0.13
+            "mean": 23.083,
+            "sd": 0.209,
+            "ci95Low": 22.933,
+            "ci95High": 23.233,
+            "ci95HalfWidth": 0.15
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 10263.469,
-            "sd": 123.298,
-            "ci95Low": 10175.265,
-            "ci95High": 10351.673,
-            "ci95HalfWidth": 88.204
+            "mean": 10264.296,
+            "sd": 122.641,
+            "ci95Low": 10176.562,
+            "ci95High": 10352.03,
+            "ci95HalfWidth": 87.734
           },
           "congestionScore": {
             "n": 10,
-            "mean": 26.6,
-            "sd": 2.707,
-            "ci95Low": 24.664,
-            "ci95High": 28.536,
-            "ci95HalfWidth": 1.936
+            "mean": 27.758,
+            "sd": 2.592,
+            "ci95Low": 25.904,
+            "ci95High": 29.613,
+            "ci95HalfWidth": 1.854
           }
         },
         "max-pressure": {
@@ -931,11 +931,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 25.558,
-            "sd": 2.365,
-            "ci95Low": 23.867,
-            "ci95High": 27.25,
-            "ci95HalfWidth": 1.692
+            "mean": 31.1,
+            "sd": 2.665,
+            "ci95Low": 29.194,
+            "ci95High": 33.006,
+            "ci95HalfWidth": 1.906
           }
         },
         "max-pressure-ca": {
@@ -957,11 +957,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 26.958,
-            "sd": 3.322,
-            "ci95Low": 24.582,
-            "ci95High": 29.335,
-            "ci95HalfWidth": 2.377
+            "mean": 31.658,
+            "sd": 4.155,
+            "ci95Low": 28.686,
+            "ci95High": 34.631,
+            "ci95HalfWidth": 2.973
           }
         }
       },
@@ -969,23 +969,23 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 0.67,
-            "sd": 0.259,
-            "ci95Low": 0.485,
-            "ci95High": 0.855,
-            "ci95HalfWidth": 0.185,
-            "pctVsBaseline": 2.99,
+            "mean": 0.705,
+            "sd": 0.284,
+            "ci95Low": 0.501,
+            "ci95High": 0.909,
+            "ci95HalfWidth": 0.204,
+            "pctVsBaseline": 3.15,
             "winsOutOfN": 0,
             "significant": "worse"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 0.284,
-            "sd": 13.424,
-            "ci95Low": -9.319,
-            "ci95High": 9.887,
-            "ci95HalfWidth": 9.603,
-            "pctVsBaseline": 0,
+            "mean": 1.111,
+            "sd": 15.033,
+            "ci95Low": -9.643,
+            "ci95High": 11.865,
+            "ci95HalfWidth": 10.754,
+            "pctVsBaseline": 0.01,
             "winsOutOfN": 6,
             "significant": "indistinguishable"
           }
@@ -1071,37 +1071,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 29.175,
-            "sd": 2.411,
-            "ci95Low": 27.451,
-            "ci95High": 30.899,
-            "ci95HalfWidth": 1.724
+            "mean": 29.15,
+            "sd": 2.416,
+            "ci95Low": 27.421,
+            "ci95High": 30.879,
+            "ci95HalfWidth": 1.729
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 25.588,
-            "sd": 1.799,
-            "ci95Low": 24.301,
-            "ci95High": 26.875,
-            "ci95HalfWidth": 1.287
+            "mean": 25.644,
+            "sd": 1.777,
+            "ci95Low": 24.373,
+            "ci95High": 26.915,
+            "ci95HalfWidth": 1.271
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 10595.587,
-            "sd": 190.219,
-            "ci95Low": 10459.51,
-            "ci95High": 10731.664,
-            "ci95HalfWidth": 136.077
+            "mean": 10594.964,
+            "sd": 190.394,
+            "ci95Low": 10458.762,
+            "ci95High": 10731.166,
+            "ci95HalfWidth": 136.202
           },
           "congestionScore": {
             "n": 10,
-            "mean": 26.9,
-            "sd": 2.656,
-            "ci95Low": 25,
-            "ci95High": 28.8,
-            "ci95HalfWidth": 1.9
+            "mean": 28,
+            "sd": 2.553,
+            "ci95Low": 26.174,
+            "ci95High": 29.826,
+            "ci95HalfWidth": 1.826
           }
         },
         "max-pressure": {
@@ -1123,11 +1123,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 25.883,
-            "sd": 2.409,
-            "ci95Low": 24.16,
-            "ci95High": 27.607,
-            "ci95HalfWidth": 1.723
+            "mean": 31.358,
+            "sd": 2.826,
+            "ci95Low": 29.337,
+            "ci95High": 33.38,
+            "ci95HalfWidth": 2.022
           }
         },
         "max-pressure-ca": {
@@ -1149,11 +1149,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 26.725,
-            "sd": 2.488,
-            "ci95Low": 24.945,
-            "ci95High": 28.505,
-            "ci95HalfWidth": 1.78
+            "mean": 31.125,
+            "sd": 2.659,
+            "ci95Low": 29.223,
+            "ci95High": 33.027,
+            "ci95HalfWidth": 1.902
           }
         }
       },
@@ -1161,23 +1161,23 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -8.668,
-            "sd": 5.029,
-            "ci95Low": -12.266,
-            "ci95High": -5.07,
-            "ci95HalfWidth": 3.598,
-            "pctVsBaseline": -25.3,
+            "mean": -8.612,
+            "sd": 5.065,
+            "ci95Low": -12.235,
+            "ci95High": -4.989,
+            "ci95HalfWidth": 3.623,
+            "pctVsBaseline": -25.14,
             "winsOutOfN": 9,
             "significant": "better"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 84.035,
-            "sd": 78.139,
-            "ci95Low": 28.137,
-            "ci95High": 139.933,
-            "ci95HalfWidth": 55.898,
-            "pctVsBaseline": 0.8,
+            "mean": 83.412,
+            "sd": 78.713,
+            "ci95Low": 27.103,
+            "ci95High": 139.721,
+            "ci95HalfWidth": 56.309,
+            "pctVsBaseline": 0.79,
             "winsOutOfN": 10,
             "significant": "better"
           }
@@ -1263,37 +1263,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 33.608,
-            "sd": 1.538,
-            "ci95Low": 32.508,
-            "ci95High": 34.709,
-            "ci95HalfWidth": 1.1
+            "mean": 33.583,
+            "sd": 1.531,
+            "ci95Low": 32.488,
+            "ci95High": 34.678,
+            "ci95HalfWidth": 1.095
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 24.448,
-            "sd": 0.494,
-            "ci95Low": 24.094,
-            "ci95High": 24.802,
-            "ci95HalfWidth": 0.354
+            "mean": 24.608,
+            "sd": 0.335,
+            "ci95Low": 24.368,
+            "ci95High": 24.848,
+            "ci95HalfWidth": 0.24
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 12906.305,
-            "sd": 112.058,
-            "ci95Low": 12826.142,
-            "ci95High": 12986.468,
-            "ci95HalfWidth": 80.163
+            "mean": 12899.052,
+            "sd": 111.312,
+            "ci95Low": 12819.423,
+            "ci95High": 12978.681,
+            "ci95HalfWidth": 79.629
           },
           "congestionScore": {
             "n": 10,
-            "mean": 32.267,
-            "sd": 2.321,
-            "ci95Low": 30.607,
-            "ci95High": 33.927,
-            "ci95HalfWidth": 1.66
+            "mean": 33.758,
+            "sd": 1.365,
+            "ci95Low": 32.782,
+            "ci95High": 34.735,
+            "ci95HalfWidth": 0.977
           }
         },
         "max-pressure": {
@@ -1315,11 +1315,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 31.667,
-            "sd": 1.406,
-            "ci95Low": 30.661,
-            "ci95High": 32.672,
-            "ci95HalfWidth": 1.006
+            "mean": 36.033,
+            "sd": 1.417,
+            "ci95Low": 35.02,
+            "ci95High": 37.047,
+            "ci95HalfWidth": 1.014
           }
         },
         "max-pressure-ca": {
@@ -1341,11 +1341,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 31.508,
-            "sd": 1.379,
-            "ci95Low": 30.522,
-            "ci95High": 32.495,
-            "ci95HalfWidth": 0.987
+            "mean": 36.567,
+            "sd": 2.014,
+            "ci95Low": 35.126,
+            "ci95High": 38.008,
+            "ci95HalfWidth": 1.441
           }
         }
       },
@@ -1353,24 +1353,24 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 0.875,
-            "sd": 0.447,
-            "ci95Low": 0.555,
-            "ci95High": 1.195,
-            "ci95HalfWidth": 0.32,
-            "pctVsBaseline": 3.71,
+            "mean": 1.035,
+            "sd": 0.342,
+            "ci95Low": 0.79,
+            "ci95High": 1.28,
+            "ci95HalfWidth": 0.245,
+            "pctVsBaseline": 4.39,
             "winsOutOfN": 0,
             "significant": "worse"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 3.086,
-            "sd": 15.712,
-            "ci95Low": -8.154,
-            "ci95High": 14.326,
-            "ci95HalfWidth": 11.24,
-            "pctVsBaseline": 0.02,
-            "winsOutOfN": 7,
+            "mean": -4.167,
+            "sd": 16.733,
+            "ci95Low": -16.137,
+            "ci95High": 7.803,
+            "ci95HalfWidth": 11.97,
+            "pctVsBaseline": -0.03,
+            "winsOutOfN": 4,
             "significant": "indistinguishable"
           }
         },
@@ -1455,37 +1455,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 38.408,
-            "sd": 2.572,
-            "ci95Low": 36.568,
-            "ci95High": 40.248,
-            "ci95HalfWidth": 1.84
+            "mean": 38.392,
+            "sd": 2.55,
+            "ci95Low": 36.567,
+            "ci95High": 40.216,
+            "ci95HalfWidth": 1.825
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 29.583,
-            "sd": 2.823,
-            "ci95Low": 27.564,
-            "ci95High": 31.602,
-            "ci95HalfWidth": 2.019
+            "mean": 29.761,
+            "sd": 2.896,
+            "ci95Low": 27.69,
+            "ci95High": 31.832,
+            "ci95HalfWidth": 2.071
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 13285.157,
-            "sd": 173.479,
-            "ci95Low": 13161.055,
-            "ci95High": 13409.259,
-            "ci95HalfWidth": 124.102
+            "mean": 13278.616,
+            "sd": 181.183,
+            "ci95Low": 13149.003,
+            "ci95High": 13408.229,
+            "ci95HalfWidth": 129.613
           },
           "congestionScore": {
             "n": 10,
-            "mean": 33.933,
-            "sd": 2.135,
-            "ci95Low": 32.406,
-            "ci95High": 35.46,
-            "ci95HalfWidth": 1.527
+            "mean": 35.367,
+            "sd": 1.474,
+            "ci95Low": 34.312,
+            "ci95High": 36.421,
+            "ci95HalfWidth": 1.055
           }
         },
         "max-pressure": {
@@ -1507,11 +1507,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 31.433,
-            "sd": 1.553,
-            "ci95Low": 30.322,
-            "ci95High": 32.544,
-            "ci95HalfWidth": 1.111
+            "mean": 36.342,
+            "sd": 2.176,
+            "ci95Low": 34.785,
+            "ci95High": 37.899,
+            "ci95HalfWidth": 1.557
           }
         },
         "max-pressure-ca": {
@@ -1533,11 +1533,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 31.908,
-            "sd": 1.76,
-            "ci95Low": 30.649,
-            "ci95High": 33.167,
-            "ci95HalfWidth": 1.259
+            "mean": 36.342,
+            "sd": 2.184,
+            "ci95Low": 34.779,
+            "ci95High": 37.904,
+            "ci95HalfWidth": 1.563
           }
         }
       },
@@ -1545,24 +1545,24 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -15.02,
-            "sd": 7.079,
-            "ci95Low": -20.084,
-            "ci95High": -9.956,
-            "ci95HalfWidth": 5.064,
-            "pctVsBaseline": -33.67,
+            "mean": -14.842,
+            "sd": 7.049,
+            "ci95Low": -19.885,
+            "ci95High": -9.799,
+            "ci95HalfWidth": 5.043,
+            "pctVsBaseline": -33.28,
             "winsOutOfN": 10,
             "significant": "better"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 249.564,
-            "sd": 170.158,
-            "ci95Low": 127.838,
-            "ci95High": 371.29,
-            "ci95HalfWidth": 121.726,
-            "pctVsBaseline": 1.91,
-            "winsOutOfN": 10,
+            "mean": 243.023,
+            "sd": 180.514,
+            "ci95Low": 113.889,
+            "ci95High": 372.157,
+            "ci95HalfWidth": 129.134,
+            "pctVsBaseline": 1.86,
+            "winsOutOfN": 9,
             "significant": "better"
           }
         },
@@ -1657,27 +1657,27 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 22.144,
-            "sd": 0.477,
-            "ci95Low": 21.803,
-            "ci95High": 22.485,
-            "ci95HalfWidth": 0.341
+            "mean": 22.076,
+            "sd": 0.379,
+            "ci95Low": 21.805,
+            "ci95High": 22.347,
+            "ci95HalfWidth": 0.271
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 7480.544,
-            "sd": 97.727,
-            "ci95Low": 7410.633,
-            "ci95High": 7550.455,
-            "ci95HalfWidth": 69.911
+            "mean": 7481.402,
+            "sd": 96.537,
+            "ci95Low": 7412.342,
+            "ci95High": 7550.462,
+            "ci95HalfWidth": 69.06
           },
           "congestionScore": {
             "n": 10,
-            "mean": 19.35,
-            "sd": 1.009,
-            "ci95Low": 18.628,
-            "ci95High": 20.072,
-            "ci95HalfWidth": 0.722
+            "mean": 20.108,
+            "sd": 1.55,
+            "ci95Low": 18.999,
+            "ci95High": 21.217,
+            "ci95HalfWidth": 1.109
           }
         },
         "max-pressure": {
@@ -1699,11 +1699,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 18.625,
-            "sd": 1.411,
-            "ci95Low": 17.616,
-            "ci95High": 19.634,
-            "ci95HalfWidth": 1.009
+            "mean": 22.3,
+            "sd": 1.54,
+            "ci95Low": 21.198,
+            "ci95High": 23.402,
+            "ci95HalfWidth": 1.102
           }
         },
         "max-pressure-ca": {
@@ -1725,11 +1725,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 18.258,
-            "sd": 1.629,
-            "ci95Low": 17.093,
-            "ci95High": 19.424,
-            "ci95HalfWidth": 1.166
+            "mean": 22.592,
+            "sd": 1.989,
+            "ci95Low": 21.169,
+            "ci95High": 24.015,
+            "ci95HalfWidth": 1.423
           }
         }
       },
@@ -1737,23 +1737,23 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 0.452,
-            "sd": 0.522,
-            "ci95Low": 0.079,
-            "ci95High": 0.825,
-            "ci95HalfWidth": 0.373,
-            "pctVsBaseline": 2.08,
-            "winsOutOfN": 3,
+            "mean": 0.384,
+            "sd": 0.409,
+            "ci95Low": 0.092,
+            "ci95High": 0.676,
+            "ci95HalfWidth": 0.292,
+            "pctVsBaseline": 1.77,
+            "winsOutOfN": 2,
             "significant": "worse"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 5.765,
-            "sd": 4.281,
-            "ci95Low": 2.702,
-            "ci95High": 8.828,
-            "ci95HalfWidth": 3.063,
-            "pctVsBaseline": 0.08,
+            "mean": 6.623,
+            "sd": 7.061,
+            "ci95Low": 1.572,
+            "ci95High": 11.674,
+            "ci95HalfWidth": 5.051,
+            "pctVsBaseline": 0.09,
             "winsOutOfN": 9,
             "significant": "better"
           }
@@ -1849,27 +1849,27 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 23.207,
-            "sd": 1.05,
-            "ci95Low": 22.456,
-            "ci95High": 23.958,
-            "ci95HalfWidth": 0.751
+            "mean": 23.216,
+            "sd": 1.01,
+            "ci95Low": 22.494,
+            "ci95High": 23.938,
+            "ci95HalfWidth": 0.722
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 7734.17,
-            "sd": 157.065,
-            "ci95Low": 7621.81,
-            "ci95High": 7846.53,
-            "ci95HalfWidth": 112.36
+            "mean": 7730.031,
+            "sd": 157.497,
+            "ci95Low": 7617.363,
+            "ci95High": 7842.699,
+            "ci95HalfWidth": 112.668
           },
           "congestionScore": {
             "n": 10,
-            "mean": 19.367,
-            "sd": 0.731,
-            "ci95Low": 18.844,
-            "ci95High": 19.89,
-            "ci95HalfWidth": 0.523
+            "mean": 20.242,
+            "sd": 1.259,
+            "ci95Low": 19.341,
+            "ci95High": 21.142,
+            "ci95HalfWidth": 0.9
           }
         },
         "max-pressure": {
@@ -1891,11 +1891,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 18.483,
-            "sd": 1.144,
-            "ci95Low": 17.665,
-            "ci95High": 19.302,
-            "ci95HalfWidth": 0.819
+            "mean": 22.417,
+            "sd": 1.009,
+            "ci95Low": 21.695,
+            "ci95High": 23.139,
+            "ci95HalfWidth": 0.722
           }
         },
         "max-pressure-ca": {
@@ -1917,11 +1917,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 18.433,
-            "sd": 1.142,
-            "ci95Low": 17.616,
-            "ci95High": 19.251,
-            "ci95HalfWidth": 0.817
+            "mean": 22.75,
+            "sd": 1.953,
+            "ci95Low": 21.353,
+            "ci95High": 24.147,
+            "ci95HalfWidth": 1.397
           }
         }
       },
@@ -1929,25 +1929,25 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -1.178,
-            "sd": 1.87,
-            "ci95Low": -2.516,
-            "ci95High": 0.16,
-            "ci95HalfWidth": 1.338,
-            "pctVsBaseline": -4.83,
+            "mean": -1.169,
+            "sd": 1.9,
+            "ci95Low": -2.528,
+            "ci95High": 0.19,
+            "ci95HalfWidth": 1.359,
+            "pctVsBaseline": -4.79,
             "winsOutOfN": 7,
             "significant": "indistinguishable"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 12.46,
-            "sd": 12.465,
-            "ci95Low": 3.543,
-            "ci95High": 21.377,
-            "ci95HalfWidth": 8.917,
-            "pctVsBaseline": 0.16,
-            "winsOutOfN": 9,
-            "significant": "better"
+            "mean": 8.321,
+            "sd": 12.864,
+            "ci95Low": -0.881,
+            "ci95High": 17.523,
+            "ci95HalfWidth": 9.202,
+            "pctVsBaseline": 0.11,
+            "winsOutOfN": 7,
+            "significant": "indistinguishable"
           }
         },
         "max-pressure": {
@@ -2031,37 +2031,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 35.1,
-            "sd": 2.273,
-            "ci95Low": 33.474,
-            "ci95High": 36.726,
-            "ci95HalfWidth": 1.626
+            "mean": 35.108,
+            "sd": 2.246,
+            "ci95Low": 33.502,
+            "ci95High": 36.715,
+            "ci95HalfWidth": 1.607
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 25.35,
-            "sd": 0.352,
-            "ci95Low": 25.098,
-            "ci95High": 25.602,
-            "ci95HalfWidth": 0.252
+            "mean": 25.281,
+            "sd": 0.422,
+            "ci95Low": 24.979,
+            "ci95High": 25.583,
+            "ci95HalfWidth": 0.302
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 13678.857,
-            "sd": 105.885,
-            "ci95Low": 13603.11,
-            "ci95High": 13754.604,
-            "ci95HalfWidth": 75.747
+            "mean": 13681.216,
+            "sd": 103.742,
+            "ci95Low": 13607.002,
+            "ci95High": 13755.43,
+            "ci95HalfWidth": 74.214
           },
           "congestionScore": {
             "n": 10,
-            "mean": 34.3,
-            "sd": 2.299,
-            "ci95Low": 32.655,
-            "ci95High": 35.945,
-            "ci95HalfWidth": 1.645
+            "mean": 35.042,
+            "sd": 2.831,
+            "ci95Low": 33.016,
+            "ci95High": 37.067,
+            "ci95HalfWidth": 2.025
           }
         },
         "max-pressure": {
@@ -2083,11 +2083,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 32.917,
-            "sd": 2.289,
-            "ci95Low": 31.279,
-            "ci95High": 34.554,
-            "ci95HalfWidth": 1.637
+            "mean": 37.9,
+            "sd": 2.083,
+            "ci95Low": 36.41,
+            "ci95High": 39.39,
+            "ci95HalfWidth": 1.49
           }
         },
         "max-pressure-ca": {
@@ -2109,11 +2109,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 32.983,
-            "sd": 2,
-            "ci95Low": 31.553,
-            "ci95High": 34.414,
-            "ci95HalfWidth": 1.43
+            "mean": 38,
+            "sd": 1.187,
+            "ci95Low": 37.151,
+            "ci95High": 38.849,
+            "ci95HalfWidth": 0.849
           }
         }
       },
@@ -2121,24 +2121,24 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 0.96,
-            "sd": 0.372,
-            "ci95Low": 0.694,
-            "ci95High": 1.226,
-            "ci95HalfWidth": 0.266,
-            "pctVsBaseline": 3.94,
+            "mean": 0.891,
+            "sd": 0.386,
+            "ci95Low": 0.615,
+            "ci95High": 1.167,
+            "ci95HalfWidth": 0.276,
+            "pctVsBaseline": 3.65,
             "winsOutOfN": 0,
             "significant": "worse"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": -9.723,
-            "sd": 17.166,
-            "ci95Low": -22.003,
-            "ci95High": 2.557,
-            "ci95HalfWidth": 12.28,
-            "pctVsBaseline": -0.07,
-            "winsOutOfN": 1,
+            "mean": -7.364,
+            "sd": 16.625,
+            "ci95Low": -19.257,
+            "ci95High": 4.529,
+            "ci95HalfWidth": 11.893,
+            "pctVsBaseline": -0.05,
+            "winsOutOfN": 2,
             "significant": "indistinguishable"
           }
         },
@@ -2223,37 +2223,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 40.067,
-            "sd": 1.948,
-            "ci95Low": 38.673,
-            "ci95High": 41.46,
-            "ci95HalfWidth": 1.394
+            "mean": 40.058,
+            "sd": 1.939,
+            "ci95Low": 38.671,
+            "ci95High": 41.446,
+            "ci95HalfWidth": 1.387
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 31.254,
-            "sd": 2.943,
-            "ci95Low": 29.149,
-            "ci95High": 33.359,
-            "ci95HalfWidth": 2.105
+            "mean": 31.24,
+            "sd": 2.945,
+            "ci95Low": 29.133,
+            "ci95High": 33.347,
+            "ci95HalfWidth": 2.107
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 14067.599,
-            "sd": 194.064,
-            "ci95Low": 13928.772,
-            "ci95High": 14206.426,
-            "ci95HalfWidth": 138.827
+            "mean": 14070.831,
+            "sd": 194.613,
+            "ci95Low": 13931.611,
+            "ci95High": 14210.051,
+            "ci95HalfWidth": 139.22
           },
           "congestionScore": {
             "n": 10,
-            "mean": 36.233,
-            "sd": 2.227,
-            "ci95Low": 34.64,
-            "ci95High": 37.826,
-            "ci95HalfWidth": 1.593
+            "mean": 37.425,
+            "sd": 2.743,
+            "ci95Low": 35.463,
+            "ci95High": 39.387,
+            "ci95HalfWidth": 1.962
           }
         },
         "max-pressure": {
@@ -2275,11 +2275,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 33.317,
-            "sd": 1.859,
-            "ci95Low": 31.987,
-            "ci95High": 34.647,
-            "ci95HalfWidth": 1.33
+            "mean": 38.717,
+            "sd": 2.188,
+            "ci95Low": 37.151,
+            "ci95High": 40.282,
+            "ci95HalfWidth": 1.565
           }
         },
         "max-pressure-ca": {
@@ -2301,11 +2301,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 33.942,
-            "sd": 2.147,
-            "ci95Low": 32.406,
-            "ci95High": 35.477,
-            "ci95HalfWidth": 1.536
+            "mean": 37.675,
+            "sd": 2.882,
+            "ci95Low": 35.613,
+            "ci95High": 39.737,
+            "ci95HalfWidth": 2.062
           }
         }
       },
@@ -2313,24 +2313,24 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -15.727,
-            "sd": 6.473,
-            "ci95Low": -20.357,
-            "ci95High": -11.097,
-            "ci95HalfWidth": 4.63,
-            "pctVsBaseline": -33.48,
+            "mean": -15.741,
+            "sd": 6.627,
+            "ci95Low": -20.482,
+            "ci95High": -11,
+            "ci95HalfWidth": 4.741,
+            "pctVsBaseline": -33.51,
             "winsOutOfN": 10,
             "significant": "better"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 279.583,
-            "sd": 196.741,
-            "ci95Low": 138.84,
-            "ci95High": 420.326,
-            "ci95HalfWidth": 140.743,
-            "pctVsBaseline": 2.03,
-            "winsOutOfN": 9,
+            "mean": 282.815,
+            "sd": 197.728,
+            "ci95Low": 141.366,
+            "ci95High": 424.264,
+            "ci95HalfWidth": 141.449,
+            "pctVsBaseline": 2.05,
+            "winsOutOfN": 10,
             "significant": "better"
           }
         },
@@ -2415,37 +2415,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 41.433,
-            "sd": 0.876,
-            "ci95Low": 40.807,
-            "ci95High": 42.06,
-            "ci95HalfWidth": 0.626
+            "mean": 41.442,
+            "sd": 0.85,
+            "ci95Low": 40.834,
+            "ci95High": 42.05,
+            "ci95HalfWidth": 0.608
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 30.199,
-            "sd": 0.883,
-            "ci95Low": 29.567,
-            "ci95High": 30.831,
-            "ci95HalfWidth": 0.632
+            "mean": 30.657,
+            "sd": 0.742,
+            "ci95Low": 30.126,
+            "ci95High": 31.188,
+            "ci95HalfWidth": 0.531
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 16029.216,
-            "sd": 83.01,
-            "ci95Low": 15969.833,
-            "ci95High": 16088.599,
-            "ci95HalfWidth": 59.383
+            "mean": 16044.877,
+            "sd": 85.261,
+            "ci95Low": 15983.884,
+            "ci95High": 16105.87,
+            "ci95HalfWidth": 60.993
           },
           "congestionScore": {
             "n": 10,
-            "mean": 39.908,
-            "sd": 2.016,
-            "ci95Low": 38.466,
-            "ci95High": 41.351,
-            "ci95HalfWidth": 1.442
+            "mean": 40.567,
+            "sd": 1.032,
+            "ci95Low": 39.829,
+            "ci95High": 41.305,
+            "ci95HalfWidth": 0.738
           }
         },
         "max-pressure": {
@@ -2467,11 +2467,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 39.558,
-            "sd": 1.858,
-            "ci95Low": 38.229,
-            "ci95High": 40.888,
-            "ci95HalfWidth": 1.329
+            "mean": 43.325,
+            "sd": 1.923,
+            "ci95Low": 41.949,
+            "ci95High": 44.701,
+            "ci95HalfWidth": 1.376
           }
         },
         "max-pressure-ca": {
@@ -2493,11 +2493,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 38.642,
-            "sd": 1.675,
-            "ci95Low": 37.443,
-            "ci95High": 39.84,
-            "ci95HalfWidth": 1.199
+            "mean": 42.6,
+            "sd": 1.596,
+            "ci95Low": 41.459,
+            "ci95High": 43.741,
+            "ci95HalfWidth": 1.141
           }
         }
       },
@@ -2505,24 +2505,24 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -0.424,
-            "sd": 0.852,
-            "ci95Low": -1.034,
-            "ci95High": 0.186,
-            "ci95HalfWidth": 0.61,
-            "pctVsBaseline": -1.38,
-            "winsOutOfN": 7,
+            "mean": 0.034,
+            "sd": 0.995,
+            "ci95Low": -0.678,
+            "ci95High": 0.746,
+            "ci95HalfWidth": 0.712,
+            "pctVsBaseline": 0.11,
+            "winsOutOfN": 6,
             "significant": "indistinguishable"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": -2.166,
-            "sd": 20.625,
-            "ci95Low": -16.92,
-            "ci95High": 12.588,
-            "ci95HalfWidth": 14.754,
-            "pctVsBaseline": -0.01,
-            "winsOutOfN": 4,
+            "mean": 13.495,
+            "sd": 19.539,
+            "ci95Low": -0.483,
+            "ci95High": 27.473,
+            "ci95HalfWidth": 13.978,
+            "pctVsBaseline": 0.08,
+            "winsOutOfN": 8,
             "significant": "indistinguishable"
           }
         },
@@ -2608,36 +2608,36 @@
           "congestionScore": {
             "n": 10,
             "mean": 47.175,
-            "sd": 1.964,
-            "ci95Low": 45.77,
-            "ci95High": 48.58,
-            "ci95HalfWidth": 1.405
+            "sd": 2.001,
+            "ci95Low": 45.744,
+            "ci95High": 48.606,
+            "ci95HalfWidth": 1.431
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 39.448,
-            "sd": 3.669,
-            "ci95Low": 36.824,
-            "ci95High": 42.072,
-            "ci95HalfWidth": 2.624
+            "mean": 40.635,
+            "sd": 3.985,
+            "ci95Low": 37.784,
+            "ci95High": 43.486,
+            "ci95HalfWidth": 2.851
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 16429.251,
-            "sd": 259.334,
-            "ci95Low": 16243.731,
-            "ci95High": 16614.771,
-            "ci95HalfWidth": 185.52
+            "mean": 16420.822,
+            "sd": 246.245,
+            "ci95Low": 16244.666,
+            "ci95High": 16596.978,
+            "ci95HalfWidth": 176.156
           },
           "congestionScore": {
             "n": 10,
-            "mean": 42.442,
-            "sd": 1.967,
-            "ci95Low": 41.035,
-            "ci95High": 43.848,
-            "ci95HalfWidth": 1.407
+            "mean": 43.767,
+            "sd": 2.66,
+            "ci95Low": 41.864,
+            "ci95High": 45.67,
+            "ci95HalfWidth": 1.903
           }
         },
         "max-pressure": {
@@ -2659,11 +2659,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 41.267,
-            "sd": 3.26,
-            "ci95Low": 38.935,
-            "ci95High": 43.599,
-            "ci95HalfWidth": 2.332
+            "mean": 44.592,
+            "sd": 2.276,
+            "ci95Low": 42.964,
+            "ci95High": 46.22,
+            "ci95HalfWidth": 1.628
           }
         },
         "max-pressure-ca": {
@@ -2685,11 +2685,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 40.175,
-            "sd": 3.204,
-            "ci95Low": 37.883,
-            "ci95High": 42.467,
-            "ci95HalfWidth": 2.292
+            "mean": 43.142,
+            "sd": 2.553,
+            "ci95Low": 41.315,
+            "ci95High": 44.968,
+            "ci95HalfWidth": 1.826
           }
         }
       },
@@ -2697,23 +2697,23 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -19.135,
-            "sd": 6.994,
-            "ci95Low": -24.138,
-            "ci95High": -14.132,
-            "ci95HalfWidth": 5.003,
-            "pctVsBaseline": -32.66,
+            "mean": -17.948,
+            "sd": 6.697,
+            "ci95Low": -22.739,
+            "ci95High": -13.157,
+            "ci95HalfWidth": 4.791,
+            "pctVsBaseline": -30.64,
             "winsOutOfN": 10,
             "significant": "better"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 424.347,
-            "sd": 229.841,
-            "ci95Low": 259.925,
-            "ci95High": 588.769,
-            "ci95HalfWidth": 164.422,
-            "pctVsBaseline": 2.65,
+            "mean": 415.918,
+            "sd": 214.125,
+            "ci95Low": 262.739,
+            "ci95High": 569.097,
+            "ci95HalfWidth": 153.179,
+            "pctVsBaseline": 2.6,
             "winsOutOfN": 10,
             "significant": "better"
           }
@@ -2799,37 +2799,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 24.883,
-            "sd": 1.607,
-            "ci95Low": 23.733,
-            "ci95High": 26.033,
-            "ci95HalfWidth": 1.15
+            "mean": 24.892,
+            "sd": 1.627,
+            "ci95Low": 23.728,
+            "ci95High": 26.056,
+            "ci95HalfWidth": 1.164
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 22.773,
-            "sd": 0.336,
-            "ci95Low": 22.533,
-            "ci95High": 23.013,
-            "ci95HalfWidth": 0.24
+            "mean": 22.661,
+            "sd": 0.317,
+            "ci95Low": 22.434,
+            "ci95High": 22.888,
+            "ci95HalfWidth": 0.227
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 9345.004,
-            "sd": 119.615,
-            "ci95Low": 9259.435,
-            "ci95High": 9430.573,
-            "ci95HalfWidth": 85.569
+            "mean": 9346.525,
+            "sd": 121.622,
+            "ci95Low": 9259.52,
+            "ci95High": 9433.53,
+            "ci95HalfWidth": 87.005
           },
           "congestionScore": {
             "n": 10,
-            "mean": 23.617,
-            "sd": 1.236,
-            "ci95Low": 22.733,
-            "ci95High": 24.501,
-            "ci95HalfWidth": 0.884
+            "mean": 24.625,
+            "sd": 1.347,
+            "ci95Low": 23.661,
+            "ci95High": 25.589,
+            "ci95HalfWidth": 0.964
           }
         },
         "max-pressure": {
@@ -2851,11 +2851,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 23.233,
-            "sd": 1.495,
-            "ci95Low": 22.164,
-            "ci95High": 24.303,
-            "ci95HalfWidth": 1.07
+            "mean": 27.85,
+            "sd": 1.765,
+            "ci95Low": 26.587,
+            "ci95High": 29.113,
+            "ci95HalfWidth": 1.263
           }
         },
         "max-pressure-ca": {
@@ -2877,11 +2877,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 23.308,
-            "sd": 1.157,
-            "ci95Low": 22.48,
-            "ci95High": 24.136,
-            "ci95HalfWidth": 0.828
+            "mean": 27.75,
+            "sd": 1.851,
+            "ci95Low": 26.426,
+            "ci95High": 29.074,
+            "ci95HalfWidth": 1.324
           }
         }
       },
@@ -2889,24 +2889,24 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 0.557,
-            "sd": 0.432,
-            "ci95Low": 0.248,
-            "ci95High": 0.866,
-            "ci95HalfWidth": 0.309,
-            "pctVsBaseline": 2.51,
-            "winsOutOfN": 0,
+            "mean": 0.445,
+            "sd": 0.434,
+            "ci95Low": 0.135,
+            "ci95High": 0.755,
+            "ci95HalfWidth": 0.31,
+            "pctVsBaseline": 2,
+            "winsOutOfN": 1,
             "significant": "worse"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 2.907,
-            "sd": 14.792,
-            "ci95Low": -7.675,
-            "ci95High": 13.489,
-            "ci95HalfWidth": 10.582,
-            "pctVsBaseline": 0.03,
-            "winsOutOfN": 4,
+            "mean": 4.428,
+            "sd": 13.135,
+            "ci95Low": -4.968,
+            "ci95High": 13.824,
+            "ci95HalfWidth": 9.396,
+            "pctVsBaseline": 0.05,
+            "winsOutOfN": 6,
             "significant": "indistinguishable"
           }
         },
@@ -2991,37 +2991,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 25.383,
-            "sd": 1.665,
-            "ci95Low": 24.192,
-            "ci95High": 26.575,
-            "ci95HalfWidth": 1.191
+            "mean": 25.375,
+            "sd": 1.663,
+            "ci95Low": 24.185,
+            "ci95High": 26.565,
+            "ci95HalfWidth": 1.19
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 24.764,
-            "sd": 1.69,
-            "ci95Low": 23.555,
-            "ci95High": 25.973,
-            "ci95HalfWidth": 1.209
+            "mean": 24.807,
+            "sd": 1.779,
+            "ci95Low": 23.534,
+            "ci95High": 26.08,
+            "ci95HalfWidth": 1.273
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 9651.33,
-            "sd": 171.359,
-            "ci95Low": 9528.745,
-            "ci95High": 9773.915,
-            "ci95HalfWidth": 122.585
+            "mean": 9650.663,
+            "sd": 172.205,
+            "ci95Low": 9527.472,
+            "ci95High": 9773.854,
+            "ci95HalfWidth": 123.191
           },
           "congestionScore": {
             "n": 10,
-            "mean": 23.908,
-            "sd": 1.612,
-            "ci95Low": 22.755,
-            "ci95High": 25.062,
-            "ci95HalfWidth": 1.153
+            "mean": 24.767,
+            "sd": 1.443,
+            "ci95Low": 23.734,
+            "ci95High": 25.799,
+            "ci95HalfWidth": 1.032
           }
         },
         "max-pressure": {
@@ -3043,11 +3043,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 22.667,
-            "sd": 1.432,
-            "ci95Low": 21.642,
-            "ci95High": 23.691,
-            "ci95HalfWidth": 1.024
+            "mean": 28.158,
+            "sd": 2.119,
+            "ci95Low": 26.642,
+            "ci95High": 29.674,
+            "ci95HalfWidth": 1.516
           }
         },
         "max-pressure-ca": {
@@ -3069,11 +3069,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 22.808,
-            "sd": 1.425,
-            "ci95Low": 21.789,
-            "ci95High": 23.827,
-            "ci95HalfWidth": 1.019
+            "mean": 27.275,
+            "sd": 2.153,
+            "ci95Low": 25.735,
+            "ci95High": 28.815,
+            "ci95HalfWidth": 1.54
           }
         }
       },
@@ -3081,23 +3081,23 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -5.742,
-            "sd": 3.846,
-            "ci95Low": -8.494,
-            "ci95High": -2.99,
-            "ci95HalfWidth": 2.752,
-            "pctVsBaseline": -18.82,
-            "winsOutOfN": 9,
+            "mean": -5.699,
+            "sd": 3.974,
+            "ci95Low": -8.542,
+            "ci95High": -2.856,
+            "ci95HalfWidth": 2.843,
+            "pctVsBaseline": -18.68,
+            "winsOutOfN": 8,
             "significant": "better"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 40.263,
-            "sd": 43.073,
-            "ci95Low": 9.449,
-            "ci95High": 71.077,
-            "ci95HalfWidth": 30.814,
-            "pctVsBaseline": 0.42,
+            "mean": 39.596,
+            "sd": 42.251,
+            "ci95Low": 9.371,
+            "ci95High": 69.821,
+            "ci95HalfWidth": 30.225,
+            "pctVsBaseline": 0.41,
             "winsOutOfN": 9,
             "significant": "better"
           }
@@ -3183,37 +3183,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 41.8,
-            "sd": 1.398,
-            "ci95Low": 40.8,
-            "ci95High": 42.8,
-            "ci95HalfWidth": 1
+            "mean": 41.808,
+            "sd": 1.396,
+            "ci95Low": 40.81,
+            "ci95High": 42.807,
+            "ci95HalfWidth": 0.999
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 33.913,
-            "sd": 1.078,
-            "ci95Low": 33.142,
-            "ci95High": 34.684,
-            "ci95HalfWidth": 0.771
+            "mean": 34.167,
+            "sd": 0.849,
+            "ci95Low": 33.56,
+            "ci95High": 34.774,
+            "ci95HalfWidth": 0.607
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 16937.802,
-            "sd": 92.037,
-            "ci95Low": 16871.962,
-            "ci95High": 17003.642,
-            "ci95HalfWidth": 65.84
+            "mean": 16944.332,
+            "sd": 81.036,
+            "ci95Low": 16886.361,
+            "ci95High": 17002.303,
+            "ci95HalfWidth": 57.971
           },
           "congestionScore": {
             "n": 10,
-            "mean": 42.4,
-            "sd": 1.82,
-            "ci95Low": 41.098,
-            "ci95High": 43.702,
-            "ci95HalfWidth": 1.302
+            "mean": 43.433,
+            "sd": 1.427,
+            "ci95Low": 42.413,
+            "ci95High": 44.454,
+            "ci95HalfWidth": 1.021
           }
         },
         "max-pressure": {
@@ -3235,11 +3235,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 42.167,
-            "sd": 1.6,
-            "ci95Low": 41.022,
-            "ci95High": 43.311,
-            "ci95HalfWidth": 1.145
+            "mean": 45.933,
+            "sd": 1.827,
+            "ci95Low": 44.626,
+            "ci95High": 47.24,
+            "ci95HalfWidth": 1.307
           }
         },
         "max-pressure-ca": {
@@ -3261,11 +3261,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 41.558,
-            "sd": 1.536,
-            "ci95Low": 40.46,
-            "ci95High": 42.657,
-            "ci95HalfWidth": 1.099
+            "mean": 44.892,
+            "sd": 1.479,
+            "ci95Low": 43.834,
+            "ci95High": 45.95,
+            "ci95HalfWidth": 1.058
           }
         }
       },
@@ -3273,24 +3273,24 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 2.581,
-            "sd": 0.972,
-            "ci95Low": 1.885,
-            "ci95High": 3.277,
-            "ci95HalfWidth": 0.696,
-            "pctVsBaseline": 8.24,
+            "mean": 2.835,
+            "sd": 0.851,
+            "ci95Low": 2.226,
+            "ci95High": 3.444,
+            "ci95HalfWidth": 0.609,
+            "pctVsBaseline": 9.05,
             "winsOutOfN": 0,
             "significant": "worse"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": -46.918,
-            "sd": 32.157,
-            "ci95Low": -69.922,
-            "ci95High": -23.914,
-            "ci95HalfWidth": 23.004,
-            "pctVsBaseline": -0.28,
-            "winsOutOfN": 2,
+            "mean": -40.388,
+            "sd": 21.971,
+            "ci95Low": -56.105,
+            "ci95High": -24.671,
+            "ci95HalfWidth": 15.717,
+            "pctVsBaseline": -0.24,
+            "winsOutOfN": 1,
             "significant": "worse"
           }
         },
@@ -3375,37 +3375,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 47.783,
-            "sd": 2.56,
-            "ci95Low": 45.952,
-            "ci95High": 49.615,
-            "ci95HalfWidth": 1.832
+            "mean": 47.792,
+            "sd": 2.556,
+            "ci95Low": 45.963,
+            "ci95High": 49.62,
+            "ci95HalfWidth": 1.828
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 45.92,
-            "sd": 4.289,
-            "ci95Low": 42.852,
-            "ci95High": 48.988,
-            "ci95HalfWidth": 3.068
+            "mean": 45.96,
+            "sd": 4.328,
+            "ci95Low": 42.864,
+            "ci95High": 49.056,
+            "ci95HalfWidth": 3.096
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 17293.941,
-            "sd": 231.739,
-            "ci95Low": 17128.162,
-            "ci95High": 17459.72,
-            "ci95HalfWidth": 165.779
+            "mean": 17303.488,
+            "sd": 245.746,
+            "ci95Low": 17127.688,
+            "ci95High": 17479.288,
+            "ci95HalfWidth": 175.8
           },
           "congestionScore": {
             "n": 10,
-            "mean": 47.05,
-            "sd": 2.631,
-            "ci95Low": 45.168,
-            "ci95High": 48.932,
-            "ci95HalfWidth": 1.882
+            "mean": 47.533,
+            "sd": 2.917,
+            "ci95Low": 45.447,
+            "ci95High": 49.62,
+            "ci95HalfWidth": 2.086
           }
         },
         "max-pressure": {
@@ -3427,11 +3427,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 44.7,
-            "sd": 4.344,
-            "ci95Low": 41.592,
-            "ci95High": 47.808,
-            "ci95HalfWidth": 3.108
+            "mean": 47.817,
+            "sd": 4.478,
+            "ci95Low": 44.613,
+            "ci95High": 51.02,
+            "ci95HalfWidth": 3.204
           }
         },
         "max-pressure-ca": {
@@ -3453,11 +3453,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 42.983,
-            "sd": 2.854,
-            "ci95Low": 40.942,
-            "ci95High": 45.025,
-            "ci95HalfWidth": 2.041
+            "mean": 46.317,
+            "sd": 2.219,
+            "ci95Low": 44.729,
+            "ci95High": 47.904,
+            "ci95HalfWidth": 1.587
           }
         }
       },
@@ -3465,23 +3465,23 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -13.433,
-            "sd": 5.581,
-            "ci95Low": -17.425,
-            "ci95High": -9.441,
-            "ci95HalfWidth": 3.992,
-            "pctVsBaseline": -22.63,
+            "mean": -13.393,
+            "sd": 6.213,
+            "ci95Low": -17.838,
+            "ci95High": -8.948,
+            "ci95HalfWidth": 4.445,
+            "pctVsBaseline": -22.56,
             "winsOutOfN": 10,
             "significant": "better"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 342.702,
-            "sd": 199.666,
-            "ci95Low": 199.867,
-            "ci95High": 485.537,
-            "ci95HalfWidth": 142.835,
-            "pctVsBaseline": 2.02,
+            "mean": 352.249,
+            "sd": 212.426,
+            "ci95Low": 200.286,
+            "ci95High": 504.212,
+            "ci95HalfWidth": 151.963,
+            "pctVsBaseline": 2.08,
             "winsOutOfN": 10,
             "significant": "better"
           }
@@ -3567,37 +3567,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 49.492,
-            "sd": 1.512,
-            "ci95Low": 48.41,
+            "mean": 49.483,
+            "sd": 1.523,
+            "ci95Low": 48.394,
             "ci95High": 50.573,
-            "ci95HalfWidth": 1.082
+            "ci95HalfWidth": 1.09
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 44.022,
-            "sd": 0.749,
-            "ci95Low": 43.486,
-            "ci95High": 44.558,
-            "ci95HalfWidth": 0.536
+            "mean": 44.195,
+            "sd": 0.635,
+            "ci95Low": 43.74,
+            "ci95High": 44.65,
+            "ci95HalfWidth": 0.455
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 18941.58,
-            "sd": 80.157,
-            "ci95Low": 18884.238,
-            "ci95High": 18998.922,
-            "ci95HalfWidth": 57.342
+            "mean": 18939.835,
+            "sd": 72.893,
+            "ci95Low": 18887.69,
+            "ci95High": 18991.98,
+            "ci95HalfWidth": 52.145
           },
           "congestionScore": {
             "n": 10,
-            "mean": 48.35,
-            "sd": 1.837,
-            "ci95Low": 47.036,
-            "ci95High": 49.664,
-            "ci95HalfWidth": 1.314
+            "mean": 48.217,
+            "sd": 1.587,
+            "ci95Low": 47.082,
+            "ci95High": 49.352,
+            "ci95HalfWidth": 1.135
           }
         },
         "max-pressure": {
@@ -3619,11 +3619,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 52.167,
-            "sd": 2.162,
-            "ci95Low": 50.62,
-            "ci95High": 53.713,
-            "ci95HalfWidth": 1.546
+            "mean": 54.05,
+            "sd": 1.561,
+            "ci95Low": 52.933,
+            "ci95High": 55.167,
+            "ci95HalfWidth": 1.117
           }
         },
         "max-pressure-ca": {
@@ -3645,11 +3645,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 47.975,
-            "sd": 2.292,
-            "ci95Low": 46.335,
-            "ci95High": 49.615,
-            "ci95HalfWidth": 1.64
+            "mean": 49.642,
+            "sd": 2.222,
+            "ci95Low": 48.052,
+            "ci95High": 51.231,
+            "ci95HalfWidth": 1.59
           }
         }
       },
@@ -3657,22 +3657,22 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -2.164,
-            "sd": 2.051,
-            "ci95Low": -3.631,
-            "ci95High": -0.697,
-            "ci95HalfWidth": 1.467,
-            "pctVsBaseline": -4.69,
-            "winsOutOfN": 8,
+            "mean": -1.991,
+            "sd": 1.975,
+            "ci95Low": -3.404,
+            "ci95High": -0.578,
+            "ci95HalfWidth": 1.413,
+            "pctVsBaseline": -4.31,
+            "winsOutOfN": 9,
             "significant": "better"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 89.491,
-            "sd": 50.055,
-            "ci95Low": 53.683,
-            "ci95High": 125.299,
-            "ci95HalfWidth": 35.808,
+            "mean": 87.746,
+            "sd": 37.618,
+            "ci95Low": 60.836,
+            "ci95High": 114.656,
+            "ci95HalfWidth": 26.91,
             "pctVsBaseline": 0.47,
             "winsOutOfN": 10,
             "significant": "better"
@@ -3759,37 +3759,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 55.225,
-            "sd": 1.833,
-            "ci95Low": 53.914,
-            "ci95High": 56.536,
-            "ci95HalfWidth": 1.311
+            "mean": 55.208,
+            "sd": 1.815,
+            "ci95Low": 53.91,
+            "ci95High": 56.507,
+            "ci95HalfWidth": 1.299
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 61.362,
-            "sd": 7.025,
-            "ci95Low": 56.337,
-            "ci95High": 66.387,
-            "ci95HalfWidth": 5.025
+            "mean": 61.491,
+            "sd": 7.595,
+            "ci95Low": 56.058,
+            "ci95High": 66.924,
+            "ci95HalfWidth": 5.433
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 19206.814,
-            "sd": 237.094,
-            "ci95Low": 19037.204,
-            "ci95High": 19376.424,
-            "ci95HalfWidth": 169.61
+            "mean": 19196.509,
+            "sd": 206.533,
+            "ci95Low": 19048.761,
+            "ci95High": 19344.257,
+            "ci95HalfWidth": 147.748
           },
           "congestionScore": {
             "n": 10,
-            "mean": 53.192,
-            "sd": 2.923,
-            "ci95Low": 51.101,
-            "ci95High": 55.283,
-            "ci95HalfWidth": 2.091
+            "mean": 53.65,
+            "sd": 2.65,
+            "ci95Low": 51.754,
+            "ci95High": 55.546,
+            "ci95HalfWidth": 1.896
           }
         },
         "max-pressure": {
@@ -3811,11 +3811,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 57.408,
-            "sd": 5.985,
-            "ci95Low": 53.127,
-            "ci95High": 61.69,
-            "ci95HalfWidth": 4.281
+            "mean": 59.65,
+            "sd": 6.743,
+            "ci95Low": 54.826,
+            "ci95High": 64.474,
+            "ci95HalfWidth": 4.824
           }
         },
         "max-pressure-ca": {
@@ -3837,11 +3837,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 54.075,
-            "sd": 3.684,
-            "ci95Low": 51.44,
-            "ci95High": 56.71,
-            "ci95HalfWidth": 2.635
+            "mean": 55.7,
+            "sd": 4.797,
+            "ci95Low": 52.268,
+            "ci95High": 59.132,
+            "ci95HalfWidth": 3.432
           }
         }
       },
@@ -3849,23 +3849,23 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -15.336,
-            "sd": 5.994,
-            "ci95Low": -19.624,
-            "ci95High": -11.048,
-            "ci95HalfWidth": 4.288,
-            "pctVsBaseline": -20,
+            "mean": -15.207,
+            "sd": 5.49,
+            "ci95Low": -19.134,
+            "ci95High": -11.28,
+            "ci95HalfWidth": 3.927,
+            "pctVsBaseline": -19.83,
             "winsOutOfN": 10,
             "significant": "better"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 470.678,
-            "sd": 226.212,
-            "ci95Low": 308.853,
-            "ci95High": 632.503,
-            "ci95HalfWidth": 161.825,
-            "pctVsBaseline": 2.51,
+            "mean": 460.373,
+            "sd": 198.642,
+            "ci95Low": 318.271,
+            "ci95High": 602.475,
+            "ci95HalfWidth": 142.102,
+            "pctVsBaseline": 2.46,
             "winsOutOfN": 10,
             "significant": "better"
           }
@@ -3951,37 +3951,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 29.833,
-            "sd": 2.01,
-            "ci95Low": 28.395,
-            "ci95High": 31.271,
-            "ci95HalfWidth": 1.438
+            "mean": 29.825,
+            "sd": 2.015,
+            "ci95Low": 28.384,
+            "ci95High": 31.266,
+            "ci95HalfWidth": 1.441
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 23.323,
-            "sd": 0.312,
-            "ci95Low": 23.1,
-            "ci95High": 23.546,
-            "ci95HalfWidth": 0.223
+            "mean": 23.517,
+            "sd": 0.177,
+            "ci95Low": 23.39,
+            "ci95High": 23.644,
+            "ci95HalfWidth": 0.127
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 11217.65,
-            "sd": 113.616,
-            "ci95Low": 11136.372,
-            "ci95High": 11298.928,
-            "ci95HalfWidth": 81.278
+            "mean": 11219.14,
+            "sd": 112.37,
+            "ci95Low": 11138.753,
+            "ci95High": 11299.527,
+            "ci95HalfWidth": 80.387
           },
           "congestionScore": {
             "n": 10,
-            "mean": 29.183,
-            "sd": 1.673,
-            "ci95Low": 27.986,
-            "ci95High": 30.38,
-            "ci95HalfWidth": 1.197
+            "mean": 29.725,
+            "sd": 2.444,
+            "ci95Low": 27.977,
+            "ci95High": 31.473,
+            "ci95HalfWidth": 1.748
           }
         },
         "max-pressure": {
@@ -4003,11 +4003,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 27.05,
-            "sd": 2.36,
-            "ci95Low": 25.362,
-            "ci95High": 28.738,
-            "ci95HalfWidth": 1.688
+            "mean": 32.75,
+            "sd": 2.934,
+            "ci95Low": 30.651,
+            "ci95High": 34.849,
+            "ci95HalfWidth": 2.099
           }
         },
         "max-pressure-ca": {
@@ -4029,11 +4029,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 28.592,
-            "sd": 2.539,
-            "ci95Low": 26.776,
-            "ci95High": 30.408,
-            "ci95HalfWidth": 1.816
+            "mean": 32.808,
+            "sd": 1.668,
+            "ci95Low": 31.615,
+            "ci95High": 34.001,
+            "ci95HalfWidth": 1.193
           }
         }
       },
@@ -4041,24 +4041,24 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 0.569,
-            "sd": 0.414,
-            "ci95Low": 0.272,
-            "ci95High": 0.866,
-            "ci95HalfWidth": 0.297,
-            "pctVsBaseline": 2.5,
+            "mean": 0.763,
+            "sd": 0.233,
+            "ci95Low": 0.596,
+            "ci95High": 0.93,
+            "ci95HalfWidth": 0.167,
+            "pctVsBaseline": 3.35,
             "winsOutOfN": 0,
             "significant": "worse"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 1.252,
-            "sd": 12.772,
-            "ci95Low": -7.885,
-            "ci95High": 10.389,
-            "ci95HalfWidth": 9.137,
-            "pctVsBaseline": 0.01,
-            "winsOutOfN": 4,
+            "mean": 2.742,
+            "sd": 11.539,
+            "ci95Low": -5.513,
+            "ci95High": 10.997,
+            "ci95HalfWidth": 8.255,
+            "pctVsBaseline": 0.02,
+            "winsOutOfN": 7,
             "significant": "indistinguishable"
           }
         },
@@ -4143,37 +4143,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 32.442,
-            "sd": 2.369,
-            "ci95Low": 30.747,
-            "ci95High": 34.137,
-            "ci95HalfWidth": 1.695
+            "mean": 32.433,
+            "sd": 2.396,
+            "ci95Low": 30.719,
+            "ci95High": 34.148,
+            "ci95HalfWidth": 1.714
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 26.742,
-            "sd": 1.946,
-            "ci95Low": 25.35,
-            "ci95High": 28.134,
-            "ci95HalfWidth": 1.392
+            "mean": 26.707,
+            "sd": 2.048,
+            "ci95Low": 25.242,
+            "ci95High": 28.172,
+            "ci95HalfWidth": 1.465
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 11574.325,
-            "sd": 187.172,
-            "ci95Low": 11440.428,
-            "ci95High": 11708.222,
-            "ci95HalfWidth": 133.897
+            "mean": 11579.116,
+            "sd": 181.553,
+            "ci95Low": 11449.238,
+            "ci95High": 11708.994,
+            "ci95HalfWidth": 129.878
           },
           "congestionScore": {
             "n": 10,
-            "mean": 29.808,
-            "sd": 2.839,
-            "ci95Low": 27.777,
-            "ci95High": 31.839,
-            "ci95HalfWidth": 2.031
+            "mean": 30.142,
+            "sd": 2.934,
+            "ci95Low": 28.043,
+            "ci95High": 32.24,
+            "ci95HalfWidth": 2.099
           }
         },
         "max-pressure": {
@@ -4195,11 +4195,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 27.5,
-            "sd": 2.24,
-            "ci95Low": 25.897,
-            "ci95High": 29.103,
-            "ci95HalfWidth": 1.603
+            "mean": 32.842,
+            "sd": 3.316,
+            "ci95Low": 30.47,
+            "ci95High": 35.214,
+            "ci95HalfWidth": 2.372
           }
         },
         "max-pressure-ca": {
@@ -4221,11 +4221,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 27.383,
-            "sd": 2.308,
-            "ci95Low": 25.732,
-            "ci95High": 29.034,
-            "ci95HalfWidth": 1.651
+            "mean": 32.017,
+            "sd": 2.484,
+            "ci95Low": 30.24,
+            "ci95High": 33.793,
+            "ci95HalfWidth": 1.777
           }
         }
       },
@@ -4233,24 +4233,24 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -11.608,
-            "sd": 6.372,
-            "ci95Low": -16.166,
-            "ci95High": -7.05,
-            "ci95HalfWidth": 4.558,
-            "pctVsBaseline": -30.27,
+            "mean": -11.643,
+            "sd": 6.44,
+            "ci95Low": -16.25,
+            "ci95High": -7.036,
+            "ci95HalfWidth": 4.607,
+            "pctVsBaseline": -30.36,
             "winsOutOfN": 10,
             "significant": "better"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 141.389,
-            "sd": 122.955,
-            "ci95Low": 53.431,
-            "ci95High": 229.347,
-            "ci95HalfWidth": 87.958,
-            "pctVsBaseline": 1.24,
-            "winsOutOfN": 10,
+            "mean": 146.18,
+            "sd": 120.839,
+            "ci95Low": 59.735,
+            "ci95High": 232.625,
+            "ci95HalfWidth": 86.445,
+            "pctVsBaseline": 1.28,
+            "winsOutOfN": 9,
             "significant": "better"
           }
         },
@@ -4335,37 +4335,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 48.325,
-            "sd": 2.132,
-            "ci95Low": 46.8,
-            "ci95High": 49.85,
-            "ci95HalfWidth": 1.525
+            "mean": 48.267,
+            "sd": 2.11,
+            "ci95Low": 46.758,
+            "ci95High": 49.776,
+            "ci95HalfWidth": 1.509
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 50.075,
-            "sd": 1.333,
-            "ci95Low": 49.122,
-            "ci95High": 51.028,
-            "ci95HalfWidth": 0.953
+            "mean": 50.692,
+            "sd": 1.237,
+            "ci95Low": 49.807,
+            "ci95High": 51.577,
+            "ci95HalfWidth": 0.885
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 19933.687,
-            "sd": 107.612,
-            "ci95Low": 19856.704,
-            "ci95High": 20010.67,
-            "ci95HalfWidth": 76.983
+            "mean": 19924.932,
+            "sd": 108.002,
+            "ci95Low": 19847.671,
+            "ci95High": 20002.193,
+            "ci95HalfWidth": 77.261
           },
           "congestionScore": {
             "n": 10,
-            "mean": 50.008,
-            "sd": 1.785,
-            "ci95Low": 48.731,
-            "ci95High": 51.286,
-            "ci95HalfWidth": 1.277
+            "mean": 51.075,
+            "sd": 3.054,
+            "ci95Low": 48.89,
+            "ci95High": 53.26,
+            "ci95HalfWidth": 2.185
           }
         },
         "max-pressure": {
@@ -4387,11 +4387,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 57.892,
-            "sd": 3.346,
-            "ci95Low": 55.498,
-            "ci95High": 60.285,
-            "ci95HalfWidth": 2.393
+            "mean": 59.708,
+            "sd": 2.948,
+            "ci95Low": 57.599,
+            "ci95High": 61.817,
+            "ci95HalfWidth": 2.109
           }
         },
         "max-pressure-ca": {
@@ -4413,11 +4413,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 51.967,
-            "sd": 3.188,
-            "ci95Low": 49.686,
-            "ci95High": 54.248,
-            "ci95HalfWidth": 2.281
+            "mean": 54.183,
+            "sd": 2.664,
+            "ci95Low": 52.278,
+            "ci95High": 56.089,
+            "ci95HalfWidth": 1.906
           }
         }
       },
@@ -4425,24 +4425,24 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 2.704,
-            "sd": 0.893,
-            "ci95Low": 2.065,
-            "ci95High": 3.343,
-            "ci95HalfWidth": 0.639,
-            "pctVsBaseline": 5.71,
+            "mean": 3.321,
+            "sd": 0.945,
+            "ci95Low": 2.645,
+            "ci95High": 3.997,
+            "ci95HalfWidth": 0.676,
+            "pctVsBaseline": 7.01,
             "winsOutOfN": 0,
             "significant": "worse"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": -119.929,
-            "sd": 57.454,
-            "ci95Low": -161.03,
-            "ci95High": -78.828,
-            "ci95HalfWidth": 41.101,
-            "pctVsBaseline": -0.6,
-            "winsOutOfN": 0,
+            "mean": -128.684,
+            "sd": 71.615,
+            "ci95Low": -179.915,
+            "ci95High": -77.453,
+            "ci95HalfWidth": 51.231,
+            "pctVsBaseline": -0.64,
+            "winsOutOfN": 1,
             "significant": "worse"
           }
         },
@@ -4527,37 +4527,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 54.967,
-            "sd": 2.662,
-            "ci95Low": 53.062,
-            "ci95High": 56.871,
-            "ci95HalfWidth": 1.904
+            "mean": 54.917,
+            "sd": 2.659,
+            "ci95Low": 53.015,
+            "ci95High": 56.819,
+            "ci95HalfWidth": 1.902
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 70.11,
-            "sd": 8.808,
-            "ci95Low": 63.809,
-            "ci95High": 76.411,
-            "ci95HalfWidth": 6.301
+            "mean": 70.969,
+            "sd": 8.509,
+            "ci95Low": 64.882,
+            "ci95High": 77.056,
+            "ci95HalfWidth": 6.087
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 20101.034,
-            "sd": 220.02,
-            "ci95Low": 19943.638,
-            "ci95High": 20258.43,
-            "ci95HalfWidth": 157.396
+            "mean": 20120.305,
+            "sd": 236.964,
+            "ci95Low": 19950.788,
+            "ci95High": 20289.822,
+            "ci95HalfWidth": 169.517
           },
           "congestionScore": {
             "n": 10,
-            "mean": 55.667,
-            "sd": 2.164,
-            "ci95Low": 54.119,
-            "ci95High": 57.215,
-            "ci95HalfWidth": 1.548
+            "mean": 56.617,
+            "sd": 3.063,
+            "ci95Low": 54.426,
+            "ci95High": 58.808,
+            "ci95HalfWidth": 2.191
           }
         },
         "max-pressure": {
@@ -4579,11 +4579,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 64.95,
-            "sd": 6.152,
-            "ci95Low": 60.549,
-            "ci95High": 69.351,
-            "ci95HalfWidth": 4.401
+            "mean": 67.175,
+            "sd": 6.271,
+            "ci95Low": 62.689,
+            "ci95High": 71.661,
+            "ci95HalfWidth": 4.486
           }
         },
         "max-pressure-ca": {
@@ -4605,11 +4605,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 58.525,
-            "sd": 4.577,
-            "ci95Low": 55.251,
-            "ci95High": 61.799,
-            "ci95HalfWidth": 3.274
+            "mean": 62.1,
+            "sd": 4.707,
+            "ci95Low": 58.733,
+            "ci95High": 65.467,
+            "ci95HalfWidth": 3.367
           }
         }
       },
@@ -4617,24 +4617,24 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -6.957,
-            "sd": 4.26,
-            "ci95Low": -10.004,
-            "ci95High": -3.91,
-            "ci95HalfWidth": 3.047,
-            "pctVsBaseline": -9.03,
+            "mean": -6.098,
+            "sd": 4.661,
+            "ci95Low": -9.433,
+            "ci95High": -2.763,
+            "ci95HalfWidth": 3.335,
+            "pctVsBaseline": -7.91,
             "winsOutOfN": 9,
             "significant": "better"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 137.173,
-            "sd": 176.149,
-            "ci95Low": 11.162,
-            "ci95High": 263.184,
-            "ci95HalfWidth": 126.011,
-            "pctVsBaseline": 0.69,
-            "winsOutOfN": 8,
+            "mean": 156.444,
+            "sd": 183.333,
+            "ci95Low": 25.293,
+            "ci95High": 287.595,
+            "ci95HalfWidth": 131.151,
+            "pctVsBaseline": 0.78,
+            "winsOutOfN": 9,
             "significant": "better"
           }
         },
@@ -4719,37 +4719,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 58.325,
-            "sd": 1.251,
-            "ci95Low": 57.43,
-            "ci95High": 59.22,
-            "ci95HalfWidth": 0.895
+            "mean": 58.3,
+            "sd": 1.248,
+            "ci95Low": 57.407,
+            "ci95High": 59.193,
+            "ci95HalfWidth": 0.893
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 64.846,
-            "sd": 2.535,
-            "ci95Low": 63.032,
-            "ci95High": 66.66,
-            "ci95HalfWidth": 1.814
+            "mean": 65.894,
+            "sd": 2.159,
+            "ci95Low": 64.349,
+            "ci95High": 67.439,
+            "ci95HalfWidth": 1.545
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 21269.127,
-            "sd": 117.278,
-            "ci95Low": 21185.229,
-            "ci95High": 21353.025,
-            "ci95HalfWidth": 83.898
+            "mean": 21267.593,
+            "sd": 67.386,
+            "ci95Low": 21219.387,
+            "ci95High": 21315.799,
+            "ci95HalfWidth": 48.206
           },
           "congestionScore": {
             "n": 10,
-            "mean": 59.858,
-            "sd": 3.586,
-            "ci95Low": 57.293,
-            "ci95High": 62.424,
-            "ci95HalfWidth": 2.565
+            "mean": 58.658,
+            "sd": 3.623,
+            "ci95Low": 56.067,
+            "ci95High": 61.25,
+            "ci95HalfWidth": 2.592
           }
         },
         "max-pressure": {
@@ -4771,11 +4771,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 70.442,
-            "sd": 1.3,
-            "ci95Low": 69.512,
-            "ci95High": 71.372,
-            "ci95HalfWidth": 0.93
+            "mean": 72.983,
+            "sd": 1.297,
+            "ci95Low": 72.056,
+            "ci95High": 73.911,
+            "ci95HalfWidth": 0.928
           }
         },
         "max-pressure-ca": {
@@ -4797,11 +4797,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 62.6,
-            "sd": 2.135,
-            "ci95Low": 61.073,
-            "ci95High": 64.127,
-            "ci95HalfWidth": 1.527
+            "mean": 64.625,
+            "sd": 1.883,
+            "ci95Low": 63.278,
+            "ci95High": 65.972,
+            "ci95HalfWidth": 1.347
           }
         }
       },
@@ -4809,23 +4809,23 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -6.749,
-            "sd": 2.374,
-            "ci95Low": -8.447,
-            "ci95High": -5.051,
-            "ci95HalfWidth": 1.698,
-            "pctVsBaseline": -9.43,
+            "mean": -5.701,
+            "sd": 1.533,
+            "ci95Low": -6.798,
+            "ci95High": -4.604,
+            "ci95HalfWidth": 1.097,
+            "pctVsBaseline": -7.96,
             "winsOutOfN": 10,
             "significant": "better"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 169.88,
-            "sd": 101.134,
-            "ci95Low": 97.532,
-            "ci95High": 242.228,
-            "ci95HalfWidth": 72.348,
-            "pctVsBaseline": 0.81,
+            "mean": 168.346,
+            "sd": 67.611,
+            "ci95Low": 119.979,
+            "ci95High": 216.713,
+            "ci95HalfWidth": 48.367,
+            "pctVsBaseline": 0.8,
             "winsOutOfN": 10,
             "significant": "better"
           }
@@ -4911,37 +4911,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 63.617,
-            "sd": 1.885,
-            "ci95Low": 62.268,
-            "ci95High": 64.965,
-            "ci95HalfWidth": 1.348
+            "mean": 63.6,
+            "sd": 1.872,
+            "ci95Low": 62.261,
+            "ci95High": 64.939,
+            "ci95HalfWidth": 1.339
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 88.916,
-            "sd": 10.043,
-            "ci95Low": 81.732,
-            "ci95High": 96.1,
-            "ci95HalfWidth": 7.184
+            "mean": 89.622,
+            "sd": 9.559,
+            "ci95Low": 82.784,
+            "ci95High": 96.46,
+            "ci95HalfWidth": 6.838
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 21368.271,
-            "sd": 217.311,
-            "ci95Low": 21212.813,
-            "ci95High": 21523.729,
-            "ci95HalfWidth": 155.458
+            "mean": 21380.335,
+            "sd": 203.174,
+            "ci95Low": 21234.99,
+            "ci95High": 21525.68,
+            "ci95HalfWidth": 145.345
           },
           "congestionScore": {
             "n": 10,
-            "mean": 63.975,
-            "sd": 3.484,
-            "ci95Low": 61.483,
-            "ci95High": 66.467,
-            "ci95HalfWidth": 2.492
+            "mean": 62.917,
+            "sd": 2.744,
+            "ci95Low": 60.954,
+            "ci95High": 64.88,
+            "ci95HalfWidth": 1.963
           }
         },
         "max-pressure": {
@@ -4963,11 +4963,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 79.267,
-            "sd": 7.055,
-            "ci95Low": 74.22,
-            "ci95High": 84.313,
-            "ci95HalfWidth": 5.047
+            "mean": 81.225,
+            "sd": 6.4,
+            "ci95Low": 76.647,
+            "ci95High": 85.803,
+            "ci95HalfWidth": 4.578
           }
         },
         "max-pressure-ca": {
@@ -4989,11 +4989,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 67.867,
-            "sd": 4.261,
-            "ci95Low": 64.818,
-            "ci95High": 70.915,
-            "ci95HalfWidth": 3.048
+            "mean": 70.492,
+            "sd": 5.021,
+            "ci95Low": 66.9,
+            "ci95High": 74.084,
+            "ci95HalfWidth": 3.592
           }
         }
       },
@@ -5001,23 +5001,23 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -14.136,
-            "sd": 5.007,
-            "ci95Low": -17.718,
-            "ci95High": -10.554,
-            "ci95HalfWidth": 3.582,
-            "pctVsBaseline": -13.72,
+            "mean": -13.43,
+            "sd": 5.014,
+            "ci95Low": -17.017,
+            "ci95High": -9.843,
+            "ci95HalfWidth": 3.587,
+            "pctVsBaseline": -13.03,
             "winsOutOfN": 10,
             "significant": "better"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 430.055,
-            "sd": 180.748,
-            "ci95Low": 300.753,
-            "ci95High": 559.357,
-            "ci95HalfWidth": 129.302,
-            "pctVsBaseline": 2.05,
+            "mean": 442.119,
+            "sd": 184.909,
+            "ci95Low": 309.841,
+            "ci95High": 574.397,
+            "ci95HalfWidth": 132.278,
+            "pctVsBaseline": 2.11,
             "winsOutOfN": 10,
             "significant": "better"
           }
@@ -5103,37 +5103,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 33.158,
-            "sd": 1.53,
-            "ci95Low": 32.064,
-            "ci95High": 34.253,
-            "ci95HalfWidth": 1.094
+            "mean": 33.142,
+            "sd": 1.511,
+            "ci95Low": 32.061,
+            "ci95High": 34.223,
+            "ci95HalfWidth": 1.081
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 25.053,
-            "sd": 0.255,
-            "ci95Low": 24.871,
-            "ci95High": 25.235,
-            "ci95HalfWidth": 0.182
+            "mean": 24.681,
+            "sd": 0.359,
+            "ci95Low": 24.424,
+            "ci95High": 24.938,
+            "ci95HalfWidth": 0.257
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 13066.447,
-            "sd": 113.89,
-            "ci95Low": 12984.974,
-            "ci95High": 13147.92,
-            "ci95HalfWidth": 81.473
+            "mean": 13069.9,
+            "sd": 105.708,
+            "ci95Low": 12994.279,
+            "ci95High": 13145.521,
+            "ci95HalfWidth": 75.621
           },
           "congestionScore": {
             "n": 10,
-            "mean": 32.875,
-            "sd": 2.308,
-            "ci95Low": 31.224,
-            "ci95High": 34.526,
-            "ci95HalfWidth": 1.651
+            "mean": 33.9,
+            "sd": 1.175,
+            "ci95Low": 33.059,
+            "ci95High": 34.741,
+            "ci95HalfWidth": 0.841
           }
         },
         "max-pressure": {
@@ -5155,11 +5155,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 32.25,
-            "sd": 1.517,
-            "ci95Low": 31.165,
-            "ci95High": 33.335,
-            "ci95HalfWidth": 1.085
+            "mean": 36.833,
+            "sd": 1.579,
+            "ci95Low": 35.704,
+            "ci95High": 37.963,
+            "ci95HalfWidth": 1.129
           }
         },
         "max-pressure-ca": {
@@ -5181,11 +5181,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 31.692,
-            "sd": 1.266,
-            "ci95Low": 30.786,
-            "ci95High": 32.598,
-            "ci95HalfWidth": 0.906
+            "mean": 35.283,
+            "sd": 1.18,
+            "ci95Low": 34.439,
+            "ci95High": 36.127,
+            "ci95HalfWidth": 0.844
           }
         }
       },
@@ -5193,23 +5193,23 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 0.681,
-            "sd": 0.274,
-            "ci95Low": 0.485,
-            "ci95High": 0.877,
-            "ci95HalfWidth": 0.196,
-            "pctVsBaseline": 2.79,
-            "winsOutOfN": 0,
+            "mean": 0.309,
+            "sd": 0.344,
+            "ci95Low": 0.063,
+            "ci95High": 0.555,
+            "ci95HalfWidth": 0.246,
+            "pctVsBaseline": 1.27,
+            "winsOutOfN": 2,
             "significant": "worse"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": -7.073,
-            "sd": 14.953,
-            "ci95Low": -17.77,
-            "ci95High": 3.624,
-            "ci95HalfWidth": 10.697,
-            "pctVsBaseline": -0.05,
+            "mean": -3.62,
+            "sd": 13.261,
+            "ci95Low": -13.106,
+            "ci95High": 5.866,
+            "ci95HalfWidth": 9.486,
+            "pctVsBaseline": -0.03,
             "winsOutOfN": 3,
             "significant": "indistinguishable"
           }
@@ -5295,37 +5295,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 37.733,
-            "sd": 2.512,
-            "ci95Low": 35.936,
-            "ci95High": 39.53,
-            "ci95HalfWidth": 1.797
+            "mean": 37.717,
+            "sd": 2.503,
+            "ci95Low": 35.926,
+            "ci95High": 39.507,
+            "ci95HalfWidth": 1.791
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 30.487,
-            "sd": 2.829,
-            "ci95Low": 28.464,
-            "ci95High": 32.51,
-            "ci95HalfWidth": 2.023
+            "mean": 29.966,
+            "sd": 2.514,
+            "ci95Low": 28.168,
+            "ci95High": 31.764,
+            "ci95HalfWidth": 1.798
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 13450.115,
-            "sd": 183.899,
-            "ci95Low": 13318.559,
-            "ci95High": 13581.671,
-            "ci95HalfWidth": 131.556
+            "mean": 13451.838,
+            "sd": 192.23,
+            "ci95Low": 13314.322,
+            "ci95High": 13589.354,
+            "ci95HalfWidth": 137.516
           },
           "congestionScore": {
             "n": 10,
-            "mean": 34.725,
-            "sd": 2.204,
-            "ci95Low": 33.148,
-            "ci95High": 36.302,
-            "ci95HalfWidth": 1.577
+            "mean": 35.45,
+            "sd": 1.707,
+            "ci95Low": 34.229,
+            "ci95High": 36.671,
+            "ci95HalfWidth": 1.221
           }
         },
         "max-pressure": {
@@ -5347,11 +5347,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 32.425,
-            "sd": 2.132,
-            "ci95Low": 30.9,
-            "ci95High": 33.95,
-            "ci95HalfWidth": 1.525
+            "mean": 37.108,
+            "sd": 1.922,
+            "ci95Low": 35.733,
+            "ci95High": 38.483,
+            "ci95HalfWidth": 1.375
           }
         },
         "max-pressure-ca": {
@@ -5373,11 +5373,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 32.758,
-            "sd": 1.332,
-            "ci95Low": 31.805,
-            "ci95High": 33.712,
-            "ci95HalfWidth": 0.953
+            "mean": 37.083,
+            "sd": 1.907,
+            "ci95Low": 35.719,
+            "ci95High": 38.448,
+            "ci95HalfWidth": 1.364
           }
         }
       },
@@ -5385,23 +5385,23 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": -14.774,
-            "sd": 7.133,
-            "ci95Low": -19.876,
-            "ci95High": -9.672,
-            "ci95HalfWidth": 5.102,
-            "pctVsBaseline": -32.64,
+            "mean": -15.295,
+            "sd": 7.059,
+            "ci95Low": -20.345,
+            "ci95High": -10.245,
+            "ci95HalfWidth": 5.05,
+            "pctVsBaseline": -33.79,
             "winsOutOfN": 10,
             "significant": "better"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 238.131,
-            "sd": 184.406,
-            "ci95Low": 106.213,
-            "ci95High": 370.049,
-            "ci95HalfWidth": 131.918,
-            "pctVsBaseline": 1.8,
+            "mean": 239.854,
+            "sd": 191.186,
+            "ci95Low": 103.085,
+            "ci95High": 376.623,
+            "ci95HalfWidth": 136.769,
+            "pctVsBaseline": 1.82,
             "winsOutOfN": 9,
             "significant": "better"
           }
@@ -5487,37 +5487,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 56.175,
-            "sd": 1.864,
-            "ci95Low": 54.841,
-            "ci95High": 57.509,
-            "ci95HalfWidth": 1.334
+            "mean": 56.15,
+            "sd": 1.879,
+            "ci95Low": 54.806,
+            "ci95High": 57.494,
+            "ci95HalfWidth": 1.344
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 77.265,
-            "sd": 1.965,
-            "ci95Low": 75.859,
-            "ci95High": 78.671,
-            "ci95HalfWidth": 1.406
+            "mean": 80.337,
+            "sd": 3.203,
+            "ci95Low": 78.045,
+            "ci95High": 82.629,
+            "ci95HalfWidth": 2.292
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 21981.825,
-            "sd": 112.962,
-            "ci95Low": 21901.015,
-            "ci95High": 22062.635,
-            "ci95HalfWidth": 80.81
+            "mean": 21957.058,
+            "sd": 105.267,
+            "ci95Low": 21881.753,
+            "ci95High": 22032.363,
+            "ci95HalfWidth": 75.305
           },
           "congestionScore": {
             "n": 10,
-            "mean": 64.192,
-            "sd": 1.433,
-            "ci95Low": 63.166,
-            "ci95High": 65.217,
-            "ci95HalfWidth": 1.025
+            "mean": 63,
+            "sd": 1.324,
+            "ci95Low": 62.053,
+            "ci95High": 63.947,
+            "ci95HalfWidth": 0.947
           }
         },
         "max-pressure": {
@@ -5539,11 +5539,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 78.825,
-            "sd": 1.523,
-            "ci95Low": 77.735,
-            "ci95High": 79.915,
-            "ci95HalfWidth": 1.09
+            "mean": 80.533,
+            "sd": 1.188,
+            "ci95Low": 79.684,
+            "ci95High": 81.383,
+            "ci95HalfWidth": 0.85
           }
         },
         "max-pressure-ca": {
@@ -5565,11 +5565,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 71.067,
-            "sd": 1.849,
-            "ci95Low": 69.744,
-            "ci95High": 72.389,
-            "ci95HalfWidth": 1.323
+            "mean": 72.083,
+            "sd": 1.926,
+            "ci95Low": 70.706,
+            "ci95High": 73.461,
+            "ci95HalfWidth": 1.378
           }
         }
       },
@@ -5577,23 +5577,23 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 6.423,
-            "sd": 2.185,
-            "ci95Low": 4.86,
-            "ci95High": 7.986,
-            "ci95HalfWidth": 1.563,
-            "pctVsBaseline": 9.07,
+            "mean": 9.495,
+            "sd": 1.881,
+            "ci95Low": 8.149,
+            "ci95High": 10.841,
+            "ci95HalfWidth": 1.346,
+            "pctVsBaseline": 13.4,
             "winsOutOfN": 0,
             "significant": "worse"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": -368.139,
-            "sd": 100.32,
-            "ci95Low": -439.905,
-            "ci95High": -296.373,
-            "ci95HalfWidth": 71.766,
-            "pctVsBaseline": -1.65,
+            "mean": -392.906,
+            "sd": 101.114,
+            "ci95Low": -465.24,
+            "ci95High": -320.572,
+            "ci95HalfWidth": 72.334,
+            "pctVsBaseline": -1.76,
             "winsOutOfN": 0,
             "significant": "worse"
           }
@@ -5679,37 +5679,37 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 61.942,
-            "sd": 2.394,
-            "ci95Low": 60.229,
-            "ci95High": 63.654,
-            "ci95HalfWidth": 1.712
+            "mean": 61.917,
+            "sd": 2.404,
+            "ci95Low": 60.197,
+            "ci95High": 63.637,
+            "ci95HalfWidth": 1.72
           }
         },
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 103.09,
-            "sd": 8.436,
-            "ci95Low": 97.055,
-            "ci95High": 109.125,
-            "ci95HalfWidth": 6.035
+            "mean": 106.6,
+            "sd": 9.083,
+            "ci95Low": 100.102,
+            "ci95High": 113.098,
+            "ci95HalfWidth": 6.498
           },
           "throughputVeh": {
             "n": 10,
-            "mean": 22002.242,
-            "sd": 190.92,
-            "ci95Low": 21865.663,
-            "ci95High": 22138.821,
-            "ci95HalfWidth": 136.579
+            "mean": 21955.938,
+            "sd": 195.144,
+            "ci95Low": 21816.338,
+            "ci95High": 22095.538,
+            "ci95HalfWidth": 139.6
           },
           "congestionScore": {
             "n": 10,
-            "mean": 68.317,
-            "sd": 2.171,
-            "ci95Low": 66.763,
-            "ci95High": 69.87,
-            "ci95HalfWidth": 1.553
+            "mean": 67.792,
+            "sd": 1.761,
+            "ci95Low": 66.532,
+            "ci95High": 69.051,
+            "ci95HalfWidth": 1.26
           }
         },
         "max-pressure": {
@@ -5731,11 +5731,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 83.492,
-            "sd": 5.443,
-            "ci95Low": 79.598,
-            "ci95High": 87.385,
-            "ci95HalfWidth": 3.893
+            "mean": 85.825,
+            "sd": 4.438,
+            "ci95Low": 82.65,
+            "ci95High": 89,
+            "ci95HalfWidth": 3.175
           }
         },
         "max-pressure-ca": {
@@ -5757,11 +5757,11 @@
           },
           "congestionScore": {
             "n": 10,
-            "mean": 74.425,
-            "sd": 4.232,
-            "ci95Low": 71.398,
-            "ci95High": 77.452,
-            "ci95HalfWidth": 3.027
+            "mean": 76.825,
+            "sd": 3.83,
+            "ci95Low": 74.085,
+            "ci95High": 79.565,
+            "ci95HalfWidth": 2.74
           }
         }
       },
@@ -5769,24 +5769,24 @@
         "webster": {
           "avgDelayPerVehSec": {
             "n": 10,
-            "mean": 1.498,
-            "sd": 4.791,
-            "ci95Low": -1.93,
-            "ci95High": 4.926,
-            "ci95HalfWidth": 3.428,
-            "pctVsBaseline": 1.47,
-            "winsOutOfN": 5,
-            "significant": "indistinguishable"
+            "mean": 5.008,
+            "sd": 4.496,
+            "ci95Low": 1.792,
+            "ci95High": 8.224,
+            "ci95HalfWidth": 3.216,
+            "pctVsBaseline": 4.93,
+            "winsOutOfN": 1,
+            "significant": "worse"
           },
           "throughputVeh": {
             "n": 10,
-            "mean": -200.018,
-            "sd": 167.641,
-            "ci95Low": -319.943,
-            "ci95High": -80.093,
-            "ci95HalfWidth": 119.925,
-            "pctVsBaseline": -0.9,
-            "winsOutOfN": 0,
+            "mean": -246.322,
+            "sd": 165.587,
+            "ci95Low": -364.778,
+            "ci95High": -127.866,
+            "ci95HalfWidth": 118.456,
+            "pctVsBaseline": -1.11,
+            "winsOutOfN": 1,
             "significant": "worse"
           }
         },

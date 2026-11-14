@@ -34,11 +34,11 @@ export const WORKSPACES = [
 ];
 
 export const PERSONA_OPTIONS = [
-  { id: 'anonymous', label: 'Anonymous', roleLabel: 'Read-only' },
-  { id: 'viewer', label: 'Viewer', roleLabel: 'City + Alerts' },
-  { id: 'south-operator', label: 'South Desk', roleLabel: 'South Zone Op' },
-  { id: 'east-operator', label: 'East Desk', roleLabel: 'East Zone Op' },
-  { id: 'admin', label: 'Supervisor', roleLabel: 'Network Admin' },
+  { id: 'anonymous', label: 'Anonymous', shortLabel: 'Anon', roleLabel: 'Read-only' },
+  { id: 'viewer', label: 'Viewer', shortLabel: 'Viewer', roleLabel: 'City + Alerts' },
+  { id: 'south-operator', label: 'South Desk', shortLabel: 'South Op', roleLabel: 'South Zone Op' },
+  { id: 'east-operator', label: 'East Desk', shortLabel: 'East Op', roleLabel: 'East Zone Op' },
+  { id: 'admin', label: 'Supervisor', shortLabel: 'Supervisor', roleLabel: 'Network Admin' },
 ];
 
 const ThemeContext = createContext({
@@ -113,6 +113,9 @@ export function useTheme() {
 export function classifyJunctionStatus(junction, isDark = true) {
   const status = junction?.status || 'healthy';
   const metrics = junction?.metrics || junction?.data || junction || {};
+  const vOverC = Number(junction?.kpi?.degreeOfSaturation ?? metrics.degreeOfSaturation ?? metrics.vOverC ?? 0);
+  const delaySec = Number(junction?.kpi?.avgDelayPerVehSec ?? metrics.avgDelayPerVehSec ?? 0);
+  const avgSpeed = Number(metrics.avgSpeedKmph ?? junction?.avgSpeedKmph ?? 40);
   const isEmergency = Boolean(
     metrics.ambulanceDetected || junction?.emergencyMode || status === 'emergency'
   );
@@ -130,7 +133,13 @@ export function classifyJunctionStatus(junction, isDark = true) {
     };
   }
 
-  if (isStalled || status === 'critical' || status === 'gridlock') {
+  if (
+    isStalled ||
+    status === 'critical' ||
+    status === 'gridlock' ||
+    delaySec >= 65 ||
+    avgSpeed < 10
+  ) {
     return {
       key: 'gridlock',
       label: isStalled ? 'Incident' : 'Gridlock',
@@ -142,7 +151,7 @@ export function classifyJunctionStatus(junction, isDark = true) {
     };
   }
 
-  if (status === 'congested' || status === 'warning') {
+  if (status === 'congested' || status === 'warning' || vOverC >= 0.85 || delaySec >= 22 || avgSpeed < 20) {
     return {
       key: 'heavy',
       label: 'Heavy',

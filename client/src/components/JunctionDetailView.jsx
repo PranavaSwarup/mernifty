@@ -182,7 +182,10 @@ export function JunctionDetailView({
             <span>
               Speed <strong className="text-ink-primary">{fmtNum(merged.metrics?.avgSpeedKmph, 1)} km/h</strong>
             </span>
-            <span>
+            <span
+              title="v/c = rolling arrival flow / (saturation flow × incident factor × weather factor × realised effective green ratio)"
+              className="underline decoration-dotted decoration-ink-muted/60 cursor-help"
+            >
               Saturation v/c <strong className="text-ink-primary">{fmtNum(kpi.degreeOfSaturation, 2)}</strong>
             </span>
             <span>
