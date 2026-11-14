@@ -9,7 +9,7 @@ import { validateTelemetryEvent, validateTelemetryBatch } from '../middleware/va
 
 const router = express.Router();
 
-// 1. Single Telemetry Ingestion Endpoint
+// 1. Single Traffic Junction Ingestion Endpoint
 router.post('/ingest', rateLimiter(), validateTelemetryEvent, async (req, res) => {
   const startT = Date.now();
   const event = req.validatedEvent;
@@ -20,7 +20,7 @@ router.post('/ingest', rateLimiter(), validateTelemetryEvent, async (req, res) =
     return res.status(429).json({ success: false, error: bufferRes.reason });
   }
 
-  // Anomaly detection
+  // Anomaly & gridlock detection
   const alert = anomalyEngine.evaluate(event);
 
   // Real-time broadcast
@@ -32,12 +32,15 @@ router.post('/ingest', rateLimiter(), validateTelemetryEvent, async (req, res) =
   res.status(202).json({
     success: true,
     eventId: event.eventId,
+    junctionId: event.junctionId,
+    zoneId: event.zoneId,
     anomalyDetected: !!alert,
+    alertTitle: alert ? alert.title : null,
     processingLatencyMs: latency,
   });
 });
 
-// 2. Batch High-Throughput Ingestion Endpoint
+// 2. Batch High-Throughput Traffic Ingestion Endpoint
 router.post('/batch', rateLimiter({ max: 5000 }), validateTelemetryBatch, async (req, res) => {
   const startT = Date.now();
   const events = req.validatedEvents;
@@ -62,14 +65,21 @@ router.post('/batch', rateLimiter({ max: 5000 }), validateTelemetryBatch, async 
 });
 
 // 3. Historical Telemetry Retrieval
-// Supports: deviceId, category, from, to, limit
+// Supports: junctionId / deviceId, zoneId / category, from, to, limit
 router.get('/history', async (req, res) => {
   try {
-    const { deviceId, category, from, to, limit = 100 } = req.query;
+    const { junctionId, deviceId, zoneId, category, from, to, limit = 100 } = req.query;
     const query = {};
 
-    if (deviceId) query.deviceId = deviceId;
-    if (category) query.category = category;
+    const targetId = junctionId || deviceId;
+    if (targetId) {
+      query.$or = [{ junctionId: targetId }, { deviceId: targetId }];
+    }
+
+    const targetZone = zoneId || category;
+    if (targetZone && targetZone !== 'all') {
+      query.category = targetZone;
+    }
 
     if (from || to) {
       query.timestamp = {};
@@ -97,9 +107,10 @@ router.get('/history', async (req, res) => {
 // 4. Aggregated Time-Series Data (for fast long-span charts)
 router.get('/aggregate', async (req, res) => {
   try {
-    const { deviceId, minutes = 15, bucketSeconds = 10 } = req.query;
-    if (!deviceId) {
-      return res.status(400).json({ success: false, error: 'deviceId is required for aggregation' });
+    const { junctionId, deviceId, minutes = 15, bucketSeconds = 10 } = req.query;
+    const targetId = junctionId || deviceId;
+    if (!targetId) {
+      return res.status(400).json({ success: false, error: 'junctionId/deviceId is required for aggregation' });
     }
 
     const sinceDate = new Date(Date.now() - parseInt(minutes, 10) * 60 * 1000);
@@ -107,20 +118,20 @@ router.get('/aggregate', async (req, res) => {
 
     // Fetch raw records within window
     const records = await Telemetry.find({
-      deviceId,
+      $or: [{ junctionId: targetId }, { deviceId: targetId }],
       timestamp: { $gte: sinceDate },
     })
       .sort({ timestamp: 1 })
       .lean();
 
-    // Group into buckets in-memory (resilient across Mongo standalone/memory-server)
+    // Group into buckets in-memory
     const buckets = new Map();
     for (const rec of records) {
       const bucketTime = Math.floor(new Date(rec.timestamp).getTime() / intervalMs) * intervalMs;
       if (!buckets.has(bucketTime)) {
         buckets.set(bucketTime, []);
       }
-      buckets.get(bucketTime).push(rec.metrics);
+      buckets.get(bucketTime).push(rec.metrics || {});
     }
 
     const aggregated = [];
@@ -144,7 +155,8 @@ router.get('/aggregate', async (req, res) => {
 
     res.json({
       success: true,
-      deviceId,
+      junctionId: targetId,
+      deviceId: targetId,
       bucketSeconds: parseInt(bucketSeconds, 10),
       buckets: aggregated,
     });

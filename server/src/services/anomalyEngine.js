@@ -4,11 +4,11 @@ import crypto from 'crypto';
 
 class AnomalyEngine {
   constructor() {
-    // Sliding window of recent values: deviceId:metric -> array of numbers
+    // Sliding window of recent values: junctionId:metric -> array of numbers
     this.history = new Map();
-    this.maxHistory = 30; // 30 data points per metric
-    this.alertCooldowns = new Map(); // key: deviceId:metric -> timestamp
-    this.cooldownMs = 20000; // 20s cooldown per alert type to avoid alert fatigue
+    this.maxHistory = 30;
+    this.alertCooldowns = new Map(); // key: junctionId:metric -> timestamp
+    this.cooldownMs = 15000; // 15s cooldown per alert type to avoid alert fatigue
     this.socketBroadcastCallback = null;
   }
 
@@ -17,17 +17,21 @@ class AnomalyEngine {
   }
 
   evaluate(event) {
-    const { deviceId, deviceName, category, metrics, timestamp } = event;
-    if (!metrics) return null;
+    const { junctionId, deviceId, junctionName, deviceName, zoneId, category, metrics, timestamp, data } = event;
+    const juncId = junctionId || deviceId;
+    const juncName = junctionName || deviceName || juncId;
+    const zId = zoneId || category || 'south-bangalore';
 
+    if (!metrics && !data) return null;
+
+    const trafficMetrics = metrics || data || {};
     const anomalies = [];
 
-    // Helper to evaluate a specific metric
+    // Helper to evaluate a numerical metric with Z-score + threshold
     const checkMetric = (metricName, val, warningThreshold, criticalThreshold, unit = '', higherIsBad = true) => {
       if (typeof val !== 'number') return;
 
-      // Update sliding history for Z-score calculation
-      const histKey = `${deviceId}:${metricName}`;
+      const histKey = `${juncId}:${metricName}`;
       if (!this.history.has(histKey)) {
         this.history.set(histKey, []);
       }
@@ -35,22 +39,20 @@ class AnomalyEngine {
       values.push(val);
       if (values.length > this.maxHistory) values.shift();
 
-      // Z-Score Statistical Anomaly
       let isStatisticalAnomaly = false;
       let zScore = 0;
-      if (values.length >= 10) {
+      if (values.length >= 8) {
         const mean = values.reduce((a, b) => a + b, 0) / values.length;
         const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values.length;
         const stdDev = Math.sqrt(variance);
         if (stdDev > 0.001) {
           zScore = (val - mean) / stdDev;
-          if (Math.abs(zScore) >= 3.2) {
+          if (Math.abs(zScore) >= 3.0) {
             isStatisticalAnomaly = true;
           }
         }
       }
 
-      // Rule-based threshold check
       let severity = null;
       let threshold = null;
 
@@ -72,7 +74,6 @@ class AnomalyEngine {
         }
       }
 
-      // If statistical spike occurred even without fixed threshold breach
       if (!severity && isStatisticalAnomaly) {
         severity = 'warning';
         threshold = 0;
@@ -90,23 +91,51 @@ class AnomalyEngine {
       }
     };
 
-    // Category-specific evaluation
-    if (category === 'server') {
-      checkMetric('cpuPercent', metrics.cpuPercent, 82, 94, '%', true);
-      checkMetric('memoryPercent', metrics.memoryPercent, 85, 95, '%', true);
-      checkMetric('latencyMs', metrics.latencyMs, 250, 600, 'ms', true);
-      checkMetric('temperatureC', metrics.temperatureC, 75, 88, '°C', true);
-      checkMetric('errorRate', metrics.errorRate, 3, 10, '%', true);
-    } else if (category === 'fleet') {
-      checkMetric('speedKmh', metrics.speedKmh, 110, 130, 'km/h', true);
-      checkMetric('batteryLevel', metrics.batteryLevel, 20, 10, '%', false);
-      checkMetric('motorTempC', metrics.motorTempC, 80, 95, '°C', true);
-      checkMetric('tirePressurePsi', metrics.tirePressurePsi, 28, 24, 'psi', false);
-    } else if (category === 'turbine') {
-      checkMetric('vibrationMmS', metrics.vibrationMmS, 5.0, 7.5, 'mm/s', true);
-      checkMetric('powerOutputMw', metrics.powerOutputMw, 4.8, 5.5, 'MW', true);
-      checkMetric('oilTempC', metrics.oilTempC, 80, 95, '°C', true);
-      checkMetric('gridFrequencyHz', metrics.gridFrequencyHz, 49.2, 48.5, 'Hz', false);
+    // 1. Stalled Vehicle Incident Detection
+    if (trafficMetrics.stalledVehicleDetected || data?.stalledVehicleDetected) {
+      anomalies.push({
+        metric: 'stalledVehicle',
+        triggerValue: 1,
+        thresholdValue: 0,
+        severity: 'critical',
+        zScore: 4.5,
+        unit: 'event',
+        customTitle: `Stalled Vehicle Obstacle at ${juncName}`,
+        customMsg: `Vision camera detected an immobilized / stalled vehicle blocking arterial lanes. Emergency towing dispatch recommended.`,
+      });
+    }
+
+    // 2. Emergency Vehicle (Ambulance / Fire) Corridor Preemption
+    if (trafficMetrics.ambulanceDetected || data?.ambulanceDetected) {
+      anomalies.push({
+        metric: 'ambulancePreemption',
+        triggerValue: 1,
+        thresholdValue: 0,
+        severity: 'critical',
+        zScore: 5.0,
+        unit: 'event',
+        customTitle: `Emergency Vehicle Approaching ${juncName}`,
+        customMsg: `Ambulance transponder & camera beacon active. Automated Green Corridor Preemption recommended.`,
+      });
+    }
+
+    // 3. Gridlock & Saturated Queue Detection
+    if (typeof trafficMetrics.maxQueueLengthM === 'number') {
+      checkMetric('maxQueueLengthM', trafficMetrics.maxQueueLengthM, 120, 165, 'm', true);
+    }
+    if (typeof trafficMetrics.avgSpeedKmph === 'number') {
+      checkMetric('avgSpeedKmph', trafficMetrics.avgSpeedKmph, 11, 6, 'km/h', false);
+    }
+    if (typeof trafficMetrics.totalFlowVehiclesPerMin === 'number') {
+      checkMetric('totalFlowVehiclesPerMin', trafficMetrics.totalFlowVehiclesPerMin, 135, 175, 'veh/min', true);
+    }
+
+    // Support legacy server/fleet/turbine metrics if passed in tests
+    if (typeof trafficMetrics.cpuPercent === 'number') {
+      checkMetric('cpuPercent', trafficMetrics.cpuPercent, 82, 94, '%', true);
+    }
+    if (typeof trafficMetrics.vibrationMmS === 'number') {
+      checkMetric('vibrationMmS', trafficMetrics.vibrationMmS, 5.0, 7.5, 'mm/s', true);
     }
 
     if (anomalies.length === 0) return null;
@@ -119,23 +148,32 @@ class AnomalyEngine {
     }, anomalies[0]);
 
     // Check cooldown
-    const cooldownKey = `${deviceId}:${highestAnomaly.metric}`;
+    const cooldownKey = `${juncId}:${highestAnomaly.metric}`;
     const now = Date.now();
     const lastAlertTime = this.alertCooldowns.get(cooldownKey) || 0;
     if (now - lastAlertTime < this.cooldownMs) {
-      return null; // Suppressed by cooldown to prevent flooding
+      return null;
     }
 
     this.alertCooldowns.set(cooldownKey, now);
 
+    const title = highestAnomaly.customTitle || `${highestAnomaly.metric} ${highestAnomaly.severity.toUpperCase()} at ${juncName}`;
+    const message =
+      highestAnomaly.customMsg ||
+      `${highestAnomaly.metric} reached ${highestAnomaly.triggerValue} ${highestAnomaly.unit} (Threshold: ${highestAnomaly.thresholdValue} ${highestAnomaly.unit}${
+        highestAnomaly.zScore ? `, Z-Score: ${highestAnomaly.zScore}` : ''
+      })`;
+
     const alertDoc = {
       alertId: `ALT-${crypto.randomBytes(6).toString('hex').toUpperCase()}`,
-      deviceId,
-      deviceName: deviceName || deviceId,
-      category,
+      junctionId: juncId,
+      deviceId: juncId,
+      deviceName: juncName,
+      zoneId: zId,
+      category: zId,
       severity: highestAnomaly.severity,
-      title: `${highestAnomaly.metric} ${highestAnomaly.severity.toUpperCase()} on ${deviceName || deviceId}`,
-      message: `${highestAnomaly.metric} reached ${highestAnomaly.triggerValue} ${highestAnomaly.unit} (Threshold: ${highestAnomaly.thresholdValue} ${highestAnomaly.unit}${highestAnomaly.zScore ? `, Z-Score: ${highestAnomaly.zScore}` : ''})`,
+      title,
+      message,
       metric: highestAnomaly.metric,
       triggerValue: highestAnomaly.triggerValue,
       thresholdValue: highestAnomaly.thresholdValue,
@@ -143,7 +181,6 @@ class AnomalyEngine {
       resolved: false,
     };
 
-    // Save alert asynchronously and broadcast
     this.persistAndBroadcastAlert(alertDoc);
 
     return alertDoc;
@@ -153,7 +190,6 @@ class AnomalyEngine {
     try {
       await Alert.create(alertDoc);
 
-      // Also adjust device health score
       const penalty = alertDoc.severity === 'critical' ? 25 : 10;
       await Device.updateOne(
         { deviceId: alertDoc.deviceId },

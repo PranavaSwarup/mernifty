@@ -85,7 +85,7 @@ export function AlertsFeed({ alerts = [], onAlertsChange }) {
           </div>
           <div>
             <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
-              Live Anomaly Feed
+              Live Incident & Alert Feed
               {alerts.length > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/30">
                   {alerts.length}
@@ -93,7 +93,7 @@ export function AlertsFeed({ alerts = [], onAlertsChange }) {
               )}
             </h3>
             <p className="text-[11px] text-slate-400">
-              Statistical Z-Score & Dynamic Threshold Detection
+              Gridlock, Stalled Vehicle & Emergency Preemption Detection
             </p>
           </div>
         </div>

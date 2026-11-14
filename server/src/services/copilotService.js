@@ -6,41 +6,29 @@ import { socketService } from './socketService.js';
 class CopilotService {
   constructor() {
     this.runbooks = {
-      'server:cpuPercent': {
-        title: 'Dynamic Traffic Shedding & Worker Pool Recycle',
-        action: 'shed_load',
-        description: 'Throttle batch worker concurrency by 40% and flush Redis caches to drop CPU below 50%.',
-        recoveryMetric: { cpuPercent: 48, latencyMs: 28 },
+      'traffic:maxQueueLengthM': {
+        title: 'Adaptive Dynamic Green Split Optimization',
+        action: 'adaptive_green_split',
+        description: 'Dynamically reallocate +25s of green phase split to the saturated approach and synchronize downstream signals.',
+        recoveryMetric: { maxQueueLengthM: 45, avgSpeedKmph: 24, congestionScore: 28 },
       },
-      'server:latencyMs': {
-        title: 'BGP Route Failover & Edge CDN Bypass',
-        action: 'route_failover',
-        description: 'Reroute incoming API traffic to secondary tier-1 edge POP to normalize latency to <35ms.',
-        recoveryMetric: { latencyMs: 32, cpuPercent: 50 },
+      'traffic:stalledVehicle': {
+        title: 'BTP Rapid Incident Tow Crane Dispatch',
+        action: 'dispatch_tow_incident',
+        description: 'Dispatch nearest Bengaluru Traffic Police (BTP) towing unit and post Lane 1 Obstacle Warning on upstream electronic VMS boards.',
+        recoveryMetric: { stalledVehicleDetected: false, maxQueueLengthM: 55, avgSpeedKmph: 22 },
       },
-      'fleet:batteryLevel': {
-        title: 'Autonomous Eco-Cruise & Auxiliary Shutdown',
-        action: 'battery_eco_mode',
-        description: 'Restrict electric motor torque, disengage cabin HVAC, and redirect to nearest megawatt charger.',
-        recoveryMetric: { batteryLevel: 42, motorTempC: 68 },
+      'traffic:ambulancePreemption': {
+        title: 'Automated Emergency Green Wave Corridor',
+        action: 'emergency_green_corridor',
+        description: 'Force all intersecting cross-arterials to RED and trigger an uninterrupted green corridor wave for the emergency responder.',
+        recoveryMetric: { ambulanceDetected: false, avgSpeedKmph: 28, maxQueueLengthM: 50 },
       },
-      'fleet:motorTempC': {
-        title: 'Liquid Glycol Coolant Pump Overdrive',
-        action: 'coolant_overdrive',
-        description: 'Activate secondary radiator fan and reduce electric motor RPM by 15%.',
-        recoveryMetric: { motorTempC: 70, speedKmh: 82 },
-      },
-      'turbine:vibrationMmS': {
-        title: 'Aero-Dynamic Blade Feathering & Rotor Dampening',
-        action: 'feather_blades',
-        description: 'Pitch wind turbine blades to +4.5 degrees to alleviate mechanical resonance and bearing friction.',
-        recoveryMetric: { vibrationMmS: 2.4, oilTempC: 66 },
-      },
-      'turbine:oilTempC': {
-        title: 'Gearbox Oil Heat Exchanger Forced Air Flush',
-        action: 'oil_cool_flush',
-        description: 'Engage auxiliary cooling heat exchanger to prevent bearing lubrication viscosity breakdown.',
-        recoveryMetric: { oilTempC: 68, vibrationMmS: 2.8 },
+      'traffic:avgSpeedKmph': {
+        title: 'Upstream Electronic Signage Diversion (VMS)',
+        action: 'upstream_diversion',
+        description: 'Publish arterial diversion advisory on electronic display boards 1km upstream to siphon 35% of traffic onto outer bypass corridors.',
+        recoveryMetric: { avgSpeedKmph: 22, maxQueueLengthM: 60, congestionScore: 35 },
       },
     };
   }
@@ -51,146 +39,150 @@ class CopilotService {
 
     const activeAlerts = await Alert.find({ deviceId, resolved: false }).sort({ timestamp: -1 }).lean();
     const metrics = device.lastMetrics || {};
+    const data = device.lastData || {};
 
     const findings = [];
 
-    // Analyze based on category and metrics
-    if (device.category === 'server') {
-      if ((metrics.cpuPercent > 80 || activeAlerts.some((a) => a.metric === 'cpuPercent'))) {
-        findings.push({
-          id: 'FIND-SRV-01',
-          rule: 'High CPU Saturation & Thermal Correlation',
-          severity: 'critical',
-          confidence: 96,
-          rootCause: 'Continuous ingestion batch spike saturating thread pool event loop.',
-          impact: 'Elevated request latency and threat of connection drops.',
-          runbook: this.runbooks['server:cpuPercent'],
-        });
-      }
-      if (metrics.latencyMs > 200 || activeAlerts.some((a) => a.metric === 'latencyMs')) {
-        findings.push({
-          id: 'FIND-SRV-02',
-          rule: 'Edge Gateway Latency Degradation',
-          severity: 'warning',
-          confidence: 88,
-          rootCause: 'Trans-Atlantic transit BGP route flapping causing buffer bloat.',
-          impact: 'P99 latency exceeding 500ms SLA threshold.',
-          runbook: this.runbooks['server:latencyMs'],
-        });
-      }
-    } else if (device.category === 'fleet') {
-      if (metrics.batteryLevel < 20 || activeAlerts.some((a) => a.metric === 'batteryLevel')) {
-        findings.push({
-          id: 'FIND-FLT-01',
-          rule: 'Rapid State-of-Charge Depletion Under Heavy Payload',
-          severity: 'critical',
-          confidence: 94,
-          rootCause: 'Steep grade incline with maximum cargo load causing elevated discharge rate.',
-          impact: 'Vehicle immobilized if charging station range window missed.',
-          runbook: this.runbooks['fleet:batteryLevel'],
-        });
-      }
-      if (metrics.motorTempC > 85 || activeAlerts.some((a) => a.metric === 'motorTempC')) {
-        findings.push({
-          id: 'FIND-FLT-02',
-          rule: 'Inverter Stator Thermal Throttling',
-          severity: 'warning',
-          confidence: 91,
-          rootCause: 'High ambient temperature coupled with continuous high-torque towing.',
-          impact: 'Automatic torque derating imminent.',
-          runbook: this.runbooks['fleet:motorTempC'],
-        });
-      }
-    } else if (device.category === 'turbine') {
-      if (metrics.vibrationMmS > 5.0 || activeAlerts.some((a) => a.metric === 'vibrationMmS')) {
-        findings.push({
-          id: 'FIND-TRB-01',
-          rule: 'Harmonic Resonance & Main Bearing Stress',
-          severity: 'critical',
-          confidence: 98,
-          rootCause: 'Turbulent wind shear matching resonant blade frequency.',
-          impact: 'High risk of micro-fracturing in gearbox planetary gears.',
-          runbook: this.runbooks['turbine:vibrationMmS'],
-        });
-      }
+    // 1. Stalled Vehicle Finding
+    if (metrics.stalledVehicleDetected || data.stalledVehicleDetected || activeAlerts.some((a) => a.metric === 'stalledVehicle')) {
+      findings.push({
+        id: 'FIND-TRF-STALL',
+        rule: 'Vision Obstacle Detection: Stalled Vehicle on Arterial',
+        severity: 'critical',
+        confidence: 98,
+        rootCause: 'Camera optical flow and YOLO vision stream identified an immobilized vehicle blocking travel lanes.',
+        impact: 'Loss of 50% corridor capacity; rapid upstream queue shockwave building at 80m/min.',
+        runbook: this.runbooks['traffic:stalledVehicle'],
+      });
     }
 
-    // Default nominal status if no severe anomalies
-    if (findings.length === 0) {
+    // 2. Emergency Preemption Finding
+    if (metrics.ambulanceDetected || data.ambulanceDetected || activeAlerts.some((a) => a.metric === 'ambulancePreemption')) {
       findings.push({
-        id: 'FIND-NOM-00',
-        rule: 'Continuous Statistical Baseline Nominal',
-        severity: 'info',
+        id: 'FIND-TRF-AMB',
+        rule: 'Emergency Responder Inbound: Green Wave Preemption Required',
+        severity: 'critical',
         confidence: 99,
-        rootCause: 'All telemetry variables tracking within +/- 1.8 sigma normal Gaussian distribution.',
-        impact: 'Full operational capacity.',
-        runbook: null,
+        rootCause: 'Ambulance acoustic/beacon sensor triggered corridor alert approaching junction.',
+        impact: 'Emergency transit delay without preemptive signal priority clearance.',
+        runbook: this.runbooks['traffic:ambulancePreemption'],
+      });
+    }
+
+    // 3. Gridlock / High Queue Finding
+    if (metrics.maxQueueLengthM > 120 || activeAlerts.some((a) => a.metric === 'maxQueueLengthM')) {
+      findings.push({
+        id: 'FIND-TRF-QUEUE',
+        rule: 'Arterial Saturation & Green Time Starvation',
+        severity: metrics.maxQueueLengthM > 160 ? 'critical' : 'warning',
+        confidence: 94,
+        rootCause: `Heavy volume spillover on critical approach with fixed timer green split insufficient for peak demand.`,
+        impact: `Spillback will choke upstream feeder corridors within 4 minutes.`,
+        runbook: this.runbooks['traffic:maxQueueLengthM'],
+      });
+    }
+
+    // 4. Low Speed / Congestion
+    if (metrics.avgSpeedKmph < 10 || activeAlerts.some((a) => a.metric === 'avgSpeedKmph')) {
+      findings.push({
+        id: 'FIND-TRF-SPEED',
+        rule: 'Severe Corridor Velocity Degradation',
+        severity: 'warning',
+        confidence: 89,
+        rootCause: 'Corridor density exceeding critical threshold ($K > K_{crit}$), triggering stop-and-go bottleneck wave.',
+        impact: 'Commuter transit time inflated by 350%; localized idling emissions surge.',
+        runbook: this.runbooks['traffic:avgSpeedKmph'],
       });
     }
 
     return {
       deviceId,
       deviceName: device.name,
-      category: device.category,
+      zoneId: device.zoneId,
+      status: device.status,
       healthScore: device.healthScore,
       activeAlertsCount: activeAlerts.length,
-      currentMetrics: metrics,
       findings,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(),
     };
   }
 
-  async executeRunbook(deviceId, action) {
-    // 1. Reset chaos spikes if any on simulator
-    simulatorService.chaosSpikes.delete(deviceId);
+  async executeRemediation(deviceId, action) {
+    const device = await Device.findOne({ deviceId });
+    if (!device) throw new Error('Junction node not found');
 
-    // 2. Resolve active alerts for this device
-    await Alert.updateMany(
-      { deviceId, resolved: false },
-      { $set: { resolved: true, resolvedAt: new Date(), resolvedBy: 'AI Copilot Runbook' } }
-    );
+    // Find runbook
+    const runbookEntry = Object.values(this.runbooks).find((r) => r.action === action);
+    if (!runbookEntry) throw new Error(`Unknown runbook action: ${action}`);
 
-    // 3. Restore device health score in DB
-    const updatedDevice = await Device.findOneAndUpdate(
-      { deviceId },
-      {
-        $set: {
-          status: 'online',
-          healthScore: 98,
-        },
-      },
-      { new: true }
-    );
+    // Clear active chaos on simulator
+    simulatorService.clearChaos(deviceId);
 
-    // 4. Update simulated device baseMetrics to nominal
-    const simDev = simulatorService.devices.find((d) => d.deviceId === deviceId);
-    if (simDev) {
-      if (simDev.category === 'server') {
-        simDev.baseMetrics.cpuPercent = 48;
-        simDev.baseMetrics.latencyMs = 28;
-      } else if (simDev.category === 'fleet') {
-        simDev.baseMetrics.batteryLevel = 65;
-        simDev.baseMetrics.motorTempC = 68;
-      } else if (simDev.category === 'turbine') {
-        simDev.baseMetrics.vibrationMmS = 2.4;
-        simDev.baseMetrics.oilTempC = 66;
-      }
+    // Apply recovered metrics to device
+    const recoveryMetrics = {
+      ...(device.lastMetrics || {}),
+      ...runbookEntry.recoveryMetric,
+    };
+
+    const recoveryData = {
+      ...(device.lastData || {}),
+      ...runbookEntry.recoveryMetric,
+      stalledVehicleDetected: false,
+      ambulanceDetected: false,
+    };
+
+    // If approaches exist, normalize them
+    if (Array.isArray(device.approaches)) {
+      device.approaches = device.approaches.map((app) => ({
+        ...app,
+        queueLengthM: Math.min(app.queueLengthM, 45),
+        avgSpeedKmph: Math.max(app.avgSpeedKmph, 22),
+      }));
+      recoveryData.approaches = device.approaches;
     }
 
-    // 5. Broadcast resolution to all clients
+    // Update Device document
+    device.status = 'online';
+    device.healthScore = Math.min(100, (device.healthScore || 80) + 30);
+    device.lastMetrics = recoveryMetrics;
+    device.lastData = recoveryData;
+    device.stalledVehicleDetected = false;
+    device.ambulanceDetected = false;
+    device.adaptiveSignalMode = action === 'emergency_green_corridor' ? 'emergency-corridor' : 'dynamic-ai';
+    await device.save();
+
+    // Mark active alerts for this device as resolved
+    await Alert.updateMany(
+      { deviceId, resolved: false },
+      {
+        $set: {
+          resolved: true,
+          resolvedAt: new Date(),
+          resolvedBy: 'AI Traffic Copilot (Autonomous Runbook)',
+          remediationAction: runbookEntry.title,
+        },
+      }
+    );
+
+    // Broadcast device status update
     socketService.broadcastDeviceStatus({
+      junctionId: deviceId,
       deviceId,
+      name: device.name,
       status: 'online',
-      healthScore: 98,
-      remediatedBy: action,
+      healthScore: device.healthScore,
+      lastMetrics: recoveryMetrics,
+      lastData: recoveryData,
     });
+
+    console.log(`[Copilot] Remediated traffic junction ${deviceId} with action: ${action}`);
 
     return {
       success: true,
-      deviceId,
       action,
-      message: `Automated runbook '${action}' executed successfully. Metrics normalized and alerts resolved.`,
-      device: updatedDevice,
+      runbook: runbookEntry.title,
+      message: `Successfully executed: ${runbookEntry.title}. Junction traffic normalized.`,
+      recoveredMetrics: recoveryMetrics,
     };
   }
 }

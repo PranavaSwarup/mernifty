@@ -12,7 +12,7 @@ import {
 import { api } from '../services/api';
 
 export function HistoricalAnalytics({ devices = [] }) {
-  const [selectedDeviceId, setSelectedDeviceId] = useState(devices[0]?.deviceId || 'srv-us-east-prod');
+  const [selectedDeviceId, setSelectedDeviceId] = useState(devices[0]?.deviceId || 'JNC-BLR-001');
   const [minutesWindow, setMinutesWindow] = useState(30);
   const [bucketSeconds, setBucketSeconds] = useState(15);
   const [buckets, setBuckets] = useState([]);

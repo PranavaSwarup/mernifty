@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * HyperPulse High-Throughput Stress & Benchmark Harness
+ * MetroPulse High-Throughput Traffic Telemetry Stress & Benchmark Harness
  * 
- * Tests the system under heavy load:
- * - Fires dense batches of telemetry records
+ * Tests the system under heavy smart city camera stream loads:
+ * - Fires dense batches of junction telemetry records
  * - Measures throughput (events/second), processing latency, and server response time
  * 
  * Usage:
- *   node scripts/stress-test.js [--count 5000] [--batchSize 250]
+ *   node scripts/stress-test.js [--count 3000] [--batchSize 200]
  */
 
 import http from 'http';
@@ -21,32 +21,44 @@ function getArg(flag, defaultValue) {
 }
 
 const totalEvents = parseInt(getArg('--count', '3000'), 10);
-const batchSize = parseInt(getArg('--batchSize', '250'), 10);
+const batchSize = parseInt(getArg('--batchSize', '200'), 10);
 const targetUrl = new URL(getArg('--url', 'http://localhost:5000/api/telemetry/batch'));
 
 console.log('====================================================');
-console.log('⚡ HyperPulse High-Throughput Stress Test Harness');
+console.log('🚦 MetroPulse BLR: Smart City Traffic Stress Test Harness');
 console.log(`Target: ${targetUrl.href}`);
 console.log(`Total Events to Ingest: ${totalEvents}`);
 console.log(`Batch Size: ${batchSize} events/request`);
 console.log('====================================================');
 
+const junctions = [
+  { junctionId: 'JNC-BLR-001', zoneId: 'south-bangalore', road: 'Hosur Rd (Silk Board)' },
+  { junctionId: 'JNC-BLR-002', zoneId: 'south-bangalore', road: '100ft Rd (Sony World)' },
+  { junctionId: 'JNC-BLR-005', zoneId: 'east-bangalore', road: 'ORR (Bellandur EcoSpace)' },
+  { junctionId: 'JNC-BLR-006', zoneId: 'east-bangalore', road: 'Old Madras Rd (Tin Factory)' },
+  { junctionId: 'JNC-BLR-008', zoneId: 'north-bangalore', road: 'Bellary Rd (Hebbal Flyover)' },
+  { junctionId: 'JNC-BLR-011', zoneId: 'central-bangalore', road: 'Residency Rd (Richmond Circle)' },
+];
+
 function createBatch(size, batchIndex) {
   const events = [];
   const now = Date.now();
   for (let i = 0; i < size; i++) {
+    const junc = junctions[i % junctions.length];
     events.push({
       eventId: `BENCH-${now}-${batchIndex}-${i}`,
-      deviceId: i % 2 === 0 ? 'srv-us-east-prod' : 'turbine-wind-01',
-      category: i % 2 === 0 ? 'server' : 'turbine',
+      junctionId: junc.junctionId,
+      zoneId: junc.zoneId,
       timestamp: new Date().toISOString(),
       sequence: batchIndex * size + i,
-      metrics: {
-        cpuPercent: parseFloat((50 + Math.random() * 40).toFixed(2)),
-        memoryPercent: parseFloat((60 + Math.random() * 30).toFixed(2)),
-        latencyMs: Math.round(20 + Math.random() * 30),
+      data: {
+        approaches: [
+          { road: junc.road, vehiclesPerMin: Math.round(30 + Math.random() * 20), queueLengthM: Math.round(50 + Math.random() * 60), avgSpeedKmph: Math.round(12 + Math.random() * 15), signal: i % 2 === 0 ? 'green' : 'red' },
+          { road: 'Feeder Arterial', vehiclesPerMin: Math.round(20 + Math.random() * 15), queueLengthM: Math.round(30 + Math.random() * 40), avgSpeedKmph: Math.round(15 + Math.random() * 10), signal: i % 2 === 0 ? 'red' : 'green' },
+        ],
+        vehicleMix: { twoWheeler: 0.55, car: 0.30, bus: 0.05, truck: 0.10 },
+        stalledVehicleDetected: false,
       },
-      status: 'healthy',
     });
   }
   return events;
@@ -66,63 +78,78 @@ async function sendBatch(batch, batchIndex) {
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(data),
-          'X-API-Key': 'hp_key_live_admin_stream_master_2026',
+          'X-API-Key': 'blr_traffic_key_live_command_center_2026',
         },
       },
       (res) => {
         let body = '';
         res.on('data', (c) => (body += c));
         res.on('end', () => {
-          const reqTime = performance.now() - startReq;
+          const durationMs = performance.now() - startReq;
           if (res.statusCode >= 200 && res.statusCode < 300) {
-            resolve({ count: batch.length, timeMs: reqTime });
+            resolve({
+              success: true,
+              batchIndex,
+              count: batch.length,
+              durationMs,
+              statusCode: res.statusCode,
+            });
           } else {
-            reject(new Error(`HTTP ${res.statusCode}: ${body}`));
+            resolve({
+              success: false,
+              batchIndex,
+              error: `HTTP ${res.statusCode}: ${body}`,
+              durationMs,
+            });
           }
         });
       }
     );
 
-    req.on('error', reject);
+    req.on('error', (err) => {
+      resolve({
+        success: false,
+        batchIndex,
+        error: err.message,
+        durationMs: performance.now() - startReq,
+      });
+    });
+
     req.write(data);
     req.end();
   });
 }
 
 async function run() {
-  const totalBatches = Math.ceil(totalEvents / batchSize);
-  console.log(`Executing ${totalBatches} batches in sequence...`);
+  const numBatches = Math.ceil(totalEvents / batchSize);
+  console.log(`Firing ${numBatches} batches (${batchSize} events each)...`);
 
-  const wallClockStart = performance.now();
-  let completedEvents = 0;
-  const latencies = [];
+  const startTime = performance.now();
+  let totalSuccessful = 0;
+  let latencies = [];
 
-  for (let b = 0; b < totalBatches; b++) {
-    const count = Math.min(batchSize, totalEvents - completedEvents);
-    const batch = createBatch(count, b);
-    try {
-      const res = await sendBatch(batch, b);
-      completedEvents += res.count;
-      latencies.push(res.timeMs);
-      process.stdout.write(
-        `\rProgress: ${completedEvents}/${totalEvents} (${Math.round((completedEvents / totalEvents) * 100)}%) - Last batch: ${Math.round(res.timeMs)}ms`
-      );
-    } catch (err) {
-      console.error(`\nBatch ${b} failed:`, err.message);
+  for (let b = 0; b < numBatches; b++) {
+    const batch = createBatch(batchSize, b);
+    const result = await sendBatch(batch, b);
+
+    if (result.success) {
+      totalSuccessful += result.count;
+      latencies.push(result.durationMs);
+      process.stdout.write(`\r[Progress] Ingested ${totalSuccessful}/${totalEvents} events | Last Batch RTT: ${result.durationMs.toFixed(1)}ms`);
+    } else {
+      console.warn(`\n[Warning] Batch ${b} error: ${result.error}`);
     }
   }
 
-  const totalTimeMs = performance.now() - wallClockStart;
-  const avgLatency = (latencies.reduce((a, b) => a + b, 0) / latencies.length).toFixed(1);
-  const throughput = Math.round((completedEvents / totalTimeMs) * 1000);
+  const totalTimeSec = (performance.now() - startTime) / 1000;
+  const avgLatency = latencies.length > 0 ? latencies.reduce((a, b) => a + b, 0) / latencies.length : 0;
+  const throughput = Math.round(totalSuccessful / totalTimeSec);
 
-  console.log('\n\n====================================================');
-  console.log('🏆 BENCHMARK RESULTS');
-  console.log(`Total Events Ingested:    ${completedEvents}`);
-  console.log(`Total Duration:           ${(totalTimeMs / 1000).toFixed(2)} seconds`);
-  console.log(`Average Batch Latency:    ${avgLatency} ms`);
-  console.log(`Ingestion Throughput:     ${throughput.toLocaleString()} events/sec`);
-  console.log(`Packet Loss Rate:         0.0%`);
+  console.log('\n\n================ Benchmark Summary ================');
+  console.log(`Total Events Sent:       ${totalSuccessful.toLocaleString()}`);
+  console.log(`Total Wall-Clock Time:   ${totalTimeSec.toFixed(2)} seconds`);
+  console.log(`Sustained Throughput:    ${throughput.toLocaleString()} events/second`);
+  console.log(`Mean Batch Ingestion RTT:${avgLatency.toFixed(2)} ms`);
   console.log('====================================================\n');
 }
 

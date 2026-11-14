@@ -13,7 +13,7 @@ router.get('/status', (req, res) => {
 
 // Start simulator
 router.post('/start', (req, res) => {
-  const { rate = 10 } = req.body;
+  const { rate = 12 } = req.body;
   simulatorService.start(parseInt(rate, 10));
   res.json({
     success: true,
@@ -46,13 +46,14 @@ router.post('/rate', (req, res) => {
   });
 });
 
-// Inject chaos
+// Inject chaos / incident
 router.post('/chaos', (req, res) => {
-  const { deviceId, metric, multiplier = 2.5, durationSec = 15 } = req.body;
-  if (!deviceId || !metric) {
-    return res.status(400).json({ success: false, error: 'deviceId and metric are required for chaos injection' });
+  const { deviceId, junctionId, metric, multiplier = 2.5, durationSec = 20, flags = {} } = req.body;
+  const targetId = junctionId || deviceId;
+  if (!targetId || !metric) {
+    return res.status(400).json({ success: false, error: 'junctionId/deviceId and metric are required for chaos injection' });
   }
-  const result = simulatorService.injectChaos(deviceId, metric, parseFloat(multiplier), parseInt(durationSec, 10));
+  const result = simulatorService.injectChaos(targetId, metric, parseFloat(multiplier), parseInt(durationSec, 10), flags);
   res.json(result);
 });
 

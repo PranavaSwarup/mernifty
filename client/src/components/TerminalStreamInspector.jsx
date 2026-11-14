@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Terminal, Pause, Play, Trash2, Search, Copy, Check, Filter } from 'lucide-react';
+import { Terminal, Pause, Play, Trash2, Search, Copy, Check, Filter, Navigation } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 
 export function TerminalStreamInspector() {
@@ -40,7 +40,7 @@ export function TerminalStreamInspector() {
           </div>
           <Terminal className="w-4 h-4 text-emerald-400" />
           <span className="text-xs font-bold text-slate-200">
-            Live Telemetry Terminal Stream (WebSocket Ingestion Tap)
+            Smart City Camera Telemetry Packet Tap (WebSocket Stream)
           </span>
           <span className="text-[10px] text-slate-500">[{recentEvents.length} frames buffer]</span>
         </div>
@@ -52,7 +52,7 @@ export function TerminalStreamInspector() {
             <Search className="w-3 h-3 absolute left-2 top-2 text-slate-500" />
             <input
               type="text"
-              placeholder="Grep packet..."
+              placeholder="Grep 'Hosur' / 'stalled'..."
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
               className="w-full bg-slate-900 border border-slate-800 rounded px-2 pl-7 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-emerald-500"
@@ -86,50 +86,69 @@ export function TerminalStreamInspector() {
       {/* Terminal Output Area */}
       <div
         ref={logContainerRef}
-        className="p-3 bg-[#060A12] text-xs overflow-y-auto max-h-96 space-y-1.5"
+        className="p-3 bg-[#060A12] text-xs overflow-y-auto max-h-[500px] space-y-2"
       >
         {filteredEvents.length === 0 ? (
           <div className="py-12 text-center text-slate-600">
-            Awaiting streaming frames...
+            Awaiting streaming camera vision frames from Central DC...
           </div>
         ) : (
-          filteredEvents.map((evt) => (
-            <div
-              key={evt.eventId}
-              className="group p-2 rounded bg-slate-950/60 hover:bg-slate-900 border border-slate-900 hover:border-slate-800 transition-colors flex items-start justify-between gap-3 text-[11px]"
-            >
-              <div className="flex-1 space-y-0.5 overflow-hidden">
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-500">{new Date(evt.timestamp).toISOString().slice(11, 23)}</span>
-                  <span className="font-bold text-emerald-400">[{evt.deviceId}]</span>
-                  <span className="px-1.5 py-0.2 rounded text-[9px] bg-slate-800 text-slate-300">
-                    {evt.category}
-                  </span>
-                  <span className="text-slate-600 text-[10px]">seq:{evt.sequence || 0}</span>
-                </div>
-                <div className="text-slate-300 truncate font-mono text-[11px]">
-                  {Object.entries(evt.metrics || {}).map(([k, v]) => (
-                    <span key={k} className="mr-3">
-                      <span className="text-cyan-400">{k}:</span>{' '}
-                      <span className="text-white font-semibold">{v}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
+          filteredEvents.map((evt) => {
+            const jId = evt.junctionId || evt.deviceId;
+            const zId = evt.zoneId || evt.category;
+            const approaches = evt.data?.approaches || [];
+            const isStalled = Boolean(evt.data?.stalledVehicleDetected || evt.metrics?.stalledVehicleDetected);
+            const isAmb = Boolean(evt.data?.ambulanceDetected || evt.metrics?.ambulanceDetected);
 
-              <button
-                onClick={(e) => copyFrame(evt, evt.eventId)}
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-400 hover:text-white"
-                title="Copy raw JSON frame"
+            return (
+              <div
+                key={evt.eventId}
+                className="group p-2.5 rounded bg-slate-950/70 hover:bg-slate-900 border border-slate-900 hover:border-slate-800 transition-colors flex flex-col gap-1.5 text-[11px]"
               >
-                {copiedId === evt.eventId ? (
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                ) : (
-                  <Copy className="w-3.5 h-3.5" />
-                )}
-              </button>
-            </div>
-          ))
+                <div className="flex items-center justify-between text-[10px] text-slate-400 pb-1 border-b border-slate-900">
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 font-bold">{evt.eventId}</span>
+                    <span className="text-cyan-400 font-semibold">[{jId}]</span>
+                    <span className="text-purple-400 font-medium">{zId}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isAmb && (
+                      <span className="text-blue-400 font-bold px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/30 animate-pulse">
+                        AMBULANCE
+                      </span>
+                    )}
+                    {isStalled && (
+                      <span className="text-rose-400 font-bold px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/30 animate-pulse">
+                        STALLED
+                      </span>
+                    )}
+                    <span>{new Date(evt.timestamp).toLocaleTimeString()}</span>
+                    <button
+                      onClick={(e) => copyFrame(evt, evt.eventId)}
+                      className="p-1 rounded bg-slate-800 text-slate-400 hover:text-white"
+                      title="Copy JSON"
+                    >
+                      {copiedId === evt.eventId ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Formatted JSON Body */}
+                <pre className="text-slate-300 overflow-x-auto text-[10px] leading-relaxed p-1">
+                  {JSON.stringify(
+                    {
+                      junctionId: jId,
+                      zoneId: zId,
+                      timestamp: evt.timestamp,
+                      data: evt.data || evt.metrics,
+                    },
+                    null,
+                    2
+                  )}
+                </pre>
+              </div>
+            );
+          })
         )}
       </div>
     </div>

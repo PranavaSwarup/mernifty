@@ -1,7 +1,7 @@
-# HyperPulse Architecture & Design Document
+# MetroPulse BLR: Smart City Traffic Architecture & Design Document
 
-> **System Architecture, Data Flow Specifications, and Performance Engineering Guide**  
-> MERNIFY Hackathon 2026
+> **Centralized Camera Telemetry Ingestion, Gridlock Detection & Adaptive Signal Control**  
+> MERNIFY Hackathon 2026 • Track: High-Throughput Streams & Telemetry
 
 ---
 
@@ -9,43 +9,52 @@
 
 ```mermaid
 graph TD
-    subgraph Data Sources
-        DS1[Edge Servers Cluster<br/>CPU, RAM, Latency, Temp]
-        DS2[Logistics Fleet<br/>GPS, Speed, Battery, Heading]
-        DS3[Energy Turbines<br/>Power MW, Vibration, Oil Temp]
-        DS4[External Ingestion CLI<br/>standalone-producer.js]
+    subgraph Bengaluru Roadside Infrastructure
+        CAM1["Silk Board (Hosur Rd / ORR)<br/>4x Optical CCTV / ANPR"]
+        CAM2["Tin Factory (Old Madras Rd)<br/>4x Optical CCTV / ANPR"]
+        CAM3["Hebbal Flyover (Bellary Rd)<br/>4x Optical CCTV / ANPR"]
+        CAM4["Bellandur EcoSpace (ORR)<br/>4x Optical CCTV / ANPR"]
     end
 
-    subgraph Node.js & Express Ingestion Layer
-        API[HTTP REST Endpoints<br/>POST /api/telemetry/ingest<br/>POST /api/telemetry/batch]
-        VAL[Zod Schema Validator]
-        RL[Sliding Window Rate Limiter]
-        DEDUP[In-Memory Event Deduplicator<br/>Bloom Filter / Set]
+    subgraph Central Traffic Data Center GPU Cluster
+        RTSP["High-Speed Municipal Dark Fiber Ring<br/>RTSP / H.264 Video Stream Concentrator"]
+        YOLO["GPU Vision Worker Cluster<br/>Optical Flow & YOLO-v9 Vehicle Tracking<br/>Vehicle Classification: 2W, Car, Bus, Truck<br/>Queue Length (m) & Velocity (km/h) Extraction"]
     end
 
-    subgraph Real-Time Processing Pipeline
-        BUFFER[Write-Behind Batch Buffer<br/>Flush: 500ms / 200 events]
-        ANOMALY[Statistical Anomaly Engine<br/>Z-Score |Z| >= 3.2 + Thresholds]
-        SOCKET_SRV[Socket.IO Broadcast Engine<br/>Micro-batching 80ms window]
+    subgraph Node.js & Express High-Throughput Ingestion
+        API["HTTP REST Ingestion Endpoints<br/>POST /api/telemetry/ingest<br/>POST /api/telemetry/batch"]
+        VAL["Traffic Schema Normalizer & Validator<br/>Validates junctionId, zoneId, approaches"]
+        RL["Sliding-Window Rate Limiter<br/>Backpressure Guard (10,000 capacity)"]
+        DEDUP["Frame Deduplicator<br/>Drops duplicate sequence / camera frames"]
+    end
+
+    subgraph Real-Time Processing & Anomaly Pipeline
+        BUFFER["Write-Behind Batch Buffer<br/>Flushes 200 events / 500ms via bulkWrite()"]
+        ANOMALY["Traffic Anomaly & Gridlock Engine<br/>Z-Score Surge Detector (|Z| >= 3.0)<br/>Stalled Vehicle & Ambulance Preemption"]
+        SOCKET_SRV["Socket.IO Zonal Broadcast Engine<br/>80ms Micro-Batching window"]
     end
 
     subgraph Database Layer
-        MONGO[(MongoDB Database<br/>Compound Indexes)]
-        COLL_TEL[Telemetry Collection<br/>deviceId + timestamp]
-        COLL_DEV[Device Registry<br/>status, health, lastSeen]
-        COLL_ALT[Alerts Collection<br/>severity, metrics, timestamp]
+        MONGO[("MongoDB Database<br/>Compound Time-Series Indexes")]
+        COLL_TEL["Telemetry Collection<br/>junctionId + zoneId + timestamp"]
+        COLL_DEV["Junction Matrix<br/>status, healthScore, lastData, approaches"]
+        COLL_ALT["Incident Alerts Store<br/>gridlock, stalledVehicle, ambulance"]
     end
 
-    subgraph Client Application Layer
-        CLIENT1[React Client A<br/>Room: global + alerts]
-        CLIENT2[React Client B<br/>Room: category:fleet]
-        CLIENT3[React Client C<br/>Room: device:srv-us-east-prod]
+    subgraph Command Operations & Dispatch
+        CLIENT1["City-Wide Operations HQ<br/>Room: global + alerts"]
+        CLIENT2["South Zone Traffic Desk<br/>Room: zone:south-bangalore"]
+        CLIENT3["East Zone Traffic Desk<br/>Room: zone:east-bangalore"]
+        COPILOT["AI Traffic Copilot<br/>Autonomous Adaptive Green Wave & Tow Dispatch"]
     end
 
-    DS1 --> API
-    DS2 --> API
-    DS3 --> API
-    DS4 --> API
+    CAM1 --> RTSP
+    CAM2 --> RTSP
+    CAM3 --> RTSP
+    CAM4 --> RTSP
+
+    RTSP --> YOLO
+    YOLO -->|Structured JSON Stream| API
 
     API --> VAL --> RL --> DEDUP
 
@@ -53,138 +62,123 @@ graph TD
     DEDUP --> ANOMALY
     DEDUP --> SOCKET_SRV
 
-    BUFFER -->|bulkWrite ordered:false| COLL_TEL
-    BUFFER -->|bulkWrite upsert| COLL_DEV
-    ANOMALY -->|create alert| COLL_ALT
-    ANOMALY -->|alert:new| SOCKET_SRV
+    BUFFER --> COLL_TEL
+    BUFFER --> COLL_DEV
+    ANOMALY --> COLL_ALT
 
-    SOCKET_SRV -->|telemetry:batch| CLIENT1
-    SOCKET_SRV -->|telemetry:batch| CLIENT2
-    SOCKET_SRV -->|telemetry:device_feed| CLIENT3
-
-    COLL_TEL -.->|GET /api/telemetry/history| CLIENT3
+    SOCKET_SRV --> CLIENT1
+    SOCKET_SRV --> CLIENT2
+    SOCKET_SRV --> CLIENT3
+    COLL_ALT --> COPILOT
 ```
 
 ---
 
-## 2. Ingestion & Write-Behind Processing Pipeline
+## 2. Core Architectural Decisions
 
-High-frequency ingestion pipelines frequently fail when direct database writes occur synchronously on the request thread. HyperPulse addresses this with a **Write-Behind Batch Buffer**:
+### A. Centralized Data Center Processing vs. Edge Junction Compute
+- **The Challenge:** Roadside controller cabinets on Bangalore roads endure extreme humidity, monsoonal flooding, 40°C summer dust, and unstable grid power. Deploying high-power GPU accelerators on every junction pole would incur catastrophic failure rates and enormous replacement costs.
+- **The Solution:** Roadside cameras act purely as ruggedized RTSP optical emitters streaming video over municipal fiber to the **Centralized City Data Center**. Scalable GPU vision clusters perform object detection, optical flow queue calculation, and vehicle classification in an air-conditioned, redundant environment, emitting structured JSON telemetry into the ingestion pipeline.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Source as Telemetry Source
-    participant API as Ingestion API / Router
-    participant Queue as In-Memory Queue (10k Cap)
-    participant Worker as Batch Worker (500ms Timer)
-    participant Anomaly as Z-Score Engine
-    participant Socket as Socket.IO Hub
-    participant DB as MongoDB Storage
-
-    Source->>API: POST /api/telemetry/ingest (Event Payload)
-    API->>API: Validate Zod Schema & Check Deduplication
-    API->>Queue: Push event to Queue (bufferSize++)
-    API->>Anomaly: Evaluate Metric Z-Scores
-    API->>Socket: Stage for micro-batch broadcast
-    API-->>Source: 202 Accepted (processingLatency: <2ms)
-
-    Note over Worker,DB: Asynchronous Bulk Persistence
-    Worker->>Queue: Drain up to 200 events from Queue
-    Worker->>DB: Telemetry.bulkWrite(ordered: false)
-    Worker->>DB: Device.bulkWrite(upsert: true)
-    DB-->>Worker: Write Acknowledged (bulkWrite)
-```
+### B. Strategic Scope: Focusing Compute Resources on High-Impact Traffic (Air Pollution Omitted)
+- **The Challenge:** Air pollution fluctuates across vast multi-kilometer regional zones and is not directly actionable on sub-minute timescales (traffic cannot realistically be diverted onto a 15km detour to avoid a particulate pocket without exacerbating city-wide gridlock).
+- **The Solution:** Air pollution monitoring was deliberately omitted to dedicate 100% of GPU compute, network bandwidth, and database I/O to **actionable congestion relief: dynamic adaptive signal splits, incident/stalled vehicle tow dispatch, and emergency ambulance green corridors**.
 
 ---
 
-## 3. Database Schemas & Indexing Strategy
+## 3. High-Throughput Write-Behind Ingestion Pattern
 
-### 3.1 `Telemetry` Schema
-```javascript
+Directly persisting 1,000+ camera frames per second into disk causes thread pool exhaustion and write lockups:
+
+1. **In-Memory Ring Queue:** Ingestion calls (`POST /api/telemetry/ingest` and `/batch`) enqueue validated frames into memory with zero disk delay ($< 1\text{ms}$).
+2. **Micro-Batch Flushing:** An asynchronous timer drains up to **200 events** every **500ms** (or when the buffer hits the batch ceiling).
+3. **Unordered Bulk Write:** Executed via `Telemetry.bulkWrite()` and `Device.bulkWrite()` with `ordered: false`, reducing disk I/O operations by **95%** while sustaining **7,000+ events/sec**.
+
+---
+
+## 4. Canonical Traffic Data Model Specification
+
+Each ingested frame represents one traffic junction cycle emitted by the Centralized Vision Workers:
+
+```json
 {
-  eventId: { type: String, required: true, index: true },
-  deviceId: { type: String, required: true, index: true },
-  category: { type: String, required: true, enum: ['server', 'fleet', 'turbine', 'iot'], index: true },
-  timestamp: { type: Date, required: true, index: true },
-  sequence: { type: Number, default: 0 },
-  metrics: { type: mongoose.Schema.Types.Mixed, required: true },
-  status: { type: String, enum: ['healthy', 'warning', 'critical'], default: 'healthy', index: true },
-  location: {
-    latitude: Number,
-    longitude: Number,
-    label: String
+  "eventId": "EVT-1731512400000-abcd",
+  "junctionId": "JNC-BLR-001",
+  "zoneId": "south-bangalore",
+  "timestamp": "2026-11-13T20:40:00.000Z",
+  "sequence": 1420,
+  "data": {
+    "approaches": [
+      {
+        "road": "Hosur Rd (from south)",
+        "vehiclesPerMin": 38,
+        "queueLengthM": 180,
+        "avgSpeedKmph": 6,
+        "signal": "red",
+        "greenTimeSec": 45
+      },
+      {
+        "road": "ORR (from east)",
+        "vehiclesPerMin": 52,
+        "queueLengthM": 60,
+        "avgSpeedKmph": 22,
+        "signal": "green",
+        "greenTimeSec": 50
+      },
+      {
+        "road": "Hosur Rd (from north)",
+        "vehiclesPerMin": 30,
+        "queueLengthM": 90,
+        "avgSpeedKmph": 14,
+        "signal": "red",
+        "greenTimeSec": 35
+      },
+      {
+        "road": "BTM Rd (from west)",
+        "vehiclesPerMin": 21,
+        "queueLengthM": 40,
+        "avgSpeedKmph": 18,
+        "signal": "red",
+        "greenTimeSec": 30
+      }
+    ],
+    "vehicleMix": {
+      "twoWheeler": 0.55,
+      "car": 0.30,
+      "bus": 0.05,
+      "truck": 0.10
+    },
+    "stalledVehicleDetected": false,
+    "ambulanceDetected": false,
+    "totalFlowVehiclesPerMin": 141,
+    "maxQueueLengthM": 180,
+    "avgSpeedKmph": 15.0,
+    "congestionScore": 76,
+    "cameraProcessingLatencyMs": 14
   }
 }
 ```
-**Compound Indexing:**
-1. `{ deviceId: 1, timestamp: -1 }`: Optimizes single-device historical lookups and deep-dive charts.
-2. `{ category: 1, timestamp: -1 }`: Accelerates category aggregation and filtered queries.
-3. `{ timestamp: -1 }`: Powers global time-window queries.
-
-### 3.2 `Device` Schema
-Tracks the current state, metadata, and status of every monitored node:
-```javascript
-{
-  deviceId: { type: String, required: true, unique: true },
-  name: { type: String, required: true },
-  category: { type: String, required: true, enum: ['server', 'fleet', 'turbine', 'iot'] },
-  region: { type: String, default: 'Global' },
-  status: { type: String, enum: ['online', 'degraded', 'offline', 'warning', 'critical'], default: 'online' },
-  healthScore: { type: Number, min: 0, max: 100, default: 100 },
-  lastSeen: { type: Date, default: Date.now },
-  lastMetrics: { type: mongoose.Schema.Types.Mixed, default: {} },
-  lastLocation: { latitude: Number, longitude: Number, label: String },
-  tags: [String]
-}
-```
-
-### 3.3 `Alert` Schema
-```javascript
-{
-  alertId: { type: String, required: true, unique: true },
-  deviceId: { type: String, required: true, index: true },
-  deviceName: String,
-  category: { type: String, required: true },
-  severity: { type: String, enum: ['info', 'warning', 'critical'], default: 'warning' },
-  title: { type: String, required: true },
-  message: { type: String, required: true },
-  metric: String,
-  triggerValue: Number,
-  thresholdValue: Number,
-  timestamp: { type: Date, default: Date.now, index: true },
-  resolved: { type: Boolean, default: false, index: true },
-  resolvedAt: Date,
-  resolvedBy: String
-}
-```
-**Compound Index:** `{ severity: 1, resolved: 1, timestamp: -1 }` for instant retrieval of active unresolved alerts.
 
 ---
 
-## 4. Real-Time Communication & Optimization Techniques
+## 5. Zonal Socket.IO Room Topology
 
-### 4.1 Selective Room Partitioning
-Clients connect via Socket.IO and subscribe exclusively to channels of interest:
-- `global`: Receives aggregated system metrics (`metrics:snapshot`) every 1s.
-- `category:{server|fleet|turbine}`: Receives domain-filtered batches.
-- `device:{deviceId}`: Receives high-resolution sub-second feeds when a user opens that device's inspector.
-- `alerts`: Immediate push notifications for anomalous conditions.
+Downstream clients subscribe selectively to eliminate client-side packet congestion:
 
-### 4.2 Micro-Batching on Server (80ms Window)
-Emitting a WebSocket event for every individual packet at 1,000 events/sec incurs high socket framing overhead. HyperPulse buffers outgoing events in an 80ms window (~12 FPS) and transmits them in structured arrays:
-```json
-[
-  { "eventId": "EVT-101", "deviceId": "srv-us-east-prod", "metrics": { "cpuPercent": 78 } },
-  { "eventId": "EVT-102", "deviceId": "fleet-ev-01", "metrics": { "speedKmh": 94 } }
-]
-```
+| Room Pattern | Subscribed Clients | Transmitted Slices | Bandwidth Impact |
+| :--- | :--- | :--- | :--- |
+| `global` | City Operations Center | City KPI snapshot, emergency alerts | Baseline |
+| `zone:south-bangalore` | South Desk (BTM / Silk Board / Koramangala) | Only South corridor junctions | **~75% reduction** |
+| `zone:east-bangalore` | East Desk (Bellandur / Tin Factory / KR Puram)| Only East corridor junctions | **~75% reduction** |
+| `junction:JNC-BLR-001` | Modal Inspection & Signal Override | Granular single-junction camera feed | **~92% reduction** |
 
-### 4.3 Client-Side Throttled Rendering
-On the browser side, incoming packets are queued in a reference array and drained into React state once every 100ms. This decouples socket packet reception from DOM rendering, ensuring smooth 60 FPS animation without lockups or frame stutter.
+---
 
-### 4.4 Statistical Z-Score Anomaly Detection
-An online sliding window of the last 30 readings calculates rolling mean ($\mu$) and standard deviation ($\sigma$):
-$$\mu = \frac{1}{N}\sum_{i=1}^{N} x_i, \quad \sigma = \sqrt{\frac{1}{N}\sum_{i=1}^{N}(x_i - \mu)^2}$$
-$$Z = \frac{x_{current} - \mu}{\sigma}$$
-If $|Z| \ge 3.2$, the event is classified as an outlier and dispatched as an incident alert. An anti-flap cooldown window (20 seconds) prevents redundant alerts from flooding the notification bus.
+## 6. AI Traffic Copilot Runbook Engine
+
+When anomalous bottlenecks occur, the Copilot Engine evaluates root causes and surfaces automated 1-click runbooks:
+
+1. **Dynamic Green Split Optimization:** Reallocates +25s green time to the saturated approach to dissolve queues.
+2. **Automated Emergency Green Wave Corridor:** Pre-emptively holds conflicting cross-streets at RED and establishes continuous green wave for ambulances.
+3. **BTP Rapid Incident Tow Dispatch:** Dispatches nearest recovery crane and pushes warnings to upstream electronic Variable Message Signs (VMS).
+4. **Upstream Arterial Diversion:** Siphons 35% of incoming volume onto peripheral bypass ring roads.

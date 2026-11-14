@@ -6,7 +6,7 @@ class SocketService {
   constructor() {
     this.io = null;
     this.broadcastQueue = [];
-    this.deviceBroadcastQueues = new Map(); // deviceId -> [events]
+    this.deviceBroadcastQueues = new Map(); // junctionId -> [events]
     this.broadcastIntervalMs = 80; // ~12 fps micro-batching for high throughput
 
     // Wire up anomalyEngine alert broadcast
@@ -49,19 +49,49 @@ class SocketService {
       // Send initial metrics snapshot
       socket.emit('metrics:snapshot', metricsService.getSnapshot());
 
-      // Room subscription handlers
+      // Room subscription handlers for Zones / Categories
+      socket.on('subscribe:zone', (zoneId) => {
+        if (zoneId) {
+          socket.join(`zone:${zoneId}`);
+          socket.emit('subscribed', { room: `zone:${zoneId}` });
+        }
+      });
+
+      socket.on('unsubscribe:zone', (zoneId) => {
+        if (zoneId) {
+          socket.leave(`zone:${zoneId}`);
+        }
+      });
+
       socket.on('subscribe:category', (category) => {
         if (category) {
           const room = `category:${category}`;
           socket.join(room);
+          socket.join(`zone:${category}`); // also join matching zone room
           socket.emit('subscribed', { room });
         }
       });
 
       socket.on('unsubscribe:category', (category) => {
         if (category) {
-          const room = `category:${category}`;
-          socket.leave(room);
+          socket.leave(`category:${category}`);
+          socket.leave(`zone:${category}`);
+        }
+      });
+
+      // Room subscription handlers for Junctions / Devices
+      socket.on('subscribe:junction', (junctionId) => {
+        if (junctionId) {
+          socket.join(`junction:${junctionId}`);
+          socket.join(`device:${junctionId}`);
+          socket.emit('subscribed', { room: `junction:${junctionId}` });
+        }
+      });
+
+      socket.on('unsubscribe:junction', (junctionId) => {
+        if (junctionId) {
+          socket.leave(`junction:${junctionId}`);
+          socket.leave(`device:${junctionId}`);
         }
       });
 
@@ -69,14 +99,15 @@ class SocketService {
         if (deviceId) {
           const room = `device:${deviceId}`;
           socket.join(room);
+          socket.join(`junction:${deviceId}`);
           socket.emit('subscribed', { room });
         }
       });
 
       socket.on('unsubscribe:device', (deviceId) => {
         if (deviceId) {
-          const room = `device:${deviceId}`;
-          socket.leave(room);
+          socket.leave(`device:${deviceId}`);
+          socket.leave(`junction:${deviceId}`);
         }
       });
 
@@ -98,26 +129,44 @@ class SocketService {
   broadcastTelemetry(event) {
     if (!this.io) return;
 
+    const juncId = event.junctionId || event.deviceId;
+
     // Queue for micro-batching
     this.broadcastQueue.push(event);
 
-    // Queue for specific device room
-    if (!this.deviceBroadcastQueues.has(event.deviceId)) {
-      this.deviceBroadcastQueues.set(event.deviceId, []);
+    // Queue for specific junction room
+    if (!this.deviceBroadcastQueues.has(juncId)) {
+      this.deviceBroadcastQueues.set(juncId, []);
     }
-    this.deviceBroadcastQueues.get(event.deviceId).push(event);
+    this.deviceBroadcastQueues.get(juncId).push(event);
   }
 
   broadcastAlert(alert) {
     if (!this.io) return;
+    const juncId = alert.junctionId || alert.deviceId;
+    const zId = alert.zoneId || alert.category;
+
     this.io.to('alerts').emit('alert:new', alert);
-    this.io.to(`device:${alert.deviceId}`).emit('alert:new', alert);
+    this.io.to('global').emit('alert:new', alert);
+    if (juncId) {
+      this.io.to(`device:${juncId}`).emit('alert:new', alert);
+      this.io.to(`junction:${juncId}`).emit('alert:new', alert);
+    }
+    if (zId) {
+      this.io.to(`zone:${zId}`).emit('alert:new', alert);
+      this.io.to(`category:${zId}`).emit('alert:new', alert);
+    }
     metricsService.recordBroadcast(1);
   }
 
   broadcastDeviceStatus(device) {
     if (!this.io) return;
     this.io.to('global').emit('device:status_change', device);
+    const juncId = device.junctionId || device.deviceId;
+    if (juncId) {
+      this.io.to(`device:${juncId}`).emit('device:status_change', device);
+      this.io.to(`junction:${juncId}`).emit('device:status_change', device);
+    }
   }
 
   flushBroadcasts() {
@@ -125,31 +174,34 @@ class SocketService {
       return;
     }
 
-    // 1. Emit category micro-batches
+    // 1. Emit zone / category micro-batches
     if (this.broadcastQueue.length > 0) {
       const batch = this.broadcastQueue.splice(0, this.broadcastQueue.length);
 
-      // Group by category for selective broadcasting
-      const byCategory = {};
+      // Group by zone / category
+      const byZone = {};
       for (const item of batch) {
-        if (!byCategory[item.category]) byCategory[item.category] = [];
-        byCategory[item.category].push(item);
+        const zId = item.zoneId || item.category || 'all';
+        if (!byZone[zId]) byZone[zId] = [];
+        byZone[zId].push(item);
       }
 
-      // Broadcast to global & category rooms
+      // Broadcast to global & zone rooms
       this.io.to('global').emit('telemetry:batch', batch);
-      for (const [category, items] of Object.entries(byCategory)) {
-        this.io.to(`category:${category}`).emit('telemetry:batch', items);
+      for (const [zone, items] of Object.entries(byZone)) {
+        this.io.to(`zone:${zone}`).emit('telemetry:batch', items);
+        this.io.to(`category:${zone}`).emit('telemetry:batch', items);
       }
 
       metricsService.recordBroadcast(batch.length);
     }
 
-    // 2. Emit per-device micro-batches
-    for (const [deviceId, devEvents] of this.deviceBroadcastQueues.entries()) {
-      if (devEvents.length > 0) {
-        const events = devEvents.splice(0, devEvents.length);
-        this.io.to(`device:${deviceId}`).emit('telemetry:device_feed', events);
+    // 2. Emit per-junction micro-batches
+    for (const [juncId, juncEvents] of this.deviceBroadcastQueues.entries()) {
+      if (juncEvents.length > 0) {
+        const events = juncEvents.splice(0, juncEvents.length);
+        this.io.to(`device:${juncId}`).emit('telemetry:device_feed', events);
+        this.io.to(`junction:${juncId}`).emit('telemetry:device_feed', events);
       }
     }
   }

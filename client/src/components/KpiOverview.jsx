@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUpRight, Gauge, Radio, Server, AlertTriangle, Clock } from 'lucide-react';
+import { Gauge, Radio, MapPin, AlertTriangle, Clock } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 
 export function KpiOverview({ unresolvedAlertsCount = 0, totalDevicesCount = 12 }) {
@@ -7,7 +7,7 @@ export function KpiOverview({ unresolvedAlertsCount = 0, totalDevicesCount = 12 
 
   const cards = [
     {
-      label: 'Ingestion Throughput',
+      label: 'Vision Stream Ingestion',
       value: `${stats.ingestRate} e/s`,
       subtext: `Peak: ${stats.peakIngestRate} e/s | Total: ${stats.totalIngested.toLocaleString()}`,
       icon: Gauge,
@@ -15,7 +15,7 @@ export function KpiOverview({ unresolvedAlertsCount = 0, totalDevicesCount = 12 
       trend: stats.ingestRate > 0 ? '+Active' : 'Idle',
     },
     {
-      label: 'Real-Time Broadcast',
+      label: 'Zonal Real-Time Dispatch',
       value: `${stats.broadcastRate} e/s`,
       subtext: `${stats.totalBroadcasted.toLocaleString()} Socket.IO deliveries`,
       icon: Radio,
@@ -23,25 +23,25 @@ export function KpiOverview({ unresolvedAlertsCount = 0, totalDevicesCount = 12 
       trend: 'Zero Loss',
     },
     {
-      label: 'Active Telemetry Nodes',
+      label: 'Monitored BLR Junctions',
       value: `${totalDevicesCount} / 12`,
-      subtext: 'Servers, Transport Fleet, Turbines',
-      icon: Server,
+      subtext: 'South, East, North, Central Zones',
+      icon: MapPin,
       accent: 'indigo',
       trend: '100% Online',
     },
     {
-      label: 'Anomalies & Incidents',
+      label: 'Gridlocks & Incidents',
       value: unresolvedAlertsCount,
-      subtext: unresolvedAlertsCount > 0 ? 'Requires operator review' : 'All systems normal',
+      subtext: unresolvedAlertsCount > 0 ? 'Requires dispatcher review' : 'Corridors moving freely',
       icon: AlertTriangle,
       accent: unresolvedAlertsCount > 0 ? 'amber' : 'emerald',
       trend: unresolvedAlertsCount > 0 ? 'Active Alert' : 'Nominal',
     },
     {
-      label: 'End-to-End Latency',
+      label: 'Central DC Pipeline Latency',
       value: `${stats.avgLatencyMs || clientLatency || 1} ms`,
-      subtext: `Buffer size: ${stats.bufferSize} | Drops: ${stats.totalDropped}`,
+      subtext: `Write-behind queue: ${stats.bufferSize} | Drops: ${stats.totalDropped}`,
       icon: Clock,
       accent: 'teal',
       trend: '< 5ms Target',

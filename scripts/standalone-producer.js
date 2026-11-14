@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * HyperPulse Standalone External Telemetry Producer
- * Demonstrates streaming telemetry ingestion from an independent agent/process.
+ * MetroPulse Smart City Traffic - Central Camera Telemetry Producer
+ * Simulates high-throughput JSON telemetry emitted by Centralized Vision Processing Workers
+ * for Bengaluru traffic junctions.
  * 
  * Usage:
- *   node scripts/standalone-producer.js [--rate 20] [--device edge-node-99] [--category server]
+ *   node scripts/standalone-producer.js [--rate 15] [--junction JNC-BLR-001] [--zone south-bangalore]
  */
 
 import http from 'http';
@@ -17,15 +18,15 @@ function getArg(flag, defaultValue) {
   return idx !== -1 && args[idx + 1] ? args[idx + 1] : defaultValue;
 }
 
-const rate = parseInt(getArg('--rate', '15'), 10);
-const deviceId = getArg('--device', 'external-collector-01');
-const category = getArg('--category', 'server');
+const rate = parseInt(getArg('--rate', '12'), 10);
+const junctionId = getArg('--junction', 'JNC-BLR-001');
+const zoneId = getArg('--zone', 'south-bangalore');
 const serverUrl = getArg('--url', 'http://localhost:5000/api/telemetry/ingest');
 
 console.log('====================================================');
-console.log('📡 HyperPulse Standalone Telemetry Producer');
+console.log('🚦 MetroPulse BLR: Smart City Traffic Producer');
 console.log(`Target: ${serverUrl}`);
-console.log(`Device ID: ${deviceId} | Category: ${category}`);
+console.log(`Junction ID: ${junctionId} | Zone: ${zoneId}`);
 console.log(`Emission Rate: ${rate} events/second`);
 console.log('====================================================');
 
@@ -38,27 +39,55 @@ function sendEvent() {
   sequence++;
   totalSent++;
 
+  // Alternate signal state
+  const isHosurGreen = sequence % 4 < 2;
+
+  // Exact JSON payload schema requested by the team
   const payload = {
     eventId: `EXT-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
-    deviceId,
-    deviceName: `External Agent ${deviceId}`,
-    category,
+    junctionId,
+    zoneId,
     timestamp: new Date().toISOString(),
     sequence,
-    metrics: category === 'server'
-      ? {
-          cpuPercent: parseFloat((35 + Math.random() * 45).toFixed(2)),
-          memoryPercent: parseFloat((55 + Math.random() * 30).toFixed(2)),
-          latencyMs: Math.round(15 + Math.random() * 35),
-          networkRxMbps: Math.round(200 + Math.random() * 300),
-          networkTxMbps: Math.round(300 + Math.random() * 400),
-        }
-      : {
-          speedKmh: Math.round(70 + Math.random() * 40),
-          batteryLevel: parseFloat((80 - (sequence * 0.05)).toFixed(1)),
-          motorTempC: Math.round(65 + Math.random() * 20),
+    data: {
+      approaches: [
+        {
+          road: 'Hosur Rd (from south)',
+          vehiclesPerMin: Math.round(35 + Math.random() * 15),
+          queueLengthM: isHosurGreen ? Math.round(30 + Math.random() * 20) : Math.round(150 + Math.random() * 50),
+          avgSpeedKmph: isHosurGreen ? Math.round(22 + Math.random() * 8) : Math.round(5 + Math.random() * 3),
+          signal: isHosurGreen ? 'green' : 'red',
         },
-    status: 'healthy',
+        {
+          road: 'ORR (from east)',
+          vehiclesPerMin: Math.round(45 + Math.random() * 20),
+          queueLengthM: isHosurGreen ? Math.round(120 + Math.random() * 40) : Math.round(40 + Math.random() * 20),
+          avgSpeedKmph: isHosurGreen ? Math.round(6 + Math.random() * 4) : Math.round(24 + Math.random() * 6),
+          signal: isHosurGreen ? 'red' : 'green',
+        },
+        {
+          road: 'Hosur Rd (from north)',
+          vehiclesPerMin: Math.round(25 + Math.random() * 15),
+          queueLengthM: isHosurGreen ? Math.round(40 + Math.random() * 20) : Math.round(90 + Math.random() * 30),
+          avgSpeedKmph: isHosurGreen ? Math.round(18 + Math.random() * 6) : Math.round(10 + Math.random() * 4),
+          signal: isHosurGreen ? 'green' : 'red',
+        },
+        {
+          road: 'BTM Rd (from west)',
+          vehiclesPerMin: Math.round(18 + Math.random() * 10),
+          queueLengthM: isHosurGreen ? Math.round(70 + Math.random() * 25) : Math.round(35 + Math.random() * 15),
+          avgSpeedKmph: isHosurGreen ? Math.round(8 + Math.random() * 4) : Math.round(20 + Math.random() * 5),
+          signal: isHosurGreen ? 'red' : 'green',
+        },
+      ],
+      vehicleMix: {
+        twoWheeler: 0.55,
+        car: 0.30,
+        bus: 0.05,
+        truck: 0.10,
+      },
+      stalledVehicleDetected: false,
+    },
   };
 
   const data = JSON.stringify(payload);
@@ -73,7 +102,7 @@ function sendEvent() {
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(data),
-        'X-API-Key': 'hp_key_demo_public_operator',
+        'X-API-Key': 'blr_traffic_key_live_command_center_2026',
       },
     },
     (res) => {
@@ -84,7 +113,6 @@ function sendEvent() {
           totalAcks++;
         } else {
           totalErrors++;
-          console.warn(`[Producer] HTTP ${res.statusCode}: ${body}`);
         }
       });
     }
@@ -92,26 +120,23 @@ function sendEvent() {
 
   req.on('error', (err) => {
     totalErrors++;
-    console.error(`[Producer] Connection error: ${err.message}`);
   });
 
   req.write(data);
   req.end();
 }
 
-const intervalMs = Math.round(1000 / rate);
+const intervalMs = Math.max(1, Math.floor(1000 / rate));
 const timer = setInterval(sendEvent, intervalMs);
 
-// Log summary every 5 seconds
 setInterval(() => {
   console.log(
-    `[Stats] Sent: ${totalSent} | Acknowledged: ${totalAcks} | Errors: ${totalErrors} | Active Rate: ~${rate} e/s`
+    `[Producer BLR] Sent: ${totalSent} | Ingest Acks: ${totalAcks} | Errors: ${totalErrors} | Target Rate: ${rate}/s`
   );
-}, 5000);
+}, 2000);
 
 process.on('SIGINT', () => {
   clearInterval(timer);
-  console.log('\n[Producer] Stopped.');
-  console.log(`Final summary: ${totalSent} sent, ${totalAcks} acks, ${totalErrors} errors.`);
+  console.log('\nStopping producer.');
   process.exit(0);
 });

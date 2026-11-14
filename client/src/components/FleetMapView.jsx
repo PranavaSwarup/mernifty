@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Truck, BatteryCharging, Gauge, Thermometer, Navigation, MapPin } from 'lucide-react';
+import { MapPin, Navigation, Car, AlertTriangle, ShieldCheck, Activity, Sparkles } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import L from 'leaflet';
 
@@ -9,18 +9,16 @@ export function FleetMapView({ devices = [] }) {
   const mapInstanceRef = useRef(null);
   const markersRef = useRef(new Map());
 
-  // Filter fleet devices
-  const fleetDevices = devices.filter((d) => d.category === 'fleet');
-  const [selectedVehicleId, setSelectedVehicleId] = useState(fleetDevices[0]?.deviceId || 'fleet-ev-01');
+  const [selectedJunctionId, setSelectedJunctionId] = useState(devices[0]?.deviceId || 'JNC-BLR-001');
 
-  // Initialize Leaflet Map
+  // Initialize Leaflet Map centered on Bengaluru
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    // Center on US continent
+    // Center on Bengaluru: 12.9716° N, 77.5946° E
     const map = L.map(mapContainerRef.current, {
-      center: [38.5, -98.0],
-      zoom: 4,
+      center: [12.9650, 77.6200],
+      zoom: 12,
       zoomControl: true,
       attributionControl: false,
     });
@@ -44,184 +42,225 @@ export function FleetMapView({ devices = [] }) {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    for (const dev of fleetDevices) {
+    for (const dev of devices) {
       const liveEvt = latestByDevice[dev.deviceId];
       const loc = liveEvt?.location || dev.lastLocation || dev.location;
-      const metrics = liveEvt?.metrics || dev.lastMetrics || dev.baseMetrics || {};
+      const metrics = liveEvt?.metrics || liveEvt?.data || dev.lastMetrics || dev.lastData || {};
+      const status = liveEvt?.status || dev.status || 'healthy';
+      const stalled = Boolean(liveEvt?.data?.stalledVehicleDetected || metrics.stalledVehicleDetected || dev.stalledVehicleDetected);
+      const ambulance = Boolean(liveEvt?.data?.ambulanceDetected || metrics.ambulanceDetected || dev.ambulanceDetected);
 
       if (!loc || !loc.latitude || !loc.longitude) continue;
 
-      let marker = markersRef.current.get(dev.deviceId);
+      let markerColor = '#10B981'; // green
+      let glowColor = 'rgba(16, 185, 129, 0.4)';
+      let statusText = 'FLOW';
 
-      // Custom cyber vehicle marker HTML icon
+      if (ambulance) {
+        markerColor = '#3B82F6';
+        glowColor = 'rgba(59, 130, 246, 0.7)';
+        statusText = 'AMBULANCE';
+      } else if (stalled || status === 'gridlock' || status === 'critical') {
+        markerColor = '#EF4444';
+        glowColor = 'rgba(239, 68, 68, 0.6)';
+        statusText = 'GRIDLOCK';
+      } else if (status === 'congested' || status === 'warning') {
+        markerColor = '#F59E0B';
+        glowColor = 'rgba(245, 158, 11, 0.5)';
+        statusText = 'QUEUE';
+      }
+
+      const queue = metrics.maxQueueLengthM || 45;
+      const speed = metrics.avgSpeedKmph || 18;
+      const shortName = dev.name.split(' ')[0];
+
+      // Custom cyber junction marker HTML
       const iconHtml = `
-        <div style="position: relative; display: flex; align-items: center; justify-content: center;">
-          <div style="width: 28px; height: 28px; border-radius: 50%; background: #0F172A; border: 2px solid #10B981; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="1" y="3" width="15" height="13"></rect>
-              <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
-              <circle cx="5.5" cy="18.5" r="2.5"></circle>
-              <circle cx="18.5" cy="18.5" r="2.5"></circle>
-            </svg>
+        <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
+          <div style="width: 26px; height: 26px; border-radius: 50%; background: #0B0F19; border: 2.5px solid ${markerColor}; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px ${glowColor};">
+            <div style="width: 8px; height: 8px; border-radius: 50%; background: ${markerColor}; ${stalled || ambulance ? 'animation: pulse 1s infinite;' : ''}"></div>
           </div>
-          <div style="position: absolute; -top: 18px; white-space: nowrap; font-size: 10px; font-weight: bold; background: #0B0F19; color: #E2E8F0; padding: 1px 5px; border-radius: 4px; border: 1px solid #334155;">
-            ${dev.name.split(' ')[0]} • ${metrics.speedKmh ? Math.round(metrics.speedKmh) : 0} km/h
+          <div style="margin-top: 3px; white-space: nowrap; font-size: 10px; font-weight: 700; background: rgba(11, 15, 25, 0.92); color: #F1F5F9; padding: 2px 6px; border-radius: 5px; border: 1px solid rgba(51, 65, 85, 0.8); font-family: monospace; box-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+            ${shortName} • ${queue}m
           </div>
         </div>
       `;
 
       const customIcon = L.divIcon({
         html: iconHtml,
-        className: 'fleet-custom-marker',
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
+        className: 'traffic-custom-marker',
+        iconSize: [80, 42],
+        iconAnchor: [40, 13],
       });
 
+      let marker = markersRef.current.get(dev.deviceId);
       if (!marker) {
         marker = L.marker([loc.latitude, loc.longitude], { icon: customIcon }).addTo(map);
-        marker.on('click', () => setSelectedVehicleId(dev.deviceId));
+        marker.on('click', () => setSelectedJunctionId(dev.deviceId));
         markersRef.current.set(dev.deviceId, marker);
       } else {
-        marker.setLatLng([loc.latitude, loc.longitude]);
         marker.setIcon(customIcon);
       }
     }
-  }, [latestByDevice, fleetDevices]);
+  }, [latestByDevice, devices]);
 
-  // Center on selected vehicle
-  const focusVehicle = (dev) => {
-    setSelectedVehicleId(dev.deviceId);
+  // Focus junction
+  const focusJunction = (dev) => {
+    setSelectedJunctionId(dev.deviceId);
     const liveEvt = latestByDevice[dev.deviceId];
     const loc = liveEvt?.location || dev.lastLocation || dev.location;
     if (mapInstanceRef.current && loc) {
-      mapInstanceRef.current.flyTo([loc.latitude, loc.longitude], 8, { duration: 1.5 });
+      mapInstanceRef.current.flyTo([loc.latitude, loc.longitude], 14, { duration: 1.2 });
     }
   };
 
-  const selectedDev = fleetDevices.find((d) => d.deviceId === selectedVehicleId) || fleetDevices[0];
+  const selectedDev = devices.find((d) => d.deviceId === selectedJunctionId) || devices[0];
   const selectedLive = selectedDev ? latestByDevice[selectedDev.deviceId] : null;
-  const currentMetrics = selectedLive?.metrics || selectedDev?.lastMetrics || selectedDev?.baseMetrics || {};
+  const m = selectedLive?.metrics || selectedLive?.data || selectedDev?.lastMetrics || selectedDev?.lastData || {};
+  const approaches = selectedLive?.data?.approaches || selectedDev?.approaches || [];
+  const stalled = Boolean(selectedLive?.data?.stalledVehicleDetected || m.stalledVehicleDetected || selectedDev?.stalledVehicleDetected);
+  const ambulance = Boolean(selectedLive?.data?.ambulanceDetected || m.ambulanceDetected || selectedDev?.ambulanceDetected);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {/* Map Container */}
-      <div className="lg:col-span-2 rounded-xl border border-slate-800 bg-[#0B101D] overflow-hidden flex flex-col">
-        {/* Map Header */}
-        <div className="p-3.5 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400">
-              <Truck className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="font-bold text-sm text-slate-100">Live Logistics & Fleet Geo-Tracker</h3>
-              <p className="text-[11px] text-slate-400">Real-time GPS coordinate streaming and route monitoring</p>
-            </div>
+    <div className="space-y-4">
+      {/* Top Banner */}
+      <div className="rounded-2xl border border-slate-800 bg-[#0B101D] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+            <MapPin className="w-6 h-6" />
           </div>
-          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-            {fleetDevices.length} Active Autonomous Trucks
-          </span>
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+              Bengaluru Traffic Command & Control GIS
+            </span>
+            <h2 className="text-lg sm:text-xl font-extrabold text-white">
+              Live Arterial Corridors & Signal Junctions Map
+            </h2>
+          </div>
         </div>
-
-        {/* Leaflet Canvas */}
-        <div ref={mapContainerRef} className="h-96 lg:h-[480px] w-full z-10" />
+        <div className="flex items-center gap-2 text-xs font-mono px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span>12 Monitored Bengaluru Junctions Active</span>
+        </div>
       </div>
 
-      {/* Fleet Sidebar & Selected Telemetry Card */}
-      <div className="flex flex-col gap-4">
-        {/* Selected Vehicle Card */}
-        {selectedDev && (
-          <div className="rounded-xl border border-slate-800 bg-[#0B101D] p-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400">
-                  Focused Transponder
-                </span>
-                <h4 className="font-bold text-slate-100 text-base">{selectedDev.name}</h4>
-                <p className="text-xs text-slate-400">{selectedDev.region}</p>
-              </div>
-              <span className="px-2 py-0.5 text-xs font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                {selectedLive?.status || 'Active'}
-              </span>
-            </div>
-
-            {/* Live Metrics Grid */}
-            <div className="grid grid-cols-2 gap-2.5 mt-4">
-              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                <div className="flex items-center gap-1.5 text-slate-400 text-xs">
-                  <Gauge className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Ground Speed</span>
-                </div>
-                <div className="mt-1 font-mono font-bold text-lg text-white">
-                  {currentMetrics.speedKmh ? Math.round(currentMetrics.speedKmh) : 0}{' '}
-                  <span className="text-xs text-slate-500 font-normal">km/h</span>
-                </div>
-              </div>
-
-              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                <div className="flex items-center gap-1.5 text-slate-400 text-xs">
-                  <BatteryCharging className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Battery SoC</span>
-                </div>
-                <div className="mt-1 font-mono font-bold text-lg text-emerald-400">
-                  {currentMetrics.batteryLevel ? currentMetrics.batteryLevel : 0}%
-                </div>
-              </div>
-
-              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                <div className="flex items-center gap-1.5 text-slate-400 text-xs">
-                  <Thermometer className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Motor Temp</span>
-                </div>
-                <div className="mt-1 font-mono font-bold text-lg text-white">
-                  {currentMetrics.motorTempC ? Math.round(currentMetrics.motorTempC) : 0}°C
-                </div>
-              </div>
-
-              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                <div className="flex items-center gap-1.5 text-slate-400 text-xs">
-                  <Navigation className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Heading</span>
-                </div>
-                <div className="mt-1 font-mono font-bold text-lg text-white">
-                  {currentMetrics.headingDeg || 180}°
-                </div>
-              </div>
-            </div>
+      {/* Map Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        {/* Left Sidebar: Junction List */}
+        <div className="lg:col-span-1 rounded-2xl border border-slate-800 bg-[#0B101D] p-3 flex flex-col max-h-[620px] overflow-hidden">
+          <div className="pb-2 mb-2 border-b border-slate-800 flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-200">Corridor Nodes</span>
+            <span className="text-[10px] text-slate-400 font-mono">{devices.length} sites</span>
           </div>
-        )}
 
-        {/* Fleet Roster List */}
-        <div className="rounded-xl border border-slate-800 bg-[#0B101D] p-3 flex-1 flex flex-col">
-          <span className="text-xs font-bold text-slate-300 mb-2 px-1">Fleet Telemetry Matrix</span>
-          <div className="space-y-2 overflow-y-auto max-h-72">
-            {fleetDevices.map((dev) => {
-              const live = latestByDevice[dev.deviceId];
-              const m = live?.metrics || dev.lastMetrics || dev.baseMetrics || {};
-              const isSelected = dev.deviceId === selectedVehicleId;
+          <div className="space-y-1.5 overflow-y-auto flex-1 pr-1">
+            {devices.map((d) => {
+              const live = latestByDevice[d.deviceId];
+              const q = live?.metrics?.maxQueueLengthM || 45;
+              const spd = live?.metrics?.avgSpeedKmph || 18;
+              const isSelected = d.deviceId === selectedJunctionId;
+              const isStalled = Boolean(live?.data?.stalledVehicleDetected || d.stalledVehicleDetected);
+              const isAmb = Boolean(live?.data?.ambulanceDetected || d.ambulanceDetected);
+
               return (
                 <div
-                  key={dev.deviceId}
-                  onClick={() => focusVehicle(dev)}
-                  className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
+                  key={d.deviceId}
+                  onClick={() => focusJunction(d)}
+                  className={`p-2.5 rounded-xl border cursor-pointer transition-all duration-150 ${
                     isSelected
-                      ? 'bg-cyan-500/10 border-cyan-500/50 shadow-sm'
+                      ? 'bg-emerald-950/30 border-emerald-500/50 shadow-md shadow-emerald-500/10'
                       : 'bg-slate-900/50 border-slate-800/80 hover:bg-slate-900 hover:border-slate-700'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-200">{dev.name}</span>
-                    <span className="text-[11px] font-mono font-semibold text-cyan-400">
-                      {m.speedKmh ? Math.round(m.speedKmh) : 0} km/h
+                    <span className="font-bold text-xs text-slate-100 truncate">
+                      {d.name.split('(')[0]}
                     </span>
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        isAmb
+                          ? 'bg-blue-400 animate-ping'
+                          : isStalled
+                          ? 'bg-rose-500 animate-pulse'
+                          : q > 130
+                          ? 'bg-rose-500'
+                          : q > 80
+                          ? 'bg-amber-400'
+                          : 'bg-emerald-400'
+                      }`}
+                    />
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-                    <span>{dev.region}</span>
-                    <span className="text-emerald-400 font-mono">Batt: {m.batteryLevel || 0}%</span>
+                  <div className="flex items-center justify-between mt-1 text-[10px] font-mono text-slate-400">
+                    <span>{d.zoneName ? d.zoneName.replace(' Bengaluru Zone', '') : d.zoneId}</span>
+                    <span className="text-slate-200 font-semibold">{q}m • {spd}km/h</span>
                   </div>
                 </div>
               );
             })}
           </div>
+        </div>
+
+        {/* Center / Right: The Leaflet Map & Selected Detail */}
+        <div className="lg:col-span-3 space-y-4">
+          <div className="rounded-2xl border border-slate-800 overflow-hidden relative shadow-2xl h-[460px] bg-[#070A10]">
+            <div ref={mapContainerRef} className="w-full h-full z-0" />
+
+            {/* Map Legend */}
+            <div className="absolute bottom-3 left-3 z-10 bg-slate-950/90 backdrop-blur-md p-2.5 rounded-xl border border-slate-800 text-[11px] font-mono flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                <span className="text-slate-300">Flow Normal (&lt;80m)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                <span className="text-slate-300">Heavy Queue (80-140m)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                <span className="text-slate-300">Gridlock (&gt;140m)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
+                <span className="text-blue-300">Ambulance Priority</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Selected Junction Live Telemetry Drawer */}
+          {selectedDev && (
+            <div className="rounded-2xl border border-slate-800 bg-[#0B101D] p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-sm text-slate-100">{selectedDev.name}</h3>
+                  <span className="text-xs font-mono text-slate-400">[{selectedDev.deviceId}]</span>
+                  {ambulance && (
+                    <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 animate-pulse">
+                      AMBULANCE PREEMPTION
+                    </span>
+                  )}
+                  {stalled && (
+                    <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
+                      STALLED VEHICLE DETECTED
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Location: {selectedDev.location?.label || selectedDev.region} • GPS: ({selectedDev.location?.latitude?.toFixed(4)}, {selectedDev.location?.longitude?.toFixed(4)})
+                </p>
+              </div>
+
+              {/* Approaches Quick Pill */}
+              <div className="flex flex-wrap items-center gap-2">
+                {approaches.slice(0, 4).map((app, idx) => (
+                  <div key={idx} className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${app.signal === 'green' ? 'bg-emerald-400' : 'bg-rose-500'}`} />
+                    <span className="text-slate-300 truncate max-w-[110px]">{app.road.split('(')[0]}</span>
+                    <span className="text-slate-400 font-bold">{app.queueLengthM}m</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

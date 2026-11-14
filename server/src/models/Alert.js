@@ -8,6 +8,10 @@ const alertSchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
+    junctionId: {
+      type: String,
+      index: true,
+    },
     deviceId: {
       type: String,
       required: true,
@@ -15,6 +19,10 @@ const alertSchema = new mongoose.Schema(
     },
     deviceName: {
       type: String,
+    },
+    zoneId: {
+      type: String,
+      index: true,
     },
     category: {
       type: String,
@@ -60,12 +68,18 @@ const alertSchema = new mongoose.Schema(
     resolvedBy: {
       type: String,
     },
+    remediationAction: {
+      type: String,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-alertSchema.index({ severity: 1, resolved: 1, timestamp: -1 });
+// Compound indexes
+alertSchema.index({ resolved: 1, timestamp: -1 });
+alertSchema.index({ deviceId: 1, resolved: 1 });
+alertSchema.index({ zoneId: 1, resolved: 1 });
 
 export const Alert = mongoose.models.Alert || mongoose.model('Alert', alertSchema);

@@ -138,15 +138,15 @@ function MainApp() {
       {/* Footer */}
       <footer className="border-t border-slate-800/80 bg-[#0B101D] px-6 py-4 mt-8">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
-          <span>HyperPulse Telemetry Platform • MERNIFY Hackathon 2026</span>
+          <span>MetroPulse BLR Smart City Traffic Platform • Bengaluru Central Command Center</span>
           <div className="flex items-center gap-4 text-slate-400">
             <span>Node.js + Express.js</span>
             <span>•</span>
             <span>MongoDB Write-Behind Ingestion</span>
             <span>•</span>
-            <span>React.js + Vite</span>
+            <span>React.js + Leaflet Map</span>
             <span>•</span>
-            <span>Socket.IO Selective Rooms</span>
+            <span>Socket.IO Zonal Partitioning</span>
           </div>
         </div>
       </footer>

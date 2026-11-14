@@ -76,28 +76,40 @@ class IngestionBuffer {
         insertOne: {
           document: {
             eventId: item.eventId,
-            deviceId: item.deviceId,
-            category: item.category,
+            junctionId: item.junctionId || item.deviceId,
+            deviceId: item.deviceId || item.junctionId,
+            junctionName: item.junctionName || item.deviceName,
+            zoneId: item.zoneId || item.category,
+            category: item.category || item.zoneId,
             timestamp: new Date(item.timestamp),
             sequence: item.sequence || 0,
-            metrics: item.metrics,
+            metrics: item.metrics || {},
+            data: item.data || {},
             status: item.status || 'healthy',
             location: item.location || null,
           },
         },
       }));
 
-      // Prepare bulk operations for Device status updates
+      // Prepare bulk operations for Junction status updates
       const deviceMap = new Map();
       for (const item of batch) {
-        deviceMap.set(item.deviceId, {
-          deviceId: item.deviceId,
-          name: item.deviceName || item.deviceId,
-          category: item.category,
+        const juncId = item.junctionId || item.deviceId;
+        deviceMap.set(juncId, {
+          junctionId: juncId,
+          deviceId: juncId,
+          name: item.junctionName || item.deviceName || juncId,
+          zoneId: item.zoneId || item.category,
+          category: item.category || item.zoneId,
           status: item.status || 'online',
           lastSeen: new Date(item.timestamp),
           lastMetrics: item.metrics,
+          lastData: item.data,
           lastLocation: item.location,
+          approaches: item.data?.approaches || [],
+          vehicleMix: item.data?.vehicleMix,
+          stalledVehicleDetected: Boolean(item.data?.stalledVehicleDetected),
+          ambulanceDetected: Boolean(item.data?.ambulanceDetected),
         });
       }
 
@@ -106,16 +118,23 @@ class IngestionBuffer {
           filter: { deviceId: dev.deviceId },
           update: {
             $set: {
+              junctionId: dev.junctionId,
               name: dev.name,
+              zoneId: dev.zoneId,
               category: dev.category,
               status: dev.status,
               lastSeen: dev.lastSeen,
               lastMetrics: dev.lastMetrics,
+              lastData: dev.lastData,
+              approaches: dev.approaches,
+              vehicleMix: dev.vehicleMix,
+              stalledVehicleDetected: dev.stalledVehicleDetected,
+              ambulanceDetected: dev.ambulanceDetected,
               ...(dev.lastLocation ? { lastLocation: dev.lastLocation } : {}),
             },
             $setOnInsert: {
               healthScore: 100,
-              tags: [dev.category],
+              tags: [dev.zoneId, 'bengaluru-traffic'],
             },
           },
           upsert: true,
@@ -133,7 +152,6 @@ class IngestionBuffer {
         if (res.status === 'fulfilled') {
           writeSuccess = true;
         } else if (res.reason && res.reason.code !== 11000) {
-          // Log non-duplicate errors
           console.warn('[IngestBuffer] Bulk write notice:', res.reason.message || res.reason);
         }
       }
@@ -145,7 +163,6 @@ class IngestionBuffer {
       console.warn('[IngestBuffer] Batch persistence notice:', err.message);
     } finally {
       this.isFlushing = false;
-      // If items accumulated while flushing, trigger another flush
       if (this.queue.length >= this.batchSize) {
         setImmediate(() => this.flush());
       }
