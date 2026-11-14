@@ -83,6 +83,14 @@ const alertSchema = new mongoose.Schema(
     affectedRoad: {
       type: String,
     },
+    sourceAlertId: {
+      type: String,
+      default: null,
+    },
+    citizenReportCount: {
+      type: Number,
+      default: 0,
+    },
     status: {
       type: String,
       enum: ['open', 'acknowledged', 'action_applied', 'auto_applied', 'overridden', 'resolved'],

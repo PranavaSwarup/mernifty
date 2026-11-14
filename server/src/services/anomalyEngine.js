@@ -1,5 +1,6 @@
 import { Alert } from '../models/Alert.js';
 import { Device } from '../models/Device.js';
+import { Report } from '../models/Report.js';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { baselineService } from './baselineService.js';
@@ -25,6 +26,8 @@ class AnomalyEngine {
     this.maxHistory = 30;
     this.alertCooldowns = new Map(); // key: `${junctionId}:${alertType}` -> timestamp
     this.cooldownMs = 25000; // 25s cooldown per alert type to avoid alert fatigue in normal running
+    this.openBlockages = new Map(); // junctionId -> { alertId, road, expiresAt }
+    this.openIncidents = new Map(); // junctionId -> alertDoc
     this.socketBroadcastCallback = null;
   }
 
@@ -36,6 +39,8 @@ class AnomalyEngine {
     this.history.clear();
     this.approachHistory.clear();
     this.alertCooldowns.clear();
+    this.openBlockages.clear();
+    this.openIncidents.clear();
   }
 
   evaluate(event) {
@@ -69,7 +74,7 @@ class AnomalyEngine {
 
     let detectedAnomaly = null;
 
-    // Check 1: Sudden Blockage on an Individual Road (Arterial velocity collapse)
+    // Check 1: Sudden Blockage on an Individual Road (Arterial velocity collapse relative to road baseline)
     if (Array.isArray(approaches) && approaches.length > 0) {
       for (const app of approaches) {
         if (!app.road) continue;
@@ -81,16 +86,16 @@ class AnomalyEngine {
         appHist.push({ speed: app.avgSpeedKmph, queue: app.queueLengthM, signal: app.signal });
         if (appHist.length > 15) appHist.shift();
 
-        // Check for sudden drop if previous speed was >= 12 km/h and drops to <= 4 km/h (>= 65% drop)
-        // Or if speed <= 3 km/h with queue >= 130m
-        if (appHist.length >= 3) {
-          const pastSpeeds = appHist.slice(0, -1).map((h) => h.speed);
-          const avgPastSpeed = pastSpeeds.reduce((a, b) => a + b, 0) / pastSpeeds.length;
+        // Check for sudden drop relative to road's recent baseline velocity
+        const pastSpeeds = appHist.slice(0, -1).map((h) => h.speed);
+        if (pastSpeeds.length >= 1) {
+          const baselineSpeed = pastSpeeds.reduce((a, b) => a + b, 0) / pastSpeeds.length;
 
-          const isSpeedCollapse = (avgPastSpeed >= 12 && app.avgSpeedKmph <= 4) || (app.avgSpeedKmph <= 3 && app.queueLengthM >= 140);
+          // Relative drop: speed fell by >= 50% compared to baseline and is <= 4 km/h while signal active
+          const isRelativeDrop = app.avgSpeedKmph <= baselineSpeed * 0.5 && app.avgSpeedKmph <= 4;
           const isGreenOrRecentGreen = app.signal === 'green' || appHist.slice(-3).some((h) => h.signal === 'green');
 
-          if (isSpeedCollapse && isGreenOrRecentGreen) {
+          if (isRelativeDrop && isGreenOrRecentGreen) {
             detectedAnomaly = {
               type: 'sudden_blockage',
               severity: 'critical',
@@ -99,7 +104,7 @@ class AnomalyEngine {
               thresholdValue: 4,
               unit: 'km/h',
               title: `Sudden Blockage on ${app.road} at ${juncName}`,
-              message: `Traffic velocity on ${app.road} collapsed to ${app.avgSpeedKmph} km/h while signal active. Roadway obstruction detected.`,
+              message: `Traffic velocity on ${app.road} collapsed to ${app.avgSpeedKmph} km/h (baseline: ${baselineSpeed.toFixed(1)} km/h) while signal active. Roadway obstruction detected.`,
               suggestedAction: {
                 action: 'divert',
                 description: `Publish diversion notice for ${app.road} and rebalance cycle green splits.`,
@@ -111,29 +116,64 @@ class AnomalyEngine {
       }
     }
 
+    // Clean expired open blockages
+    for (const [id, blk] of this.openBlockages.entries()) {
+      if (now > blk.expiresAt) this.openBlockages.delete(id);
+    }
+
     // Check 2: Severe Traffic Jam (Critical Queue & Velocity Collapse)
-    // Critical jam threshold: queueVal >= 190m AND speedVal <= 5 km/h, OR queueVal >= 210m, OR congestionVal >= 88
-    if (!detectedAnomaly) {
+    // Precedence: Suppress jam if this junction currently has an active blockage alert
+    if (!detectedAnomaly && !this.openBlockages.has(juncId)) {
       const isCriticalJam =
         queueVal >= 210 ||
         (queueVal >= 180 && speedVal <= 5) ||
         congestionVal >= 88;
 
       if (isCriticalJam) {
-        detectedAnomaly = {
-          type: 'jam',
-          severity: 'critical',
-          affectedRoad: approaches[0]?.road || null,
-          triggerValue: queueVal,
-          thresholdValue: 190,
-          unit: 'm',
-          title: `Traffic Gridlock / Jam at ${juncName}`,
-          message: `Arterial saturation: Max queue ${queueVal}m, average speed ${speedVal} km/h (Congestion score: ${congestionVal}/100).`,
-          suggestedAction: {
-            action: 'extend_green',
-            description: `Extend green phase by +25s on saturated arterial approach to clear backlog.`,
-          },
-        };
+        // If junction is experiencing congestion due to spread from a neighbouring junction:
+        // Do NOT raise a critical jam alert with automatic fix!
+        // Instead, raise at most one lower-severity spread notice linked to the source alert!
+        const spreadSource = data?.spreadSourceJunctionId || trafficMetrics?.spreadSourceJunctionId;
+        if (spreadSource && spreadSource !== juncId) {
+          const sourceAlert = this.openIncidents.get(spreadSource);
+          detectedAnomaly = {
+            type: 'congestion_spillover',
+            severity: 'info',
+            affectedRoad: null,
+            sourceAlertId: sourceAlert?.alertId || null,
+            triggerValue: queueVal,
+            thresholdValue: 180,
+            unit: 'm',
+            title: `Congestion Spreading from ${spreadSource} into ${juncName}`,
+            message: `Inflow congestion spreading across road network from neighbouring incident at ${spreadSource}.`,
+            suggestedAction: null, // NO automatic action!
+          };
+        } else {
+          // Worst road selection: Road with maximum queueLengthM
+          let worstRoad = approaches[0]?.road || null;
+          let maxQ = -1;
+          for (const app of approaches) {
+            if ((app.queueLengthM || 0) > maxQ) {
+              maxQ = app.queueLengthM || 0;
+              worstRoad = app.road;
+            }
+          }
+
+          detectedAnomaly = {
+            type: 'jam',
+            severity: 'critical',
+            affectedRoad: worstRoad,
+            triggerValue: queueVal,
+            thresholdValue: 190,
+            unit: 'm',
+            title: `Traffic Gridlock / Jam at ${juncName}`,
+            message: `Arterial saturation: Max queue ${queueVal}m on ${worstRoad}, average speed ${speedVal} km/h (Congestion score: ${congestionVal}/100).`,
+            suggestedAction: {
+              action: 'extend_green',
+              description: `Extend green phase by +25s on saturated arterial approach (${worstRoad}) to clear backlog.`,
+            },
+          };
+        }
       }
     }
 
@@ -208,7 +248,7 @@ class AnomalyEngine {
       severity: detectedAnomaly.severity,
       title: detectedAnomaly.title,
       message: detectedAnomaly.message,
-      metric: detectedAnomaly.type, // 'jam' | 'sudden_blockage' | 'congestion_building'
+      metric: detectedAnomaly.type, // 'jam' | 'sudden_blockage' | 'congestion_building' | 'congestion_spillover'
       triggerValue: detectedAnomaly.triggerValue,
       thresholdValue: detectedAnomaly.thresholdValue,
       timestamp: new Date(timestamp || now),
@@ -216,17 +256,73 @@ class AnomalyEngine {
       cause: 'unknown',
       causeSource: 'unknown',
       affectedRoad: detectedAnomaly.affectedRoad || null,
+      sourceAlertId: detectedAnomaly.sourceAlertId || null,
+      citizenReportCount: 0,
       status: 'open',
-      suggestedAction: {
-        action: detectedAnomaly.suggestedAction.action,
-        description: detectedAnomaly.suggestedAction.description,
-        deadline: deadlineDate,
-      },
+      suggestedAction: detectedAnomaly.suggestedAction
+        ? {
+            action: detectedAnomaly.suggestedAction.action,
+            description: detectedAnomaly.suggestedAction.description,
+            deadline: deadlineDate,
+          }
+        : null,
     };
+
+    if (detectedAnomaly.type === 'sudden_blockage') {
+      this.openBlockages.set(juncId, {
+        alertId: alertDoc.alertId,
+        road: detectedAnomaly.affectedRoad,
+        expiresAt: now + 45000,
+      });
+    }
+
+    if (['sudden_blockage', 'jam', 'congestion_building'].includes(detectedAnomaly.type)) {
+      this.openIncidents.set(juncId, alertDoc);
+      // Link any waiting unverified citizen reports for this junction (Fix 5)
+      this.checkAndLinkWaitingReports(alertDoc);
+    }
 
     this.persistAndBroadcastAlert(alertDoc);
 
     return alertDoc;
+  }
+
+  async checkAndLinkWaitingReports(alertDoc) {
+    if (mongoose.connection?.readyState !== 1) return;
+    try {
+      const waitingReport = await Report.findOne({
+        nearestJunctionId: alertDoc.junctionId,
+        linkedAlertId: null,
+        status: { $in: ['received', 'verified'] },
+      }).sort({ timestamp: -1 });
+
+      if (waitingReport) {
+        waitingReport.linkedAlertId = alertDoc.alertId;
+        waitingReport.status = 'verified';
+        await waitingReport.save();
+
+        alertDoc.cause = waitingReport.category;
+        alertDoc.causeSource = 'citizen_report';
+        alertDoc.citizenReportCount = waitingReport.reportCount;
+
+        await Alert.updateOne(
+          { alertId: alertDoc.alertId },
+          {
+            $set: {
+              cause: alertDoc.cause,
+              causeSource: alertDoc.causeSource,
+              citizenReportCount: alertDoc.citizenReportCount,
+            },
+          }
+        );
+
+        if (this.socketBroadcastCallback) {
+          this.socketBroadcastCallback(alertDoc);
+        }
+      }
+    } catch (e) {
+      // Non-critical background report linking
+    }
   }
 
   async persistAndBroadcastAlert(alertDoc) {

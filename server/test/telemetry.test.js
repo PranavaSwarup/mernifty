@@ -499,6 +499,114 @@ test('15. Ingestion Authentication, Per-Junction Rate Limit & Status Codes', asy
   assert.strictEqual(rejectedCount, 5, 'Must reject excess events over 35 limit');
 });
 
+test('16. Blockage Precedence, Worst-Road Jam Selection, and Spread Suppression (Fix 4)', async (t) => {
+  anomalyEngine.clearHistory();
+
+  const hebbalId = 'JNC-BLR-008';
+  const hebbalJunc = simulatorService.junctions.find((j) => j.junctionId === hebbalId);
+  const targetRoad = 'Bellary Rd (from north)';
+
+  const neighbours = JUNCTION_GRAPH[hebbalId] || [];
+  const testJunctions = [hebbalJunc, ...neighbours.map((nId) => simulatorService.junctions.find((j) => j.junctionId === nId)).filter(Boolean)];
+
+  const now = Date.now();
+
+  // Establish baseline normal traffic before blockage scenario
+  for (let pre = 0; pre < 3; pre++) {
+    const timestamp = now - (10 - pre) * 1000;
+    for (const junc of testJunctions) {
+      const trafficData = simulatorService.computeTrafficData(junc, timestamp);
+      anomalyEngine.evaluate({
+        eventId: `PRE-EVT-${pre}-${junc.junctionId}`,
+        junctionId: junc.junctionId,
+        deviceId: junc.junctionId,
+        junctionName: junc.name,
+        zoneId: junc.zoneId,
+        timestamp: new Date(timestamp).toISOString(),
+        metrics: {
+          congestionScore: trafficData.congestionScore,
+          avgSpeedKmph: trafficData.avgSpeedKmph,
+          maxQueueLengthM: trafficData.maxQueueLengthM,
+        },
+        data: trafficData,
+      });
+    }
+  }
+
+  // 1. Trigger sudden blockage on Hebbal
+  simulatorService.triggerBlockage(hebbalId, targetRoad, 35);
+
+  const alertsRaised = [];
+  anomalyEngine.socketBroadcastCallback = (alert) => {
+    alertsRaised.push(alert);
+  };
+
+  // Run a series of ticks across Hebbal and its neighbours
+  for (let step = 0; step < 10; step++) {
+    const timestamp = now + step * 1000;
+    for (const junc of testJunctions) {
+      const trafficData = simulatorService.computeTrafficData(junc, timestamp);
+      const event = {
+        eventId: `TEST-EVT-${step}-${junc.junctionId}`,
+        junctionId: junc.junctionId,
+        deviceId: junc.junctionId,
+        junctionName: junc.name,
+        zoneId: junc.zoneId,
+        timestamp: new Date(timestamp).toISOString(),
+        metrics: {
+          congestionScore: trafficData.congestionScore,
+          avgSpeedKmph: trafficData.avgSpeedKmph,
+          maxQueueLengthM: trafficData.maxQueueLengthM,
+        },
+        data: trafficData,
+      };
+      anomalyEngine.evaluate(event);
+    }
+  }
+
+  // Critical alerts must be exactly 1: sudden_blockage on Hebbal
+  const criticalAlerts = alertsRaised.filter((a) => a.severity === 'critical');
+  assert.strictEqual(criticalAlerts.length, 1, 'Must raise exactly one critical alert during sudden blockage');
+  assert.strictEqual(criticalAlerts[0].junctionId, hebbalId, 'Critical alert must be at Hebbal');
+  assert.strictEqual(criticalAlerts[0].metric, 'sudden_blockage', 'Alert metric must be sudden_blockage');
+  assert.strictEqual(criticalAlerts[0].affectedRoad, targetRoad, 'Alert affectedRoad must match blocked approach');
+  assert.strictEqual(criticalAlerts[0].suggestedAction.action, 'divert', 'Suggested action must be divert');
+  assert.ok(criticalAlerts[0].suggestedAction.description.includes(targetRoad), 'Diversion must name blocked road');
+
+  // Verify jam alerts on Hebbal were suppressed by the blockage
+  const hebbalJams = alertsRaised.filter((a) => a.junctionId === hebbalId && a.metric === 'jam');
+  assert.strictEqual(hebbalJams.length, 0, 'Jam alerts must be suppressed when blockage is active');
+
+  // Verify neighbours did not raise critical jam alerts during spread
+  for (const nId of neighbours) {
+    const nbrCritical = alertsRaised.filter((a) => a.junctionId === nId && a.severity === 'critical');
+    assert.strictEqual(nbrCritical.length, 0, `Neighbour ${nId} must not raise critical alerts during spread`);
+  }
+
+  // 2. Test Worst-Road selection for general jam alert (when no blockage)
+  anomalyEngine.clearHistory();
+  simulatorService.clearScenarios(hebbalId);
+
+  const jamApproaches = [
+    { road: 'Approach A', avgSpeedKmph: 4, queueLengthM: 120, signal: 'red' },
+    { road: 'Approach B (Worst)', avgSpeedKmph: 3, queueLengthM: 260, signal: 'green' },
+    { road: 'Approach C', avgSpeedKmph: 8, queueLengthM: 80, signal: 'red' },
+  ];
+
+  const jamAlert = anomalyEngine.evaluate({
+    junctionId: 'JNC-BLR-001',
+    deviceId: 'JNC-BLR-001',
+    junctionName: 'Silk Board',
+    zoneId: 'south-bangalore',
+    metrics: { maxQueueLengthM: 260, avgSpeedKmph: 4, congestionScore: 92 },
+    data: { approaches: jamApproaches },
+  });
+
+  assert.ok(jamAlert, 'Must raise jam alert');
+  assert.strictEqual(jamAlert.metric, 'jam');
+  assert.strictEqual(jamAlert.affectedRoad, 'Approach B (Worst)', 'Jam alert must record approach with highest queueLengthM as affectedRoad');
+});
+
 test.after(() => {
   setImmediate(() => process.exit(0));
 });

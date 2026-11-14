@@ -294,33 +294,42 @@ class SimulatorService {
     }
   }
 
-  // Section 5.7: Jam spreading to 1-hop neighbours
+  // Section 5.7: Jam spreading to 1-hop neighbours (Slow, gradual ramp over 20-30s)
   evaluateJamSpreading(now) {
     // Reset spread pressure base
-    const spreadPressures = new Map();
+    const spreadPressures = new Map(); // nbrId -> { intensity, sourceJunctionId }
 
     for (const [juncId, state] of this.junctionStates.entries()) {
       const isBlockage = state.activeScenario?.type === 'blockage' && state.activeScenario.expiresAt > now;
       const isSevereCongestion = state.congestionScore > 75;
 
       if (isBlockage || isSevereCongestion) {
-        state.highCongestionTicks += 10;
+        state.highCongestionTicks += 1;
       } else {
-        state.highCongestionTicks = Math.max(0, state.highCongestionTicks - 5);
+        state.highCongestionTicks = Math.max(0, state.highCongestionTicks - 1);
       }
 
-      // If jam sustained for > 10 seconds (100 ticks), spread to 1-hop neighbours
-      if (state.highCongestionTicks >= 100 || isBlockage) {
+      // Require 15s of blockage or 20s of severe congestion before spreading begins (slow and realistic)
+      const isSustained = this.isRunning
+        ? (isBlockage ? state.highCongestionTicks >= 15 : state.highCongestionTicks >= 20)
+        : (isBlockage || state.highCongestionTicks >= 1 || isSevereCongestion);
+
+      if (isSustained) {
         const neighbours = JUNCTION_GRAPH[juncId] || [];
-        const intensity = isBlockage ? 0.35 : Math.min(0.35, ((state.congestionScore - 70) / 30) * 0.35);
+        const intensity = isBlockage ? 0.20 : Math.min(0.20, ((state.congestionScore - 70) / 30) * 0.20);
 
         for (const nbrId of neighbours) {
-          const current = spreadPressures.get(nbrId) || 0;
-          spreadPressures.set(nbrId, Math.max(current, intensity));
+          // Do not spread back to the junction that caused our congestion
+          if (state.spreadSourceJunctionId === nbrId) continue;
 
-          // Cross-zone alert check: if neighbour is in a different zone
+          const existing = spreadPressures.get(nbrId);
+          if (!existing || intensity > existing.intensity) {
+            spreadPressures.set(nbrId, { intensity, sourceJunctionId: juncId });
+          }
+
+          // Cross-zone alert check: only if neighbour is in a different zone AND neighbour is not our spread source
           const nbrState = this.junctionStates.get(nbrId);
-          if (nbrState && nbrState.zoneId !== state.zoneId) {
+          if (nbrState && nbrState.zoneId !== state.zoneId && state.spreadSourceJunctionId !== nbrId) {
             if (now - nbrState.crossZoneAlertSentAt > 45000) {
               nbrState.crossZoneAlertSentAt = now;
               this.emitCrossZoneAlert(state, nbrState);
@@ -330,11 +339,12 @@ class SimulatorService {
       }
     }
 
-    // Apply calculated spread pressure to all junction states
+    // Apply calculated spread pressure to all junction states (gradual ramp over 20-30s)
     for (const [juncId, state] of this.junctionStates.entries()) {
-      const targetPressure = spreadPressures.get(juncId) || 0;
-      // Smooth gradual adjustment
-      state.spreadPressure = parseFloat((state.spreadPressure * 0.7 + targetPressure * 0.3).toFixed(2));
+      const spreadInfo = spreadPressures.get(juncId);
+      const targetPressure = spreadInfo ? spreadInfo.intensity : 0;
+      state.spreadPressure = parseFloat((state.spreadPressure * 0.85 + targetPressure * 0.15).toFixed(2));
+      state.spreadSourceJunctionId = targetPressure > 0 ? spreadInfo.sourceJunctionId : null;
     }
   }
 
@@ -347,7 +357,7 @@ class SimulatorService {
       zoneId: neighbourState.zoneId,
       category: neighbourState.zoneId,
       severity: 'info',
-      title: 'Cross-Zone Congestion Spillover',
+      title: 'Congestion Spreading from ' + sourceState.name,
       message: `Congestion from ${sourceState.name} (${sourceState.zoneId}) is spreading into ${neighbourState.name} (${neighbourState.zoneId}). Inflow queue building.`,
       metric: 'congestion_spillover',
       triggerValue: sourceState.congestionScore,
@@ -358,6 +368,7 @@ class SimulatorService {
       causeSource: 'system',
       affectedRoad: null,
       status: 'open',
+      suggestedAction: null, // Spread notices carry no automatic action
     };
 
     try {
@@ -466,11 +477,12 @@ class SimulatorService {
       // Apply Scenarios
       if (hasScenario) {
         if (scenario.type === 'blockage') {
-          // If this is the blocked road (or default first approach if road matches or unspecified)
-          if (!scenario.road || app.road.toLowerCase().includes(scenario.road.toLowerCase()) || idx === 0) {
+          // Only block the targeted road
+          const isTargetRoad = !scenario.road || app.road.toLowerCase().includes(scenario.road.toLowerCase()) || (scenario.road === app.road);
+          if (isTargetRoad) {
             avgSpeedKmph = 2; // velocity collapse
             queueLengthM = Math.min(350, Math.round(app.baseQueueM * 2.1));
-            vehiclesPerMin = Math.round(vehiclesPerMin * 0.4); // choked inflow
+            vehiclesPerMin = Math.round(vehiclesPerMin * 0.3); // choked inflow
           }
         } else if (scenario.type === 'rush-hour') {
           vehiclesPerMin = Math.round(vehiclesPerMin * scenario.multiplier);
@@ -545,6 +557,8 @@ class SimulatorService {
       simulatedTime: simDate.toISOString(),
       simulatedClockSpeed: this.clockSpeed,
       timeOfDayMultiplier,
+      spreadSourceJunctionId: state?.spreadSourceJunctionId || null,
+      spreadPressure: state?.spreadPressure || 0,
     };
   }
 
