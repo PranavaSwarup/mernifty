@@ -2,6 +2,7 @@ import { Alert } from '../models/Alert.js';
 import { Device } from '../models/Device.js';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
+import { baselineService } from './baselineService.js';
 
 // Configurable deadline for automatic remediation (3 minutes = 180s default; 20s for demo)
 let autoRemediationDeadlineSec = 180;
@@ -157,6 +158,28 @@ class AnomalyEngine {
           suggestedAction: {
             action: 'extend_green',
             description: `Extend arterial green window by 15s to relieve building queue before gridlock occurs.`,
+          },
+        };
+      }
+    }
+
+    // Check 4: Baseline Deviation - Unusual For This Hour (Section 5.14)
+    if (!detectedAnomaly) {
+      const simHour = event.data?.simulatedTime ? new Date(event.data.simulatedTime).getHours() : new Date().getHours();
+      const dev = baselineService.getDeviation(juncId, simHour, speedVal, congestionVal);
+      if (dev.hasBaseline && dev.isSignificantlyWorse) {
+        detectedAnomaly = {
+          type: 'unusual_for_this_hour',
+          severity: 'warning',
+          affectedRoad: approaches[0]?.road || null,
+          triggerValue: speedVal,
+          thresholdValue: dev.baselineSpeed,
+          unit: 'km/h',
+          title: `Unusual Congestion for ${simHour % 12 || 12} ${simHour >= 12 ? 'PM' : 'AM'} at ${juncName}`,
+          message: `${dev.label}: Current speed ${speedVal} km/h (normal ${dev.baselineSpeed} km/h, congestion ${congestionVal} vs normal ${dev.baselineCongestionScore}).`,
+          suggestedAction: {
+            action: 'extend_green',
+            description: `Rebalance signal phase split for unexpected volume deviation.`,
           },
         };
       }

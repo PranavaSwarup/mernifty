@@ -17,7 +17,10 @@ import authRoutes from './routes/authRoutes.js';
 import copilotRoutes from './routes/copilotRoutes.js';
 import corridorRoutes from './routes/corridorRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
+import baselineRoutes from './routes/baselineRoutes.js';
+import replayRoutes from './routes/replayRoutes.js';
 import { remediationService } from './services/remediationService.js';
+import { baselineService } from './services/baselineService.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -60,6 +63,8 @@ app.use('/api/alerts', alertRoutes);
 app.use('/api/simulator', simulatorRoutes);
 app.use('/api/corridor', corridorRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/baseline', baselineRoutes);
+app.use('/api/replay', replayRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/copilot', copilotRoutes);
 
@@ -112,6 +117,12 @@ async function startServer() {
 
       // 6. Start 1-second auto-remediation scanner loop (Section 5.10)
       remediationService.start();
+
+      // 7. Compute initial baseline aggregates & schedule every 5 minutes (Section 5.14)
+      baselineService.computeBaselines();
+      setInterval(() => {
+        baselineService.computeBaselines();
+      }, 5 * 60 * 1000).unref();
     });
   } catch (err) {
     console.error('Fatal startup error:', err);

@@ -47,6 +47,7 @@ class CorridorService {
       progressPct: 0,
       passedJunctions: new Set(),
       preemptedHistory: [], // { junctionId, preemptedAt, clearedAt }
+      positions: [],
       timer: null,
       status: 'active',
     };
@@ -127,6 +128,18 @@ class CorridorService {
 
         // Broadcast position event to corridor room
         socketService.io?.to('corridor').emit('corridor:position', positionEvent);
+
+        // Store position history for incident replay (Section 5.15)
+        trip.positions.push({
+          sequence: trip.sequence,
+          timestamp: positionEvent.timestamp,
+          latitude: positionEvent.data.latitude,
+          longitude: positionEvent.data.longitude,
+          speedKmph: positionEvent.data.speedKmph,
+          progressPct: positionEvent.data.progressPct,
+          lastJunctionId: fromId,
+          nextJunctionId: toId,
+        });
 
         // Check if passed a junction
         if (segmentFraction > 0.85 && !trip.passedJunctions.has(fromId)) {
@@ -264,6 +277,7 @@ class CorridorService {
       startTime: trip.startTime,
       endTime,
       durationSeconds,
+      positions: trip.positions || [],
     };
 
     // Save summary to MongoDB CorridorTrip collection if connected

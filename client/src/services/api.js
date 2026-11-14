@@ -113,4 +113,13 @@ export const api = {
     fetchJson(`/api/reports/${reportId}/verify`, { method: 'PATCH' }),
   dismissReport: (reportId) =>
     fetchJson(`/api/reports/${reportId}/dismiss`, { method: 'PATCH' }),
+
+  // Phase 4: Extras (Clock, Baseline & Replay)
+  setClockSpeed: (speed) =>
+    fetchJson('/api/simulator/clock-speed', { method: 'POST', body: JSON.stringify({ speed }) }),
+  getJunctionBaseline: (junctionId) => fetchJson(`/api/baseline/${junctionId}`),
+  getCityDeviations: () => fetchJson('/api/baseline/city/deviations'),
+  getReplayableIncidents: () => fetchJson('/api/replay/recent'),
+  getAlertReplay: (alertId) => fetchJson(`/api/replay/alert/${alertId}`),
+  getCorridorReplay: (tripId) => fetchJson(`/api/replay/corridor/${tripId}`),
 };

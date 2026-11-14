@@ -21,7 +21,7 @@ import { useSocket } from '../context/SocketContext';
 import { useAuth, DEMO_LOGINS } from '../context/AuthContext';
 
 export function Navbar({ activeTab, setActiveTab }) {
-  const { isConnected, isPaused, togglePause, clientLatency, soundEnabled, setSoundEnabled, activeRooms, eventsPerSec } = useSocket();
+  const { isConnected, isPaused, togglePause, clientLatency, soundEnabled, setSoundEnabled, activeRooms, eventsPerSec, simClock } = useSocket();
   const { user, switchDemoRole, logout } = useAuth();
   const [showRoleMenu, setShowRoleMenu] = useState(false);
 
@@ -116,6 +116,20 @@ export function Navbar({ activeTab, setActiveTab }) {
             <span className="font-bold">{eventsPerSec}</span>
             <span className="text-emerald-500/70 text-[10px]">evt/s</span>
           </div>
+
+          {/* Section 5.13: Simulated Time & Clock Speed Pill */}
+          {simClock?.clockSpeed > 1 && (
+            <div
+              title={`Accelerated Simulation Clock: ${simClock.simulatedTime || 'Active'}`}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-950/50 border border-amber-500/50 text-[11px] font-mono text-amber-300 animate-pulse shadow-sm shadow-amber-500/20"
+            >
+              <span>⏳</span>
+              <span className="font-bold">{simClock.clockSpeed}x</span>
+              <span className="text-amber-400/80 hidden lg:inline">
+                ({simClock.simulatedTime ? new Date(simClock.simulatedTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''} BLR)
+              </span>
+            </div>
+          )}
 
           {/* Section 5.4: Role Badge & Quick Switcher Dropdown */}
           <div className="relative">

@@ -17,6 +17,7 @@ import {
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
+import { IncidentReplayModal } from './IncidentReplayModal';
 
 export function AlertsFeed({ alerts = [], onAlertsChange }) {
   const { setAlerts } = useSocket();
@@ -27,6 +28,7 @@ export function AlertsFeed({ alerts = [], onAlertsChange }) {
   const [taggingAlertId, setTaggingAlertId] = useState(null);
   const [selectedCause, setSelectedCause] = useState('accident');
   const [causeNote, setCauseNote] = useState('');
+  const [replayAlertId, setReplayAlertId] = useState(null);
   const [nowTime, setNowTime] = useState(Date.now());
 
   // 1-second interval to update live countdown timers
@@ -367,6 +369,16 @@ export function AlertsFeed({ alerts = [], onAlertsChange }) {
                   <span className="font-mono text-slate-400 text-[10px]">{item.deviceId} ({item.zoneId})</span>
 
                   <div className="flex items-center gap-2">
+                    {/* Section 5.15: Incident Replay Button */}
+                    <button
+                      onClick={() => setReplayAlertId(item.alertId)}
+                      className="px-2 py-0.5 rounded bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-300 border border-cyan-500/30 text-[10px] flex items-center gap-1 font-mono transition-colors"
+                      title="Open incident replay mode window from MongoDB history"
+                    >
+                      <RotateCcw className="w-3 h-3 text-cyan-400" />
+                      Replay
+                    </button>
+
                     {/* Tag Cause Button */}
                     {!isResolved && hasAuth && (
                       <button
@@ -413,6 +425,14 @@ export function AlertsFeed({ alerts = [], onAlertsChange }) {
           })
         )}
       </div>
+
+      {/* Section 5.15 Incident Replay Modal */}
+      {replayAlertId && (
+        <IncidentReplayModal
+          alertId={replayAlertId}
+          onClose={() => setReplayAlertId(null)}
+        />
+      )}
     </div>
   );
 }

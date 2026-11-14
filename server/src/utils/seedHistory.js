@@ -1,5 +1,5 @@
 import { Telemetry } from '../models/Telemetry.js';
-import { INITIAL_DEVICES } from '../services/simulatorService.js';
+import { INITIAL_DEVICES } from '../data/junctionDevices.js';
 
 // Hourly volume profile for Bengaluru arterial roads
 export function getHourVolumeMultiplier(hour) {

@@ -87,6 +87,13 @@ router.post('/remediation-deadline', authenticate, requireRole('admin'), (req, r
   });
 });
 
+// Set simulation clock speed (1x, 60x, 144x) (Section 5.13) (Admin only)
+router.post('/clock-speed', authenticate, requireRole('admin'), (req, res) => {
+  const { speed = 1 } = req.body;
+  const result = simulatorService.setClockSpeed(speed);
+  res.json(result);
+});
+
 // Backward-compatible chaos injection (Admin only)
 router.post('/chaos', authenticate, requireRole('admin'), (req, res) => {
   const { deviceId, junctionId, metric, multiplier = 2.5, durationSec = 20 } = req.body;

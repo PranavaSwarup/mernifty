@@ -42,6 +42,9 @@ export function SocketProvider({ children }) {
   const [corridorGiveway, setCorridorGiveway] = useState(null);
   const [preemptedJunctions, setPreemptedJunctions] = useState(new Set());
 
+  // Section 5.13: Simulation Clock State
+  const [simClock, setSimClock] = useState({ clockSpeed: 1, simulatedTime: null });
+
   const socketRef = useRef(null);
   const pendingBufferRef = useRef([]);
   const isPausedRef = useRef(false);
@@ -160,6 +163,11 @@ export function SocketProvider({ children }) {
     socket.on('corridor:ended', () => {
       setActiveCorridorTrip(null);
       setPreemptedJunctions(new Set());
+    });
+
+    // 6. Simulation Clock Updates (Section 5.13)
+    socket.on('sim:clock_update', (data) => {
+      setSimClock(data);
     });
 
     // System metrics snapshot
@@ -304,6 +312,7 @@ export function SocketProvider({ children }) {
         activeCorridorTrip,
         corridorGiveway,
         preemptedJunctions,
+        simClock,
       }}
     >
       {children}

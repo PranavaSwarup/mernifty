@@ -1,6 +1,6 @@
 import { Device } from '../models/Device.js';
 import { User } from '../models/User.js';
-import { INITIAL_DEVICES } from '../services/simulatorService.js';
+import { INITIAL_DEVICES } from '../data/junctionDevices.js';
 
 import { seed24HourHistory } from './seedHistory.js';
 

@@ -7,6 +7,7 @@ export function SimulatorControls() {
   const { stats, activeCorridorTrip } = useSocket();
   const [isRunning, setIsRunning] = useState(true);
   const [targetRate, setTargetRate] = useState(12);
+  const [clockSpeed, setClockSpeedState] = useState(1);
   const [scenarioMessage, setScenarioMessage] = useState('');
   const [loadingAction, setLoadingAction] = useState(false);
 
@@ -16,6 +17,9 @@ export function SimulatorControls() {
         if (res.status) {
           setIsRunning(res.status.isRunning);
           setTargetRate(res.status.targetRate);
+          if (res.status.clockSpeed) {
+            setClockSpeedState(res.status.clockSpeed);
+          }
         }
       })
       .catch((err) => console.error(err));
@@ -113,6 +117,18 @@ export function SimulatorControls() {
     try {
       const res = await api.setRemediationDeadline(seconds);
       setScenarioMessage(`⏱️ Auto-remediation deadline set to ${seconds}s (${seconds === 20 ? 'Fast Demo Mode' : 'Standard 3m Mode'})`);
+      setTimeout(() => setScenarioMessage(''), 6000);
+    } catch (err) {
+      setScenarioMessage(`Error: ${err.message}`);
+    }
+  };
+
+  // 5. Simulation Clock Speed (Section 5.13)
+  const handleSetClockSpeed = async (speed) => {
+    try {
+      await api.setClockSpeed(speed);
+      setClockSpeedState(speed);
+      setScenarioMessage(`⏳ Simulation clock speed set to ${speed}x (${speed === 144 ? 'Fast 10m 24h Cycle' : speed + 'x realtime'})`);
       setTimeout(() => setScenarioMessage(''), 6000);
     } catch (err) {
       setScenarioMessage(`Error: ${err.message}`);
@@ -316,6 +332,29 @@ export function SimulatorControls() {
             >
               180s (Standard 3m)
             </button>
+          </div>
+        </div>
+
+        {/* Section 5.13: Accelerated Simulation Clock */}
+        <div className="mt-3 p-3 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+          <div>
+            <span className="font-bold text-slate-200">Simulation Clock Speed (Section 5.13):</span>
+            <span className="text-slate-400 ml-2">Accelerates time-of-day traffic volume cycle (144x = 24h in 10 mins)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {[1, 60, 144].map((speed) => (
+              <button
+                key={speed}
+                onClick={() => handleSetClockSpeed(speed)}
+                className={`px-3 py-1 rounded font-mono font-bold border transition-colors ${
+                  clockSpeed === speed
+                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
+                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                }`}
+              >
+                {speed}x
+              </button>
+            ))}
           </div>
         </div>
       </div>

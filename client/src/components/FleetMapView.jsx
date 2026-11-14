@@ -321,8 +321,27 @@ export function FleetMapView({ devices = [] }) {
   const [showCorridors, setShowCorridors] = useState(true);
   const [showHalos, setShowHalos] = useState(true);
   const [filterZone, setFilterZone] = useState('all');
+  const [colorMode, setColorMode] = useState('current'); // 'current' | 'deviation' (Section 5.14)
+  const [cityDeviations, setCityDeviations] = useState({});
   const [isStartingCorridor, setIsStartingCorridor] = useState(false);
   const [showCitizenReport, setShowCitizenReport] = useState(false);
+
+  // Section 5.14: Fetch city baseline deviations when deviation mode is active
+  useEffect(() => {
+    if (colorMode === 'deviation') {
+      api.getCityDeviations()
+        .then((res) => {
+          if (res.deviations) {
+            const map = {};
+            for (const d of res.deviations) {
+              map[d.junctionId] = d;
+            }
+            setCityDeviations(map);
+          }
+        })
+        .catch((err) => console.warn('Deviations fetch notice:', err.message));
+    }
+  }, [colorMode]);
 
   // Subscribe to city and corridor rooms on mount
   useEffect(() => {
@@ -571,6 +590,28 @@ export function FleetMapView({ devices = [] }) {
         glowColor = 'rgba(59, 130, 246, 0.95)';
         haloColor = '#3B82F6';
         badgeLabel = `🚨 ${shortName} • GREEN WAVE`;
+      } else if (colorMode === 'deviation') {
+        // Section 5.14: Color by Deviation from Usual Baseline
+        const devInfo = cityDeviations[dev.deviceId || dev.junctionId];
+        if (devInfo && devInfo.hasBaseline) {
+          const diff = devInfo.speedDeviationPct;
+          if (diff <= -25) {
+            markerColor = '#EF4444';
+            glowColor = 'rgba(239, 68, 68, 0.95)';
+            haloColor = '#EF4444';
+            badgeLabel = `${shortName} • ${diff}% slower`;
+          } else if (diff >= 20) {
+            markerColor = '#10B981';
+            glowColor = 'rgba(16, 185, 129, 0.85)';
+            haloColor = '#10B981';
+            badgeLabel = `${shortName} • +${diff}% faster`;
+          } else {
+            markerColor = '#06B6D4';
+            glowColor = 'rgba(6, 182, 212, 0.85)';
+            haloColor = '#06B6D4';
+            badgeLabel = `${shortName} • Usual`;
+          }
+        }
       } else if (state.status === 'gridlock' || queue > 140) {
         markerColor = '#EF4444';
         glowColor = 'rgba(239, 68, 68, 0.95)';
@@ -633,7 +674,7 @@ export function FleetMapView({ devices = [] }) {
         marker.setIcon(customIcon);
       }
     }
-  }, [latestByDevice, activeJunctions, showHalos, preemptedJunctions]);
+  }, [latestByDevice, activeJunctions, showHalos, preemptedJunctions, colorMode, cityDeviations]);
 
   // Center / FlyTo Junction
   const focusJunction = (dev) => {
@@ -733,6 +774,20 @@ export function FleetMapView({ devices = [] }) {
           >
             <AlertTriangle className="w-3.5 h-3.5 text-purple-400" />
             <span>📢 Report Incident</span>
+          </button>
+
+          {/* Section 5.14: Baseline Deviation Map Mode Toggle */}
+          <button
+            onClick={() => setColorMode((prev) => (prev === 'current' ? 'deviation' : 'current'))}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-mono font-bold transition-all ${
+              colorMode === 'deviation'
+                ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 shadow-sm shadow-cyan-500/20'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+            title="Toggle between colouring junctions by current congestion score vs baseline deviation from usual"
+          >
+            <Activity className="w-3.5 h-3.5 text-cyan-400" />
+            <span>{colorMode === 'deviation' ? 'Deviation Mode (ON)' : 'Score Mode'}</span>
           </button>
 
           {/* Basemap Toggle */}

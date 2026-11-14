@@ -8,6 +8,7 @@ import { JUNCTION_GRAPH, getShortestRoute, findNearestJunction } from '../src/da
 import { corridorService } from '../src/services/corridorService.js';
 import { simulatorService } from '../src/services/simulatorService.js';
 import { checkAreaAuthorization } from '../src/middleware/auth.js';
+import { baselineService } from '../src/services/baselineService.js';
 
 test('1. Ingestion Buffer & Deduplication Logic', (t) => {
   const uniqueEventId = `TEST-EVT-${Date.now()}`;
@@ -306,6 +307,39 @@ test('10. Citizen Incident Reports: Nearest Proximity Matching & Distance Bounds
   // Point in Mysuru (~130km away): should fail the 2.0km proximity threshold
   const farPoint = findNearestJunction(12.2958, 76.6394);
   assert.ok(farPoint.distanceKm > 50, 'Faraway coordinate must exceed 2km limit');
+});
+
+test('11. Simulation Clock Speed & Time-of-Day Profile Scaling (Section 5.13)', (t) => {
+  // 1. Clock speed adjustment
+  const clockRes = simulatorService.setClockSpeed(144);
+  assert.strictEqual(clockRes.clockSpeed, 144, 'Clock speed must be set to 144x');
+  assert.strictEqual(simulatorService.clockSpeed, 144);
+
+  // 2. Simulated time is a valid date string
+  const simTime = simulatorService.getSimulatedTime();
+  assert.ok(simTime instanceof Date && !isNaN(simTime.getTime()), 'Simulated time must be a valid Date');
+
+  // 3. Status includes clock speed and simulated time
+  const status = simulatorService.getStatus();
+  assert.strictEqual(status.clockSpeed, 144);
+  assert.ok(status.simulatedTime, 'Status must report simulatedTime');
+
+  // Reset to 1x
+  simulatorService.setClockSpeed(1);
+  assert.strictEqual(simulatorService.clockSpeed, 1);
+});
+
+test('12. Baseline Deviation & Unusual For This Hour Detection (Section 5.14)', (t) => {
+  // Silk Board at 2 PM (hour 14): baseline speed should be around 13-16 km/h
+  const dev = baselineService.getDeviation('JNC-BLR-001', 14, 5, 85);
+  assert.strictEqual(dev.hasBaseline, true, 'Should have baseline data for Silk Board');
+  assert.ok(dev.speedDeviationPct < -50, '5 km/h compared to ~15 km/h should show >50% slower');
+  assert.strictEqual(dev.isSignificantlyWorse, true, 'Large drop in velocity should flag as significantly worse');
+  assert.match(dev.label, /slower than usual/, 'Label must indicate slower than usual');
+});
+
+test.after(() => {
+  setImmediate(() => process.exit(0));
 });
 
 test.after(() => {

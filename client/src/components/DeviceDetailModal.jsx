@@ -30,6 +30,8 @@ export function DeviceDetailModal({ device, onClose }) {
   const [historicalData, setHistoricalData] = useState([]);
   const [mergedTimeline, setMergedTimeline] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [baselineHourMap, setBaselineHourMap] = useState({});
+  const [currentDeviation, setCurrentDeviation] = useState(null);
   const [copied, setCopied] = useState(false);
 
   const seenEventIdsRef = useRef(new Set());
@@ -96,6 +98,19 @@ export function DeviceDetailModal({ device, onClose }) {
       })
       .catch((err) => console.error('Error fetching history:', err))
       .finally(() => setIsLoadingHistory(false));
+
+    // Step D: Fetch 24-hour Baseline Curve (Section 5.14)
+    api.getJunctionBaseline(device.deviceId)
+      .then((res) => {
+        if (res.baselines) {
+          const map = {};
+          for (const b of res.baselines) {
+            map[b.hour] = b;
+          }
+          setBaselineHourMap(map);
+        }
+      })
+      .catch((err) => console.warn('Baseline fetch notice:', err.message));
 
     return () => {
       unsubscribeDevice(device.deviceId);
@@ -192,6 +207,24 @@ export function DeviceDetailModal({ device, onClose }) {
   const inCorridor = data.inCorridor || data.adaptiveSignalMode === 'emergency-corridor' || metrics.adaptiveSignalMode === 'emergency-corridor';
   const isCongested = metrics.congestionScore > 70 || (metrics.maxQueueLengthM && metrics.maxQueueLengthM > 140);
 
+  // Section 5.14: "Now versus usual" Baseline Deviation calculation
+  const currentHour = currentLive?.data?.simulatedTime
+    ? new Date(currentLive.data.simulatedTime).getHours()
+    : new Date().getHours();
+  const currentBaseline = baselineHourMap[currentHour];
+  let deviationLabel = null;
+  if (currentBaseline && currentBaseline.avgSpeedKmph) {
+    const curSpeed = metrics.avgSpeedKmph || 18;
+    const diffPct = Math.round(((curSpeed - currentBaseline.avgSpeedKmph) / currentBaseline.avgSpeedKmph) * 100);
+    if (diffPct <= -20) {
+      deviationLabel = `${Math.abs(diffPct)}% slower than usual for ${currentHour % 12 || 12} ${currentHour >= 12 ? 'PM' : 'AM'}`;
+    } else if (diffPct >= 20) {
+      deviationLabel = `${diffPct}% faster than usual for ${currentHour % 12 || 12} ${currentHour >= 12 ? 'PM' : 'AM'}`;
+    } else {
+      deviationLabel = 'Normal for this hour';
+    }
+  }
+
   const copyJsonPayload = () => {
     navigator.clipboard.writeText(JSON.stringify(currentLive || device, null, 2));
     setCopied(true);
@@ -219,6 +252,17 @@ export function DeviceDetailModal({ device, onClose }) {
                 {inCorridor && (
                   <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 animate-pulse">
                     🚑 CORRIDOR PREEMPTION ACTIVE
+                  </span>
+                )}
+                {deviationLabel && (
+                  <span
+                    className={`px-2 py-0.5 text-[10px] font-bold rounded border ${
+                      deviationLabel.includes('slower')
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    }`}
+                  >
+                    📊 {deviationLabel}
                   </span>
                 )}
               </div>
@@ -412,19 +456,28 @@ export function DeviceDetailModal({ device, onClose }) {
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
                   <span className="text-emerald-300">LIVE_SOCKET_IO</span>
                 </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-0.5 bg-slate-400" />
+                  <span className="text-slate-400">USUAL_BASELINE</span>
+                </div>
               </div>
             </div>
 
             <div className="h-48 w-full mt-2">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
-                  data={mergedTimeline.map((item) => ({
-                    time: item.formattedTime,
-                    queue: item.metrics?.maxQueueLengthM || item.data?.maxQueueLengthM || 45,
-                    speed: item.metrics?.avgSpeedKmph || item.data?.avgSpeedKmph || 18,
-                    source: item.sourceType,
-                    sequence: item.sequence || 0,
-                  }))}
+                  data={mergedTimeline.map((item) => {
+                    const itemHour = item.timestamp ? new Date(item.timestamp).getHours() : currentHour;
+                    const b = baselineHourMap[itemHour];
+                    return {
+                      time: item.formattedTime,
+                      queue: item.metrics?.maxQueueLengthM || item.data?.maxQueueLengthM || 45,
+                      speed: item.metrics?.avgSpeedKmph || item.data?.avgSpeedKmph || 18,
+                      baselineSpeed: b?.avgSpeedKmph || null,
+                      source: item.sourceType,
+                      sequence: item.sequence || 0,
+                    };
+                  })}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
                   <XAxis dataKey="time" stroke="#64748B" tick={{ fontSize: 9 }} />
@@ -480,6 +533,16 @@ export function DeviceDetailModal({ device, onClose }) {
                     name="Speed (km/h)"
                     stroke="#06B6D4"
                     strokeWidth={1.5}
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="baselineSpeed"
+                    name="Usual Baseline Speed"
+                    stroke="#94A3B8"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 4"
                     dot={false}
                     isAnimationActive={false}
                   />

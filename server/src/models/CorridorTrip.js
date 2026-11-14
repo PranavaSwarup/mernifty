@@ -18,6 +18,7 @@ const CorridorTripSchema = new mongoose.Schema(
         clearedAt: { type: Date },
       },
     ],
+    positions: [{ type: mongoose.Schema.Types.Mixed }],
   },
   { timestamps: true }
 );

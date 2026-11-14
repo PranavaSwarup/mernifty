@@ -1,7 +1,7 @@
 import { Server } from 'socket.io';
 import { metricsService } from './metricsService.js';
 import { anomalyEngine } from './anomalyEngine.js';
-import { INITIAL_DEVICES } from './simulatorService.js';
+import { INITIAL_DEVICES } from '../data/junctionDevices.js';
 
 class SocketService {
   constructor() {
