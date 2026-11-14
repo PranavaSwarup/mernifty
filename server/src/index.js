@@ -21,6 +21,7 @@ import baselineRoutes from './routes/baselineRoutes.js';
 import replayRoutes from './routes/replayRoutes.js';
 import { remediationService } from './services/remediationService.js';
 import { baselineService } from './services/baselineService.js';
+import { Telemetry } from './models/Telemetry.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -45,13 +46,22 @@ const clientDistPath = path.resolve(__dirname, '../../client/dist');
 app.use(express.static(clientDistPath));
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  let seededRecordCount = 0;
+  try {
+    seededRecordCount = await Telemetry.countDocuments({ seeded: true });
+  } catch (err) {
+    seededRecordCount = 0;
+  }
+
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     service: 'MetroPulse BLR Smart Traffic Telemetry Server',
     environment: config.nodeEnv,
     database: getDatabaseInfo(),
+    seededRecordCount,
+    baselineSlotCount: baselineService.cache?.size || 0,
   });
 });
 

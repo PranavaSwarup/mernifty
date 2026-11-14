@@ -86,8 +86,14 @@ export async function seedInitialData() {
     console.log('[Seed] Seeded / verified 5 role-based demo accounts (admin, officer.south, officer.junction, ambulance, citizen).');
 
     // 3. Seed 24-Hour Telemetry History (Section 5.13)
-    await seed24HourHistory();
+    try {
+      await seed24HourHistory();
+    } catch (seedErr) {
+      console.error('[Seed] Error during 24-hour history seed:', seedErr.message);
+      throw seedErr;
+    }
   } catch (err) {
-    console.warn('[Seed] Warning during data seed:', err.message);
+    console.error('[Seed] Critical failure during data seed:', err.message);
+    throw err;
   }
 }

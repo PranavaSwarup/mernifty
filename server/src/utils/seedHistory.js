@@ -13,17 +13,31 @@ export function getHourVolumeMultiplier(hour) {
 export async function seed24HourHistory() {
   console.log('[SeedHistory] Checking 24-hour historical telemetry dataset in MongoDB...');
 
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const intervalMs = 2 * 60 * 1000; // 1 record per junction every 2 minutes (720 records per junction)
+  const expectedCount = Math.floor(oneDayMs / intervalMs) * INITIAL_DEVICES.length; // 8,640 records
+
   const count = await Telemetry.countDocuments({ seeded: true });
-  if (count > 0) {
-    console.log(`[SeedHistory] Found ${count} existing seeded records. Skipping re-seed.`);
+  if (count >= expectedCount) {
+    console.log(`[SeedHistory] Found ${count} existing seeded records (>= ${expectedCount}). Skipping re-seed.`);
     return count;
   }
 
-  console.log('[SeedHistory] Seeding 24 hours of believable Bengaluru junction telemetry...');
+  if (count > 0 && count < expectedCount) {
+    console.log(`[SeedHistory] Found partial seeded history (${count}/${expectedCount} records). Resetting partial seed...`);
+    try {
+      // In MongoDB time-series collections, deletes are permitted when filtering on metaField (junctionId)
+      for (const junc of INITIAL_DEVICES) {
+        await Telemetry.deleteMany({ junctionId: junc.junctionId });
+      }
+    } catch (delErr) {
+      console.warn('[SeedHistory] Note on time-series delete:', delErr.message);
+    }
+  }
+
+  console.log(`[SeedHistory] Seeding 24 hours of believable Bengaluru junction telemetry (${expectedCount} records expected)...`);
 
   const now = Date.now();
-  const oneDayMs = 24 * 60 * 60 * 1000;
-  const intervalMs = 2 * 60 * 1000; // 1 record per junction every 2 minutes (720 records per junction)
   const startTime = now - oneDayMs;
 
   const records = [];
@@ -102,16 +116,14 @@ export async function seed24HourHistory() {
     }
   }
 
-  // Insert in batches of 1,000 records
+  // Insert in batches of 1,000 records using insertOne (strictly time-series collection compatible)
   const batchSize = 1000;
   for (let i = 0; i < records.length; i += batchSize) {
     const chunk = records.slice(i, i + batchSize);
     await Telemetry.bulkWrite(
       chunk.map((doc) => ({
-        updateOne: {
-          filter: { eventId: doc.eventId },
-          update: { $setOnInsert: doc },
-          upsert: true,
+        insertOne: {
+          document: doc,
         },
       })),
       { ordered: false }

@@ -9,6 +9,9 @@ import { corridorService } from '../src/services/corridorService.js';
 import { simulatorService } from '../src/services/simulatorService.js';
 import { checkAreaAuthorization } from '../src/middleware/auth.js';
 import { baselineService } from '../src/services/baselineService.js';
+import mongoose from 'mongoose';
+import { seed24HourHistory } from '../src/utils/seedHistory.js';
+import { Telemetry } from '../src/models/Telemetry.js';
 
 test('1. Ingestion Buffer & Deduplication Logic', (t) => {
   const uniqueEventId = `TEST-EVT-${Date.now()}`;
@@ -338,8 +341,43 @@ test('12. Baseline Deviation & Unusual For This Hour Detection (Section 5.14)', 
   assert.match(dev.label, /slower than usual/, 'Label must indicate slower than usual');
 });
 
-test.after(() => {
-  setImmediate(() => process.exit(0));
+test('13. 24-Hour Telemetry History Seeding on Time-Series Collection', async (t) => {
+  let inMemoryDbCount = 0;
+  const originalCountDocuments = Telemetry.countDocuments;
+  const originalBulkWrite = Telemetry.bulkWrite;
+  const originalDeleteMany = Telemetry.deleteMany;
+
+  const insertedOperations = [];
+
+  Telemetry.countDocuments = async (filter) => inMemoryDbCount;
+  Telemetry.deleteMany = async (filter) => { inMemoryDbCount = 0; return { deletedCount: 0 }; };
+  Telemetry.bulkWrite = async (ops, options) => {
+    assert.strictEqual(options?.ordered, false, 'bulkWrite must use ordered: false');
+    for (const op of ops) {
+      assert.ok(op.insertOne, 'Must use insertOne operation for time-series compatibility (no updateOne/upsert)');
+      assert.ok(op.insertOne.document.seeded === true, 'Seeded document must have seeded: true');
+      insertedOperations.push(op);
+    }
+    inMemoryDbCount += ops.length;
+    return { insertedCount: ops.length };
+  };
+
+  try {
+    const firstSeedCount = await seed24HourHistory();
+    assert.strictEqual(firstSeedCount, 8640, 'Should generate 8,640 historical records across 12 junctions');
+    assert.strictEqual(insertedOperations.length, 8640, 'All 8,640 records must be bulk inserted with insertOne');
+
+    // Second run should detect existing 8,640 records and skip re-seeding
+    let secondBulkWriteCalled = false;
+    Telemetry.bulkWrite = async () => { secondBulkWriteCalled = true; };
+    const secondSeedCount = await seed24HourHistory();
+    assert.strictEqual(secondSeedCount, 8640, 'Second run must return existing count');
+    assert.strictEqual(secondBulkWriteCalled, false, 'Second run must skip bulkWrite');
+  } finally {
+    Telemetry.countDocuments = originalCountDocuments;
+    Telemetry.bulkWrite = originalBulkWrite;
+    Telemetry.deleteMany = originalDeleteMany;
+  }
 });
 
 test.after(() => {
