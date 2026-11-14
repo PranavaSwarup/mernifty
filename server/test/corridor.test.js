@@ -118,12 +118,24 @@ test('4. CorridorService: starts trip, locks preemption wave, and cancels cleanl
 
   // Verify junction preemption is marked
   assert.ok(corridorService.isJunctionInCorridor('JNC-BLR-008'));
+  const emergencyIdsDuring = simulatorService
+    .getState()
+    .junctions.filter((j) => j.emergencyMode)
+    .map((j) => j.junctionId);
+  assert.ok(emergencyIdsDuring.includes('JNC-BLR-008'), 'route junctions show emergency mode during the trip');
 
   // Cancel trip
   const cancelled = await corridorService.cancelTrip(result.tripId);
   assert.ok(cancelled);
   assert.equal(cancelled.status, 'cancelled');
   assert.ok(!corridorService.isJunctionInCorridor('JNC-BLR-008'));
+
+  // After the trip ends, no route junction may still be shown as an emergency on the map
+  const stillEmergency = simulatorService
+    .getState()
+    .junctions.filter((j) => j.emergencyMode && result.route.includes(j.junctionId))
+    .map((j) => j.junctionId);
+  assert.deepEqual(stillEmergency, [], 'emergency mode must be released when the corridor trip ends');
 });
 
 test('5. Paired Simulator Twin: ambulance corridor scenario sets preemption on live twin without affecting baseline', () => {

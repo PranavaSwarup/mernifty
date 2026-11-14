@@ -218,6 +218,9 @@ class SimulatorService {
     this.sequenceMap = new Map();
     this.queueHistory = new Map(); // junctionId -> [{ elapsedSec, totalQueueVeh, maxQueueLengthM, avgSpeedKmph, maxVOverC }]
     this.emergencyModeJunctions = new Set();
+    // Junctions held in emergency mode by an ambulance green-corridor trip (corridorService).
+    // A junction leaves this set when the ambulance has passed it or the trip ends.
+    this.corridorHeldJunctions = new Set();
     this.scheduledTasks = []; // { targetElapsedSec, fn }
     this.recentActions = []; // Mirror recent OperatorAction records for fast/test access
 
@@ -274,6 +277,7 @@ class SimulatorService {
     if (wasRunning) this.stop();
     this.sequenceMap.clear();
     this.emergencyModeJunctions.clear();
+    this.corridorHeldJunctions.clear();
     this.scheduledTasks = [];
     this.recentActions = [];
     this._lastCfBroadcastElapsed = -1;
@@ -929,6 +933,39 @@ class SimulatorService {
     return path;
   }
 
+  /**
+   * Hold emergency mode on a corridor trip's route (called by corridorService when a trip
+   * starts). Each junction is released with releaseCorridorJunction() once the ambulance
+   * has passed it, so the map stops showing it as an emergency.
+   */
+  holdEmergencyModeForCorridor(path) {
+    for (const jId of path) this.corridorHeldJunctions.add(jId);
+    this.enableEmergencyModeForPath(path);
+  }
+
+  releaseCorridorJunction(junctionId) {
+    this.corridorHeldJunctions.delete(junctionId);
+    this.pruneEmergencyMode();
+  }
+
+  /**
+   * Drop junctions from emergency mode that nothing needs any more: no corridor trip holds
+   * them and no en-route simulated emergency vehicle still has them on its path. Without this
+   * the set only ever grew, so every junction an ambulance had used stayed marked as an
+   * emergency on the map until the simulator was reset.
+   */
+  pruneEmergencyMode() {
+    if (this.emergencyModeJunctions.size === 0) return;
+    const stillNeeded = new Set(this.corridorHeldJunctions);
+    for (const em of this.pair?.live?.emergencies || []) {
+      if (em.status !== 'en-route') continue;
+      for (const jId of em.path || []) stillNeeded.add(jId);
+    }
+    for (const jId of Array.from(this.emergencyModeJunctions)) {
+      if (!stillNeeded.has(jId)) this.emergencyModeJunctions.delete(jId);
+    }
+  }
+
   isCorridorInEmergencyMode(path) {
     return path.some((jId) => this.emergencyModeJunctions.has(jId));
   }
@@ -1203,6 +1240,7 @@ class SimulatorService {
   }
 
   getState() {
+    this.pruneEmergencyMode();
     const world = this.pair.live;
     const snap = world.snapshot();
     const todPeriod = getTodPeriod(world.simTimeMs);
