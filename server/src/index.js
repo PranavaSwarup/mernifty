@@ -3,8 +3,8 @@ import http from 'http';
 import cors from 'cors';
 import compression from 'compression';
 import morgan from 'morgan';
-import { config } from './config/config.js';
-import { connectDB } from './config/db.js';
+import { config, findProductionConfigProblems } from './config/config.js';
+import { connectDB, getDatabaseInfo } from './config/db.js';
 import { socketService } from './services/socketService.js';
 import { simulatorService } from './services/simulatorService.js';
 import { seedInitialData } from './utils/seedData.js';
@@ -50,6 +50,8 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     service: 'MetroPulse BLR Telemetry Server',
     environment: config.nodeEnv,
+    database: getDatabaseInfo(),
+    demoPersonas: config.demoPersonas,
   });
 });
 
@@ -95,6 +97,12 @@ app.use((err, req, res, next) => {
 async function startServer() {
   try {
     // 1. Connect to Database
+    const configProblems = findProductionConfigProblems();
+    if (configProblems.length > 0) {
+      for (const problem of configProblems) console.error(`[Config] FATAL: ${problem}`);
+      throw new Error('Refusing to start in production with unsafe configuration.');
+    }
+
     await connectDB();
 
     // 2. Seed Initial Devices & Admin User

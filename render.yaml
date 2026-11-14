@@ -8,6 +8,15 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Required in production. The server refuses to start without these two.
+      - key: MONGODB_URI
+        sync: false # paste your MongoDB Atlas connection string in the Render dashboard
+      - key: JWT_SECRET
+        generateValue: true
+      # Shows the demo persona switcher on the hosted app so judges can try each role.
+      # Set to "false" to require real logins.
+      - key: DEMO_PERSONAS
+        value: true
       - key: PORT
         value: 5000
       - key: SIMULATOR_ENABLED
