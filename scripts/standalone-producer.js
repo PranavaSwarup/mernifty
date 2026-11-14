@@ -101,7 +101,7 @@ function sendEvent() {
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(data),
-        'X-API-Key': 'blr_traffic_key_live_command_center_2026',
+        'X-API-Key': process.env.PRODUCER_KEY || 'blr_datasource_producer_key_2026',
       },
     },
     (res) => {

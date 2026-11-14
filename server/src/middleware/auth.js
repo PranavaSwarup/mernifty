@@ -51,6 +51,39 @@ export function requireAuth(req, res, next) {
   next();
 }
 
+// Require a verified Data Source API key (role: 'source') for telemetry ingestion
+export async function requireDataSourceKey(req, res, next) {
+  const apiKey = req.headers['x-api-key'] || req.query?.apiKey;
+  if (!apiKey) {
+    return res.status(401).json({
+      success: false,
+      error: 'API key required for telemetry ingestion. Provide X-API-Key header.',
+    });
+  }
+
+  try {
+    const user = await User.findOne({ apiKey });
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid API key for telemetry ingestion.',
+      });
+    }
+
+    if (user.role !== 'source') {
+      return res.status(403).json({
+        success: false,
+        error: `Forbidden: Key belongs to role '${user.role}'. Only registered data sources may ingest telemetry.`,
+      });
+    }
+
+    req.dataSource = user;
+    next();
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
 // Require one of the specified roles
 export function requireRole(allowedRoles = ['admin']) {
   const rolesArray = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];

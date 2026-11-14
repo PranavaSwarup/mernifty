@@ -4,19 +4,23 @@ import { ingestionBuffer } from '../services/ingestionBuffer.js';
 import { anomalyEngine } from '../services/anomalyEngine.js';
 import { socketService } from '../services/socketService.js';
 import { metricsService } from '../services/metricsService.js';
-import { rateLimiter, sourceRateLimiter } from '../middleware/rateLimiter.js';
+import { rateLimiter, sourceRateLimiter, checkSourceRateLimit } from '../middleware/rateLimiter.js';
 import { validateTelemetryEvent, validateTelemetryBatch } from '../middleware/validator.js';
+import { requireDataSourceKey } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // 1. Single Traffic Junction Ingestion Endpoint
-router.post('/ingest', rateLimiter(), sourceRateLimiter(), validateTelemetryEvent, async (req, res) => {
+router.post('/ingest', requireDataSourceKey, rateLimiter(), sourceRateLimiter(), validateTelemetryEvent, async (req, res) => {
   const startT = Date.now();
   const event = req.validatedEvent;
 
   // Enqueue to write-behind buffer
   const bufferRes = ingestionBuffer.enqueue(event);
   if (!bufferRes.accepted) {
+    if (bufferRes.reason && bufferRes.reason.includes('Duplicate')) {
+      return res.status(409).json({ success: false, error: bufferRes.reason });
+    }
     return res.status(429).json({ success: false, error: bufferRes.reason });
   }
 
@@ -41,24 +45,58 @@ router.post('/ingest', rateLimiter(), sourceRateLimiter(), validateTelemetryEven
 });
 
 // 2. Batch High-Throughput Traffic Ingestion Endpoint
-router.post('/batch', rateLimiter({ max: 5000 }), validateTelemetryBatch, async (req, res) => {
+router.post('/batch', requireDataSourceKey, rateLimiter({ max: 5000 }), validateTelemetryBatch, async (req, res) => {
   const startT = Date.now();
-  const events = req.validatedEvents;
+  const events = req.validatedEvents || [];
+  const apiKey = req.headers['x-api-key'] || req.query?.apiKey;
 
+  let acceptedCount = 0;
+  let duplicateCount = 0;
+  let rateLimitedCount = 0;
+  let backpressureCount = 0;
   let anomaliesCount = 0;
+
   for (const event of events) {
-    ingestionBuffer.enqueue(event);
+    const juncId = event.junctionId || event.deviceId;
+
+    // Apply per-source rate limit to batches (Section 5.5)
+    const rateCheck = checkSourceRateLimit(juncId, apiKey);
+    if (!rateCheck.allowed) {
+      rateLimitedCount++;
+      continue;
+    }
+
+    // Attempt enqueue to write-behind buffer
+    const bufferRes = ingestionBuffer.enqueue(event);
+    if (!bufferRes.accepted) {
+      if (bufferRes.reason && bufferRes.reason.includes('Duplicate')) {
+        duplicateCount++;
+      } else {
+        backpressureCount++;
+      }
+      continue;
+    }
+
+    // Event is accepted: evaluate anomaly and broadcast
+    acceptedCount++;
     const alert = anomalyEngine.evaluate(event);
     if (alert) anomaliesCount++;
     socketService.broadcastTelemetry(event);
   }
 
   const latency = Date.now() - startT;
-  metricsService.recordIngest(events.length, latency);
+  if (acceptedCount > 0) {
+    metricsService.recordIngest(acceptedCount, latency);
+  }
 
   res.status(202).json({
     success: true,
     count: events.length,
+    accepted: acceptedCount,
+    duplicate: duplicateCount,
+    rateLimited: rateLimitedCount,
+    invalid: req.invalidCount || 0,
+    backpressure: backpressureCount,
     anomaliesCount,
     batchProcessingLatencyMs: latency,
   });

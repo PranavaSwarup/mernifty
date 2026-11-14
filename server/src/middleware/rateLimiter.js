@@ -48,34 +48,45 @@ export function rateLimiter(options = {}) {
   };
 }
 
+// Check per-source rate limit (35 events/sec per junction; 350 for allowlisted stress test key)
+export function checkSourceRateLimit(junctionId, apiKey = null, maxEventsPerSec = 35) {
+  if (!junctionId) return { allowed: true, limit: maxEventsPerSec, count: 0 };
+
+  const isStressKey = apiKey && apiKey === config.stressTestKey;
+  const limit = isStressKey ? maxEventsPerSec * 10 : maxEventsPerSec;
+  const windowMs = 1000;
+  const now = Date.now();
+
+  let record = sourceEvents.get(junctionId);
+  if (!record || now > record.resetTime) {
+    record = { count: 1, resetTime: now + windowMs };
+    sourceEvents.set(junctionId, record);
+    return { allowed: true, limit, count: 1 };
+  }
+
+  record.count++;
+  if (record.count > limit) {
+    return { allowed: false, limit, count: record.count, retryAfterSeconds: 1 };
+  }
+
+  return { allowed: true, limit, count: record.count };
+}
+
 // Section 5.5: Per-source rate limiter (keyed by junctionId)
 export function sourceRateLimiter(options = {}) {
-  const windowMs = 1000; // 1 second sliding window
-  const maxEventsPerSec = options.maxPerSec || 35; // 35 events/sec per junction
+  const maxEventsPerSec = options.maxPerSec || 35;
 
   return (req, res, next) => {
     const junctionId = req.body?.junctionId || req.body?.deviceId;
     if (!junctionId) return next();
 
-    // Whitelist stress-test API key with higher throughput allowance
-    const apiKey = req.headers['x-api-key'];
-    const isStressKey = apiKey && apiKey === config.stressTestKey;
-    const limit = isStressKey ? maxEventsPerSec * 10 : maxEventsPerSec;
+    const apiKey = req.headers['x-api-key'] || req.query?.apiKey;
+    const check = checkSourceRateLimit(junctionId, apiKey, maxEventsPerSec);
 
-    const now = Date.now();
-    let record = sourceEvents.get(junctionId);
-
-    if (!record || now > record.resetTime) {
-      record = { count: 1, resetTime: now + windowMs };
-      sourceEvents.set(junctionId, record);
-      return next();
-    }
-
-    record.count++;
-    if (record.count > limit) {
+    if (!check.allowed) {
       return res.status(429).json({
         success: false,
-        error: `Per-source rate limit exceeded for ${junctionId}. Max allowed: ${limit} events/sec.`,
+        error: `Per-source rate limit exceeded for ${junctionId}. Max allowed: ${check.limit} events/sec.`,
         retryAfterSeconds: 1,
       });
     }

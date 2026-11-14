@@ -7,7 +7,8 @@ import { normalizeTrafficEvent, validateTrafficEvent } from '../src/middleware/v
 import { JUNCTION_GRAPH, getShortestRoute, findNearestJunction } from '../src/data/junctionGraph.js';
 import { corridorService } from '../src/services/corridorService.js';
 import { simulatorService } from '../src/services/simulatorService.js';
-import { checkAreaAuthorization } from '../src/middleware/auth.js';
+import { checkAreaAuthorization, requireDataSourceKey } from '../src/middleware/auth.js';
+import { checkSourceRateLimit } from '../src/middleware/rateLimiter.js';
 import { baselineService } from '../src/services/baselineService.js';
 import mongoose from 'mongoose';
 import { seed24HourHistory } from '../src/utils/seedHistory.js';
@@ -431,6 +432,71 @@ test('14. Demo Login Gating & Zero Password Token Issuance', async (t) => {
     User.findOne = originalFindOne;
     config.demoMode = true; // reset
   }
+});
+
+test('15. Ingestion Authentication, Per-Junction Rate Limit & Status Codes', async (t) => {
+  // 1. Data Source Key Authentication
+  const originalFindOne = User.findOne;
+  User.findOne = async (query) => {
+    if (query.apiKey === 'valid-source-key') return { role: 'source', name: 'Camera Worker' };
+    if (query.apiKey === 'citizen-key') return { role: 'citizen', name: 'Citizen Commuter' };
+    return null;
+  };
+
+  let statusCode = 0;
+  let responseData = null;
+  const res = {
+    status: (code) => { statusCode = code; return res; },
+    json: (d) => { responseData = d; return res; },
+  };
+
+  // Missing API key returns 401
+  await requireDataSourceKey({ headers: {} }, res, () => {});
+  assert.strictEqual(statusCode, 401, 'Missing API key must return 401');
+
+  // Citizen key returns 403
+  await requireDataSourceKey({ headers: { 'x-api-key': 'citizen-key' } }, res, () => {});
+  assert.strictEqual(statusCode, 403, 'Citizen key must return 403');
+
+  // Valid source key calls next()
+  let nextCalled = false;
+  await requireDataSourceKey({ headers: { 'x-api-key': 'valid-source-key' } }, res, () => { nextCalled = true; });
+  assert.strictEqual(nextCalled, true, 'Valid source key must call next()');
+
+  User.findOne = originalFindOne;
+
+  // 2. Duplicate single event returns 409
+  const dupEventId = `DUP-TEST-${Date.now()}`;
+  const ev1 = {
+    eventId: dupEventId,
+    junctionId: 'JNC-BLR-001',
+    deviceId: 'JNC-BLR-001',
+    zoneId: 'south-bangalore',
+    category: 'south-bangalore',
+    timestamp: new Date().toISOString(),
+    metrics: { maxQueueLengthM: 40, avgSpeedKmph: 20 },
+  };
+
+  const firstEnqueue = ingestionBuffer.enqueue(ev1);
+  assert.strictEqual(firstEnqueue.accepted, true);
+
+  const secondEnqueue = ingestionBuffer.enqueue(ev1);
+  assert.strictEqual(secondEnqueue.accepted, false);
+  assert.ok(secondEnqueue.reason.includes('Duplicate'));
+
+  // 3. Batch per-junction rate limit (35 events/sec per junction)
+  const testJunc = `RATE-JNC-${Date.now()}`;
+  let allowedCount = 0;
+  let rejectedCount = 0;
+
+  for (let i = 0; i < 40; i++) {
+    const check = checkSourceRateLimit(testJunc, null, 35);
+    if (check.allowed) allowedCount++;
+    else rejectedCount++;
+  }
+
+  assert.strictEqual(allowedCount, 35, 'Must allow up to 35 events/sec for junction');
+  assert.strictEqual(rejectedCount, 5, 'Must reject excess events over 35 limit');
 });
 
 test.after(() => {

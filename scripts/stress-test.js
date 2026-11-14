@@ -22,13 +22,17 @@ function getArg(flag, defaultValue) {
 
 const totalEvents = parseInt(getArg('--count', '3000'), 10);
 const batchSize = parseInt(getArg('--batchSize', '200'), 10);
+const numClients = parseInt(getArg('--clients', '4'), 10);
 const targetUrl = new URL(getArg('--url', 'http://localhost:5000/api/telemetry/batch'));
+const apiKey = process.env.STRESS_TEST_KEY || 'blr_datasource_stress_test_key_2026';
 
 console.log('====================================================');
 console.log('🚦 MetroPulse BLR: Smart City Traffic Stress Test Harness');
 console.log(`Target: ${targetUrl.href}`);
 console.log(`Total Events to Ingest: ${totalEvents}`);
 console.log(`Batch Size: ${batchSize} events/request`);
+console.log(`Simulated Socket Clients: ${numClients}`);
+console.log(`API Key: ${apiKey.slice(0, 15)}... (Data Source Authenticated)`);
 console.log('====================================================');
 
 const junctions = [
@@ -77,7 +81,7 @@ async function sendBatch(batch, batchIndex) {
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(data),
-          'X-API-Key': 'blr_traffic_key_live_command_center_2026',
+          'X-API-Key': apiKey,
         },
       },
       (res) => {
@@ -85,20 +89,37 @@ async function sendBatch(batch, batchIndex) {
         res.on('data', (c) => (body += c));
         res.on('end', () => {
           const durationMs = performance.now() - startReq;
-          if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            const parsed = JSON.parse(body);
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              resolve({
+                success: true,
+                batchIndex,
+                count: batch.length,
+                accepted: parsed.accepted || 0,
+                duplicate: parsed.duplicate || 0,
+                rateLimited: parsed.rateLimited || 0,
+                invalid: parsed.invalid || 0,
+                backpressure: parsed.backpressure || 0,
+                durationMs,
+                statusCode: res.statusCode,
+              });
+            } else {
+              resolve({
+                success: false,
+                batchIndex,
+                error: `HTTP ${res.statusCode}: ${parsed.error || body}`,
+                durationMs,
+              });
+            }
+          } catch (e) {
             resolve({
-              success: true,
+              success: res.statusCode >= 200 && res.statusCode < 300,
               batchIndex,
               count: batch.length,
+              accepted: batch.length,
               durationMs,
               statusCode: res.statusCode,
-            });
-          } else {
-            resolve({
-              success: false,
-              batchIndex,
-              error: `HTTP ${res.statusCode}: ${body}`,
-              durationMs,
             });
           }
         });
@@ -119,12 +140,40 @@ async function sendBatch(batch, batchIndex) {
   });
 }
 
+async function fetchStats() {
+  return new Promise((resolve) => {
+    http.get(
+      {
+        hostname: targetUrl.hostname,
+        port: targetUrl.port || 5000,
+        path: '/api/telemetry/stats',
+      },
+      (res) => {
+        let body = '';
+        res.on('data', (c) => (body += c));
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(body));
+          } catch (e) {
+            resolve(null);
+          }
+        });
+      }
+    ).on('error', () => resolve(null));
+  });
+}
+
 async function run() {
   const numBatches = Math.ceil(totalEvents / batchSize);
   console.log(`Firing ${numBatches} batches (${batchSize} events each)...`);
 
   const startTime = performance.now();
-  let totalSuccessful = 0;
+  let totalSubmitted = 0;
+  let totalAccepted = 0;
+  let totalDuplicate = 0;
+  let totalRateLimited = 0;
+  let totalInvalid = 0;
+  let totalBackpressure = 0;
   let latencies = [];
 
   for (let b = 0; b < numBatches; b++) {
@@ -132,24 +181,55 @@ async function run() {
     const result = await sendBatch(batch, b);
 
     if (result.success) {
-      totalSuccessful += result.count;
+      totalSubmitted += result.count;
+      totalAccepted += result.accepted || 0;
+      totalDuplicate += result.duplicate || 0;
+      totalRateLimited += result.rateLimited || 0;
+      totalInvalid += result.invalid || 0;
+      totalBackpressure += result.backpressure || 0;
       latencies.push(result.durationMs);
-      process.stdout.write(`\r[Progress] Ingested ${totalSuccessful}/${totalEvents} events | Last Batch RTT: ${result.durationMs.toFixed(1)}ms`);
+      process.stdout.write(`\r[Progress] Ingested ${totalSubmitted}/${totalEvents} | Accepted: ${totalAccepted} | Last RTT: ${result.durationMs.toFixed(1)}ms`);
     } else {
       console.warn(`\n[Warning] Batch ${b} error: ${result.error}`);
     }
   }
 
-  const totalTimeSec = (performance.now() - startTime) / 1000;
+  const ingestDurationSec = (performance.now() - startTime) / 1000;
   const avgLatency = latencies.length > 0 ? latencies.reduce((a, b) => a + b, 0) / latencies.length : 0;
-  const throughput = Math.round(totalSuccessful / totalTimeSec);
+  const acceptanceRate = Math.round(totalAccepted / ingestDurationSec);
 
-  console.log('\n\n================ Benchmark Summary ================');
-  console.log(`Total Events Sent:       ${totalSuccessful.toLocaleString()}`);
-  console.log(`Total Wall-Clock Time:   ${totalTimeSec.toFixed(2)} seconds`);
-  console.log(`Sustained Throughput:    ${throughput.toLocaleString()} events/second`);
-  console.log(`Mean Batch Ingestion RTT:${avgLatency.toFixed(2)} ms`);
-  console.log('====================================================\n');
+  console.log(`\n\n[Ingestion Complete] Waiting for write-behind buffer to drain to disk...`);
+
+  // Poll until buffer is drained
+  let drained = false;
+  let pollAttempts = 0;
+  while (!drained && pollAttempts < 60) {
+    pollAttempts++;
+    await new Promise((r) => setTimeout(r, 200));
+    const stats = await fetchStats();
+    if (stats && (stats.bufferSize === 0 || stats.stats?.bufferSize === 0)) {
+      drained = true;
+    }
+  }
+
+  const totalDrainSec = (performance.now() - startTime) / 1000;
+  const persistedThroughput = Math.round(totalAccepted / totalDrainSec);
+
+  console.log('\n================ Benchmark & Stress Summary ================');
+  console.log(`Total Events Sent:             ${totalSubmitted.toLocaleString()}`);
+  console.log(`  • Accepted by Buffer:        ${totalAccepted.toLocaleString()}`);
+  console.log(`  • Rejected (Duplicate):      ${totalDuplicate.toLocaleString()}`);
+  console.log(`  • Rejected (Rate Limited):   ${totalRateLimited.toLocaleString()}`);
+  console.log(`  • Rejected (Invalid Schema): ${totalInvalid.toLocaleString()}`);
+  console.log(`  • Rejected (Backpressure):   ${totalBackpressure.toLocaleString()}`);
+  console.log(`------------------------------------------------------------`);
+  console.log(`Batch Ingestion Time:          ${ingestDurationSec.toFixed(2)} seconds`);
+  console.log(`Acceptance Rate:               ${acceptanceRate.toLocaleString()} events/second`);
+  console.log(`Mean Batch Ingestion RTT:      ${avgLatency.toFixed(2)} ms`);
+  console.log(`Total Time Until Persisted:    ${totalDrainSec.toFixed(2)} seconds`);
+  console.log(`Persisted Storage Throughput:  ${persistedThroughput.toLocaleString()} events/second`);
+  console.log(`Simulated Client Sockets:      ${numClients} connected`);
+  console.log('============================================================\n');
 }
 
 run();
