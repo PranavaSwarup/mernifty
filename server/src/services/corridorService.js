@@ -138,7 +138,7 @@ class CorridorService {
 
     // Notify simulator service of emergency mode for path
     try {
-      simulatorService?.enableEmergencyModeForPath?.(route);
+      simulatorService?.holdEmergencyModeForCorridor?.(route);
     } catch (_) {}
 
     // Immediately preempt the start junction and lookahead first segment
@@ -323,6 +323,10 @@ class CorridorService {
     if (!this.preemptedJunctions.has(junctionId)) return;
 
     this.preemptedJunctions.delete(junctionId);
+    // The ambulance has passed (or the trip ended): stop showing this junction as an emergency.
+    try {
+      simulatorService?.releaseCorridorJunction?.(junctionId);
+    } catch (_) {}
     const clearedAt = new Date();
     const juncInfo = JUNCTION_COORDINATES[junctionId];
     const zoneId = juncInfo?.zoneId || 'south-bangalore';
@@ -361,6 +365,11 @@ class CorridorService {
     // Clear any remaining junctions on route before deleting trip
     for (const juncId of trip.route) {
       await this.clearJunction(juncId, trip.tripId);
+      // clearJunction skips junctions the ambulance never reached (for example when a trip
+      // is cancelled early), so release their emergency mode here as well.
+      try {
+        simulatorService?.releaseCorridorJunction?.(juncId);
+      } catch (_) {}
     }
     this.activeTrips.delete(vehicleId);
 
@@ -418,6 +427,10 @@ class CorridorService {
     }
     this.activeTrips.clear();
     this.preemptedJunctions.clear();
+    try {
+      simulatorService?.corridorHeldJunctions?.clear();
+      simulatorService?.pruneEmergencyMode?.();
+    } catch (_) {}
 
     if (mongoose.connection?.readyState === 1) {
       try {
