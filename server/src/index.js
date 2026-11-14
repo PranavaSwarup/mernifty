@@ -4,7 +4,7 @@ import cors from 'cors';
 import compression from 'compression';
 import morgan from 'morgan';
 import { config } from './config/config.js';
-import { connectDB } from './config/db.js';
+import { connectDB, getDatabaseInfo } from './config/db.js';
 import { socketService } from './services/socketService.js';
 import { simulatorService } from './services/simulatorService.js';
 import { seedInitialData } from './utils/seedData.js';
@@ -48,6 +48,7 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     service: 'MetroPulse BLR Smart Traffic Telemetry Server',
     environment: config.nodeEnv,
+    database: getDatabaseInfo(),
   });
 });
 

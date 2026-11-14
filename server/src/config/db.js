@@ -2,8 +2,24 @@ import mongoose from 'mongoose';
 import { config } from './config.js';
 
 let mongodInstance = null;
+let databaseType = 'disconnected';
+
+export function getDatabaseInfo() {
+  return {
+    type: databaseType, // 'external-mongodb' | 'in-memory-mongodb' | 'disconnected'
+    readyState: mongoose.connection.readyState,
+    name: mongoose.connection.name || 'metropulse',
+  };
+}
 
 export async function connectDB() {
+  // In production, require explicit MONGODB_URI to prevent silent data loss on restart
+  if (config.nodeEnv === 'production' && !process.env.MONGODB_URI) {
+    const errorMsg = 'FATAL: MONGODB_URI environment variable is required in production mode!';
+    console.error(`[DB] ${errorMsg}`);
+    throw new Error(errorMsg);
+  }
+
   // Option 1: Try connecting to configured MONGODB_URI
   try {
     console.log(`[DB] Attempting connection to MongoDB at: ${config.mongoUri}...`);
@@ -12,19 +28,24 @@ export async function connectDB() {
       connectTimeoutMS: 3000,
       socketTimeoutMS: 45000,
     });
-    console.log('[DB] Successfully connected to MongoDB server.');
+    databaseType = 'external-mongodb';
+    console.log('[DB] [Active: external-mongodb] Successfully connected to persistent MongoDB cluster.');
     return;
   } catch (err) {
+    if (config.nodeEnv === 'production') {
+      console.error(`[DB] FATAL: Production MongoDB connection failed: ${err.message}`);
+      throw err;
+    }
     console.warn(`[DB] Could not connect to local/external MongoDB (${err.message}).`);
-    console.log('[DB] Launching in-memory MongoDB instance for seamless standalone operation...');
+    console.log('[DB] Launching in-memory MongoDB instance for seamless standalone development...');
   }
 
-  // Option 2: Fallback to MongoMemoryServer
+  // Option 2: Fallback to MongoMemoryServer for development
   try {
     const { MongoMemoryServer } = await import('mongodb-memory-server');
     mongodInstance = await MongoMemoryServer.create({
       instance: {
-        dbName: 'hyperpulse',
+        dbName: 'metropulse',
       },
     });
     const uri = mongodInstance.getUri();
@@ -33,10 +54,10 @@ export async function connectDB() {
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 60000,
     });
-    console.log('[DB] Connected to in-memory MongoDB database.');
+    databaseType = 'in-memory-mongodb';
+    console.log('[DB] [Active: in-memory-mongodb] Connected to in-memory MongoDB development store.');
   } catch (memErr) {
     console.error('[DB] MongoMemoryServer initialization error:', memErr.message);
-    console.warn('[DB] Continuing with memory store fallback if needed.');
   }
 
   // Handle Mongoose connection events
@@ -48,13 +69,11 @@ export async function connectDB() {
   });
 }
 
-export async function disconnectDB() {
-  try {
+export async function closeDB() {
+  if (mongoose.connection.readyState !== 0) {
     await mongoose.disconnect();
-    if (mongodInstance) {
-      await mongodInstance.stop();
-    }
-  } catch (err) {
-    console.error('[DB] Error during disconnect:', err.message);
+  }
+  if (mongodInstance) {
+    await mongodInstance.stop();
   }
 }

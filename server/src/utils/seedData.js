@@ -2,6 +2,8 @@ import { Device } from '../models/Device.js';
 import { User } from '../models/User.js';
 import { INITIAL_DEVICES } from '../services/simulatorService.js';
 
+import { seed24HourHistory } from './seedHistory.js';
+
 export async function seedInitialData() {
   try {
     // 0. Clean up legacy non-traffic devices
@@ -37,7 +39,7 @@ export async function seedInitialData() {
     const DEMO_USERS = [
       {
         name: 'Bengaluru Traffic Operations Commander',
-        email: 'admin@hyperpulse.io',
+        email: 'admin@metropulse.blr',
         password: 'AdminPassword123!',
         role: 'admin',
         apiKey: 'blr_traffic_key_live_command_center_2026',
@@ -82,6 +84,9 @@ export async function seedInitialData() {
       }
     }
     console.log('[Seed] Seeded / verified 5 role-based demo accounts (admin, officer.south, officer.junction, ambulance, citizen).');
+
+    // 3. Seed 24-Hour Telemetry History (Section 5.13)
+    await seed24HourHistory();
   } catch (err) {
     console.warn('[Seed] Warning during data seed:', err.message);
   }

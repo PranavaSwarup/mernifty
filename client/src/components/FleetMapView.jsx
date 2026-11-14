@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { MapPin, Navigation, Car, AlertTriangle, ShieldCheck, Activity, Sparkles, Layers, Eye, RefreshCw, Sun, Moon, Play, Square, Siren } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { api } from '../services/api';
+import { CitizenReportModal } from './CitizenReportModal';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -321,6 +322,7 @@ export function FleetMapView({ devices = [] }) {
   const [showHalos, setShowHalos] = useState(true);
   const [filterZone, setFilterZone] = useState('all');
   const [isStartingCorridor, setIsStartingCorridor] = useState(false);
+  const [showCitizenReport, setShowCitizenReport] = useState(false);
 
   // Subscribe to city and corridor rooms on mount
   useEffect(() => {
@@ -723,6 +725,16 @@ export function FleetMapView({ devices = [] }) {
             </button>
           )}
 
+          {/* Section 5.11: Citizen Incident Report Button */}
+          <button
+            onClick={() => setShowCitizenReport(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-mono font-bold transition-all bg-purple-600/30 border-purple-500/60 text-purple-200 hover:bg-purple-600/40 shadow-lg shadow-purple-500/20"
+            title="File Citizen Incident Report (Accident, Road Blockage, Waterlogging)"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 text-purple-400" />
+            <span>📢 Report Incident</span>
+          </button>
+
           {/* Basemap Toggle */}
           <button
             onClick={() => setBasemapStyle((prev) => (prev === 'voyager' ? 'dark' : 'voyager'))}
@@ -911,6 +923,13 @@ export function FleetMapView({ devices = [] }) {
           )}
         </div>
       </div>
+
+      {/* Citizen Incident Report Modal */}
+      <CitizenReportModal
+        isOpen={showCitizenReport}
+        onClose={() => setShowCitizenReport(false)}
+        defaultJunctionId={selectedJunctionId}
+      />
     </div>
   );
 }

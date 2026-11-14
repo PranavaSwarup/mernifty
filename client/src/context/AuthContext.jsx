@@ -4,7 +4,7 @@ import { api } from '../services/api';
 const AuthContext = createContext(null);
 
 export const DEMO_LOGINS = [
-  { roleKey: 'admin', label: 'Admin (City Operations)', email: 'admin@hyperpulse.io', password: 'AdminPassword123!', role: 'admin' },
+  { roleKey: 'admin', label: 'Admin (City Operations)', email: 'admin@metropulse.blr', password: 'AdminPassword123!', role: 'admin' },
   { roleKey: 'officer_south', label: 'Officer (South Zone)', email: 'officer.south@metropulse.blr', password: 'Officer123!', role: 'officer', zone: 'south-bangalore' },
   { roleKey: 'officer_junction', label: 'Officer (Silk Board Jn)', email: 'officer.junction@metropulse.blr', password: 'Officer123!', role: 'officer', junction: 'JNC-BLR-001' },
   { roleKey: 'ambulance', label: 'Ambulance (AMB-BLR-01)', email: 'ambulance@metropulse.blr', password: 'Ambulance123!', role: 'ambulance', vehicleId: 'AMB-BLR-01' },

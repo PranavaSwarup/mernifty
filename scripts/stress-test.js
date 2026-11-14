@@ -57,7 +57,6 @@ function createBatch(size, batchIndex) {
           { road: 'Feeder Arterial', vehiclesPerMin: Math.round(20 + Math.random() * 15), queueLengthM: Math.round(30 + Math.random() * 40), avgSpeedKmph: Math.round(15 + Math.random() * 10), signal: i % 2 === 0 ? 'red' : 'green' },
         ],
         vehicleMix: { twoWheeler: 0.55, car: 0.30, bus: 0.05, truck: 0.10 },
-        stalledVehicleDetected: false,
       },
     });
   }

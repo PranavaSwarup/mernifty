@@ -86,7 +86,6 @@ function sendEvent() {
         bus: 0.05,
         truck: 0.10,
       },
-      stalledVehicleDetected: false,
     },
   };
 
