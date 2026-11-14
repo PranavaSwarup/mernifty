@@ -112,8 +112,8 @@ router.post('/demo-login', async (req, res) => {
 
   let query = {};
   if (roleKey === 'admin') query = { role: 'admin' };
-  else if (roleKey === 'officer_south') query = { role: 'officer', assignedZoneId: 'south-bangalore' };
-  else if (roleKey === 'officer_junction') query = { role: 'officer', assignedJunctionId: 'JNC-BLR-001' };
+  else if (roleKey === 'officer_south' || roleKey === 'officer-south') query = { role: 'officer', assignedZoneId: 'south-bangalore' };
+  else if (roleKey === 'officer_junction' || roleKey === 'officer-junction') query = { role: 'officer', assignedJunctionId: 'JNC-BLR-001' };
   else if (roleKey === 'ambulance') query = { role: 'ambulance' };
   else if (roleKey === 'citizen') query = { role: 'citizen' };
   else {

@@ -56,6 +56,10 @@ const telemetrySchema = new mongoose.Schema(
       longitude: Number,
       label: String,
     },
+    seeded: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
