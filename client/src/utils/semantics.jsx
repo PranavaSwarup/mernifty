@@ -181,39 +181,39 @@ export function zoneLabel(zoneId) {
 
 export function classifyLinkSpeed(speedKmph, isDark = true) {
   const spd = Number(speedKmph);
-  if (!Number.isFinite(spd) || spd >= 30) {
+  if (!Number.isFinite(spd) || spd >= 25) {
     return {
       band: 'free',
-      label: '>=30 km/h',
+      label: '>=25 km/h',
       hex: isDark ? '#10b981' : '#047857',
-      weight: 2.5,
+      weight: 3.2,
       dashArray: undefined,
-      opacity: 0.72,
+      opacity: 0.85,
     };
   }
-  if (spd >= 20) {
+  if (spd >= 18) {
     return {
       band: 'moderate',
-      label: '20-29 km/h',
+      label: '18-24 km/h',
       hex: isDark ? '#eab308' : '#b45309',
-      weight: 3.1,
+      weight: 3.2,
       dashArray: undefined,
-      opacity: 0.8,
+      opacity: 0.82,
     };
   }
-  if (spd >= 12) {
+  if (spd >= 11) {
     return {
       band: 'slow',
-      label: '12-19 km/h',
+      label: '11-17 km/h',
       hex: isDark ? '#f97316' : '#c2410c',
-      weight: 3.9,
+      weight: 3.8,
       dashArray: undefined,
       opacity: 0.88,
     };
   }
   return {
     band: 'gridlock',
-    label: '<12 km/h',
+    label: '<11 km/h',
     hex: isDark ? '#ef4444' : '#b91c1c',
     weight: 4.8,
     dashArray: '8 4',

@@ -996,15 +996,24 @@ class SimulatorService {
         const fromApp = fromJ?.approaches?.[l.fromApproachIdx];
         const approachBaseKmph =
           toApp && fromApp
-            ? toApp.avgSpeedKmph * 0.75 + fromApp.avgSpeedKmph * 0.25
+            ? Math.max(toApp.avgSpeedKmph, fromApp.avgSpeedKmph) * 0.4 + Math.min(toApp.avgSpeedKmph, fromApp.avgSpeedKmph) * 0.6
             : toApp?.avgSpeedKmph ?? fromApp?.avgSpeedKmph ?? 32;
         const vc = Math.max(0, Number(toApp?.vOverC || 0));
         const qLen = Math.max(0, Number(toApp?.queueLengthM || 0));
-        const bprFactor =
-          1 + 0.26 * Math.pow(Math.min(2.8, vc), 2.3) + Math.min(1.8, qLen / 65);
+        const isExpressway = l.corridor.includes('ORR') || l.corridor.includes('Bellary');
+        const freeFlowArterial = isExpressway ? 46 : 38;
+        const bprFactor = 1 + 0.18 * Math.pow(Math.min(2.5, vc), 2.0) + Math.min(1.2, qLen / 75);
         const weatherCap = world.weather?.speedFactor ?? 1;
-        const traversalKmph = (40 / bprFactor) * weatherCap;
-        const speedKmph = Number(clamp(Math.min(approachBaseKmph, traversalKmph), 3, 40).toFixed(1));
+        const traversalKmph = (freeFlowArterial / bprFactor) * weatherCap;
+        const speedKmph = Number(
+          clamp(
+            vc >= 1.05 || qLen > 60
+              ? Math.min(approachBaseKmph, traversalKmph)
+              : traversalKmph * 0.65 + approachBaseKmph * 0.35,
+            3,
+            44
+          ).toFixed(1)
+        );
         const vOverC = Number(vc.toFixed(2));
         return {
           id: l.id,

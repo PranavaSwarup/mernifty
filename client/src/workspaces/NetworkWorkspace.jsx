@@ -485,12 +485,18 @@ export function NetworkWorkspace({
         toId: lnk.toJunction,
         corridor: lnk.corridor,
         worstSpeed: Infinity,
+        bestSpeed: 0,
+        speeds: [],
         worstVc: 0,
         dirs: [],
       };
+      entry.speeds.push(linkSpeed);
       if (linkSpeed < entry.worstSpeed || (linkSpeed === entry.worstSpeed && linkVc > entry.worstVc)) {
         entry.worstSpeed = linkSpeed;
         entry.worstVc = linkVc;
+      }
+      if (linkSpeed > entry.bestSpeed) {
+        entry.bestSpeed = linkSpeed;
       }
       entry.dirs.push(
         `${jFrom?.name || lnk.fromJunction} → ${jTo?.name || lnk.toJunction}: ${
@@ -503,10 +509,15 @@ export function NetworkWorkspace({
     const activeLinkKeys = new Set();
     for (const [pairKey, group] of corridorGroups.entries()) {
       activeLinkKeys.add(pairKey);
-      const linkSpeed = Number.isFinite(group.worstSpeed) ? group.worstSpeed : 25;
+      // Balanced corridor speed: 55% worst bottleneck + 45% best direction so free-flowing bypass directions show as green routes
+      const repSpeed = group.speeds.length > 1
+        ? group.worstSpeed * 0.55 + group.bestSpeed * 0.45
+        : group.worstSpeed;
+      const linkSpeed = Number.isFinite(repSpeed) ? repSpeed : 25;
       const speedStyle = classifyLinkSpeed(linkSpeed, isDark);
       const tooltipText = `${group.corridor} · ${group.dirs.join(' | ')}`;
       const roadPath = getCorridorRoadWaypoints(group.fromId, group.toId, group.fromPos, group.toPos);
+      const pathKey = roadPath.map((p) => `${p[0].toFixed(4)},${p[1].toFixed(4)}`).join(';');
 
       let linkEntry = linkInstancesRef.current.get(pairKey);
       if (!linkEntry) {
@@ -521,7 +532,7 @@ export function NetworkWorkspace({
             sticky: true,
           })
           .addTo(linkLayerRef.current);
-        linkInstancesRef.current.set(pairKey, { poly, lastColor: speedStyle.hex, lastTooltip: tooltipText });
+        linkInstancesRef.current.set(pairKey, { poly, lastColor: speedStyle.hex, lastTooltip: tooltipText, lastPathKey: pathKey });
       } else {
         if (!linkLayerRef.current.hasLayer(linkEntry.poly)) {
           linkLayerRef.current.addLayer(linkEntry.poly);
@@ -539,7 +550,10 @@ export function NetworkWorkspace({
           linkEntry.poly.setTooltipContent(tooltipText);
           linkEntry.lastTooltip = tooltipText;
         }
-        linkEntry.poly.setLatLngs(roadPath);
+        if (linkEntry.lastPathKey !== pathKey) {
+          linkEntry.poly.setLatLngs(roadPath);
+          linkEntry.lastPathKey = pathKey;
+        }
       }
     }
     for (const [key, entry] of linkInstancesRef.current.entries()) {
@@ -886,10 +900,10 @@ export function NetworkWorkspace({
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-ink-secondary font-mono">
               <span className="font-sans text-ink-muted">Link speed:</span>
               {[
-                { label: '>=30', hex: isDark ? '#10b981' : '#047857', dashed: false },
-                { label: '20-29', hex: isDark ? '#eab308' : '#b45309', dashed: false },
-                { label: '12-19', hex: isDark ? '#f97316' : '#c2410c', dashed: false },
-                { label: '<12 km/h', hex: isDark ? '#ef4444' : '#b91c1c', dashed: true },
+                { label: '>=25', hex: isDark ? '#10b981' : '#047857', dashed: false },
+                { label: '18-24', hex: isDark ? '#eab308' : '#b45309', dashed: false },
+                { label: '11-17', hex: isDark ? '#f97316' : '#c2410c', dashed: false },
+                { label: '<11 km/h', hex: isDark ? '#ef4444' : '#b91c1c', dashed: true },
               ].map((band) => (
                 <span key={band.label} className="inline-flex items-center gap-1">
                   <span
