@@ -4,13 +4,13 @@ import { ingestionBuffer } from '../services/ingestionBuffer.js';
 import { anomalyEngine } from '../services/anomalyEngine.js';
 import { socketService } from '../services/socketService.js';
 import { metricsService } from '../services/metricsService.js';
-import { rateLimiter } from '../middleware/rateLimiter.js';
+import { rateLimiter, sourceRateLimiter } from '../middleware/rateLimiter.js';
 import { validateTelemetryEvent, validateTelemetryBatch } from '../middleware/validator.js';
 
 const router = express.Router();
 
 // 1. Single Traffic Junction Ingestion Endpoint
-router.post('/ingest', rateLimiter(), validateTelemetryEvent, async (req, res) => {
+router.post('/ingest', rateLimiter(), sourceRateLimiter(), validateTelemetryEvent, async (req, res) => {
   const startT = Date.now();
   const event = req.validatedEvent;
 

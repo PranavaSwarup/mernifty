@@ -5,6 +5,11 @@ class MetricsService {
     this.totalPersisted = 0;
     this.totalDropped = 0;
 
+    // Three separate counters required by Section 5.5 & 5.8:
+    this.totalRejected = 0; // Invalid payload schema / range check failures
+    this.totalDuplicates = 0; // Seen eventId duplicates dropped
+    this.totalBackpressureRefused = 0; // Refused when buffer >= 10,000
+
     this.ingestRate = 0;
     this.broadcastRate = 0;
     this.persistRate = 0;
@@ -65,6 +70,21 @@ class MetricsService {
     this.totalDropped += count;
   }
 
+  recordRejected(count = 1) {
+    this.totalRejected += count;
+    this.totalDropped += count;
+  }
+
+  recordDuplicate(count = 1) {
+    this.totalDuplicates += count;
+    this.totalDropped += count;
+  }
+
+  recordBackpressure(count = 1) {
+    this.totalBackpressureRefused += count;
+    this.totalDropped += count;
+  }
+
   setConnectedSockets(count) {
     this.connectedSockets = count;
   }
@@ -79,6 +99,9 @@ class MetricsService {
       totalBroadcasted: this.totalBroadcasted,
       totalPersisted: this.totalPersisted,
       totalDropped: this.totalDropped,
+      totalRejected: this.totalRejected,
+      totalDuplicates: this.totalDuplicates,
+      totalBackpressureRefused: this.totalBackpressureRefused,
       ingestRate: this.ingestRate,
       broadcastRate: this.broadcastRate,
       persistRate: this.persistRate,

@@ -3,6 +3,7 @@ import { ingestionBuffer } from './ingestionBuffer.js';
 import { anomalyEngine } from './anomalyEngine.js';
 import { socketService } from './socketService.js';
 import { metricsService } from './metricsService.js';
+import { corridorService } from './corridorService.js';
 
 // Predefined Bengaluru Smart City Traffic Junctions
 export const INITIAL_DEVICES = [
@@ -323,8 +324,7 @@ class SimulatorService {
           maxQueueLengthM: trafficData.maxQueueLengthM,
           avgSpeedKmph: trafficData.avgSpeedKmph,
           congestionScore: trafficData.congestionScore,
-          stalledVehicleDetected: trafficData.stalledVehicleDetected,
-          ambulanceDetected: trafficData.ambulanceDetected,
+          adaptiveSignalMode: trafficData.adaptiveSignalMode,
         },
         status,
         location: junc.location,
@@ -349,20 +349,26 @@ class SimulatorService {
   computeTrafficData(junc, now) {
     const chaos = this.chaosSpikes.get(junc.junctionId);
     const hasActiveChaos = chaos && chaos.expiresAt > now;
+    const inCorridor = corridorService.isJunctionInCorridor(junc.junctionId);
 
-    // Advance signal cycle for this junction
+    // Advance signal cycle for this junction (paused if under emergency corridor preemption)
     let phase = this.signalPhases.get(junc.junctionId);
     if (!phase) {
       phase = { activeApproachIndex: 0, phaseTimeRemaining: 35 };
       this.signalPhases.set(junc.junctionId, phase);
     }
 
-    // Step cycle down
-    phase.phaseTimeRemaining -= 0.5;
-    if (phase.phaseTimeRemaining <= 0) {
-      phase.activeApproachIndex = (phase.activeApproachIndex + 1) % junc.baseApproaches.length;
-      const nextApproach = junc.baseApproaches[phase.activeApproachIndex];
-      phase.phaseTimeRemaining = nextApproach.greenSplitSec || 35;
+    if (!inCorridor) {
+      // Step cycle down normally
+      phase.phaseTimeRemaining -= 0.5;
+      if (phase.phaseTimeRemaining <= 0) {
+        phase.activeApproachIndex = (phase.activeApproachIndex + 1) % junc.baseApproaches.length;
+        const nextApproach = junc.baseApproaches[phase.activeApproachIndex];
+        phase.phaseTimeRemaining = nextApproach.greenSplitSec || 35;
+      }
+    } else {
+      // Emergency corridor: hold arrival arterial on green
+      phase.activeApproachIndex = 0;
     }
 
     // Generate approaches
@@ -371,7 +377,10 @@ class SimulatorService {
     let sumSpeed = 0;
 
     const approaches = junc.baseApproaches.map((app, idx) => {
-      const isGreen = idx === phase.activeApproachIndex;
+      let isGreen = idx === phase.activeApproachIndex;
+      if (inCorridor) {
+        isGreen = idx === 0;
+      }
       const signalState = isGreen ? 'green' : 'red';
 
       // Vehicles per minute fluctuates naturally +/- 15%
@@ -379,14 +388,24 @@ class SimulatorService {
       let vehiclesPerMin = Math.round(app.baseVehiclesPerMin * jitterFactor);
 
       // Queue length: shrinks on green, accumulates on red
-      let queueLengthM = isGreen
-        ? Math.max(15, Math.round(app.baseQueueM * 0.45 * jitterFactor))
-        : Math.min(320, Math.round(app.baseQueueM * 1.15 * jitterFactor));
+      let queueLengthM = app.baseQueueM;
+      let avgSpeedKmph = app.baseSpeed;
 
-      // Speed: higher on green, slower on red
-      let avgSpeedKmph = isGreen
-        ? Math.max(16, Math.round(app.baseSpeed * 1.6 * jitterFactor))
-        : Math.max(3, Math.round(app.baseSpeed * 0.75 * jitterFactor));
+      if (inCorridor) {
+        if (isGreen) {
+          queueLengthM = Math.max(10, Math.round(app.baseQueueM * 0.3 * jitterFactor));
+          avgSpeedKmph = Math.max(38, Math.round(app.baseSpeed * 2.2));
+        } else {
+          queueLengthM = Math.min(320, Math.round(app.baseQueueM * 1.25 * jitterFactor));
+          avgSpeedKmph = Math.max(4, Math.round(app.baseSpeed * 0.6));
+        }
+      } else if (isGreen) {
+        queueLengthM = Math.max(15, Math.round(app.baseQueueM * 0.45 * jitterFactor));
+        avgSpeedKmph = Math.max(16, Math.round(app.baseSpeed * 1.6 * jitterFactor));
+      } else {
+        queueLengthM = Math.min(320, Math.round(app.baseQueueM * 1.15 * jitterFactor));
+        avgSpeedKmph = Math.max(3, Math.round(app.baseSpeed * 0.75 * jitterFactor));
+      }
 
       // Apply chaos spike if active
       if (hasActiveChaos) {
@@ -416,33 +435,23 @@ class SimulatorService {
     const avgSpeed = parseFloat((sumSpeed / approaches.length).toFixed(1));
 
     // Calculate composite Congestion Score (0 to 100)
-    // Weighted by maxQueueLength and low speed
     const queueFactor = Math.min(100, (maxQueue / 220) * 60);
     const speedFactor = Math.max(0, (1 - avgSpeed / 30) * 40);
     let congestionScore = Math.min(100, Math.round(queueFactor + speedFactor));
-
-    let stalledVehicle = hasActiveChaos && chaos.stalled ? true : false;
-    let ambulance = hasActiveChaos && chaos.ambulance ? true : false;
-
-    // Natural random rare occurrence if no chaos (0.2% chance)
-    if (!hasActiveChaos) {
-      if (Math.random() < 0.001) stalledVehicle = true;
-      if (Math.random() < 0.001) ambulance = true;
-    }
 
     // Vehicle mix with subtle fluctuations
     const vm = junc.vehicleMix;
 
     return {
       approaches,
+      adaptiveSignalMode: inCorridor ? 'emergency-corridor' : 'dynamic-ai',
+      inCorridor,
       vehicleMix: {
         twoWheeler: parseFloat((vm.twoWheeler + (Math.random() - 0.5) * 0.02).toFixed(2)),
         car: parseFloat((vm.car + (Math.random() - 0.5) * 0.02).toFixed(2)),
         bus: parseFloat((vm.bus + (Math.random() - 0.5) * 0.01).toFixed(2)),
         truck: parseFloat((vm.truck + (Math.random() - 0.5) * 0.01).toFixed(2)),
       },
-      stalledVehicleDetected: stalledVehicle,
-      ambulanceDetected: ambulance,
       totalFlowVehiclesPerMin: totalFlow,
       maxQueueLengthM: maxQueue,
       avgSpeedKmph: avgSpeed,

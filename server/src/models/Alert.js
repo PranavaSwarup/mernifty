@@ -71,6 +71,37 @@ const alertSchema = new mongoose.Schema(
     remediationAction: {
       type: String,
     },
+    cause: {
+      type: String,
+      default: 'unknown',
+    },
+    causeSource: {
+      type: String,
+      enum: ['unknown', 'citizen_report', 'officer', 'system'],
+      default: 'unknown',
+    },
+    affectedRoad: {
+      type: String,
+    },
+    status: {
+      type: String,
+      enum: ['open', 'acknowledged', 'action_applied', 'auto_applied', 'overridden', 'resolved'],
+      default: 'open',
+      index: true,
+    },
+    suggestedAction: {
+      action: { type: String },
+      description: { type: String },
+      deadline: { type: Date },
+    },
+    actionApplied: {
+      action: { type: String },
+      appliedBy: { type: String },
+      appliedAt: { type: Date },
+    },
+    officerNote: {
+      type: String,
+    },
   },
   {
     timestamps: true,

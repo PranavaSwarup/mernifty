@@ -71,4 +71,12 @@ export const api = {
   login: (email, password) =>
     fetchJson('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   getMe: () => fetchJson('/api/auth/me'),
+
+  // Corridor (Ambulance Emergency Green Corridor)
+  startCorridor: (params = {}) =>
+    fetchJson('/api/corridor/start', { method: 'POST', body: JSON.stringify(params) }),
+  cancelCorridor: (tripId) =>
+    fetchJson('/api/corridor/cancel', { method: 'POST', body: JSON.stringify({ tripId }) }),
+  getActiveCorridors: () => fetchJson('/api/corridor/active'),
+  getCorridorHistory: () => fetchJson('/api/corridor/history'),
 };

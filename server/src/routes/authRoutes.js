@@ -3,13 +3,14 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { User } from '../models/User.js';
 import { config } from '../config/config.js';
+import { authenticate, requireRole } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// 1. Register new user
+// 1. Register: Citizens can register freely; always assigned 'citizen' role
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, error: 'Name, email, and password are required' });
     }
@@ -19,12 +20,13 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Email already registered' });
     }
 
-    const apiKey = `hp_key_${crypto.randomBytes(16).toString('hex')}`;
+    // Role is ALWAYS citizen on registration, ignoring any role in request body
+    const apiKey = `blr_cit_${crypto.randomBytes(16).toString('hex')}`;
     const user = await User.create({
       name,
       email,
       password,
-      role: role || 'operator',
+      role: 'citizen',
       apiKey,
     });
 
@@ -64,7 +66,16 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Invalid email or password' });
     }
 
-    const token = jwt.sign({ id: user._id, role: user.role }, config.jwtSecret, { expiresIn: '7d' });
+    const token = jwt.sign(
+      {
+        id: user._id,
+        role: user.role,
+        assignedZoneId: user.assignedZoneId,
+        assignedJunctionId: user.assignedJunctionId,
+      },
+      config.jwtSecret,
+      { expiresIn: '7d' }
+    );
 
     res.json({
       success: true,
@@ -74,6 +85,9 @@ router.post('/login', async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        assignedZoneId: user.assignedZoneId,
+        assignedJunctionId: user.assignedJunctionId,
+        vehicleId: user.vehicleId,
         apiKey: user.apiKey,
       },
     });
@@ -83,31 +97,71 @@ router.post('/login', async (req, res) => {
 });
 
 // 3. Current User Session Check
-router.get('/me', async (req, res) => {
+router.get('/me', authenticate, async (req, res) => {
+  if (!req.user) {
+    return res.json({ success: true, user: null, role: 'anonymous' });
+  }
+  res.json({
+    success: true,
+    user: {
+      id: req.user._id,
+      name: req.user.name,
+      email: req.user.email,
+      role: req.user.role,
+      assignedZoneId: req.user.assignedZoneId,
+      assignedJunctionId: req.user.assignedJunctionId,
+      vehicleId: req.user.vehicleId,
+      apiKey: req.user.apiKey,
+    },
+  });
+});
+
+// 4. Admin Account Management (Admin only)
+router.post('/manage-user', authenticate, requireRole('admin'), async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
-      const decoded = jwt.verify(token, config.jwtSecret);
-      const user = await User.findById(decoded.id).select('-password');
-      if (user) {
-        return res.json({ success: true, user });
-      }
+    const { email, role, assignedZoneId, assignedJunctionId, vehicleId, name, password } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Target email is required' });
     }
 
-    // Default guest session
+    let user = await User.findOne({ email });
+    if (!user) {
+      if (!password || !name) {
+        return res.status(400).json({ success: false, error: 'Name and password required for new account' });
+      }
+      user = new User({
+        name,
+        email,
+        password,
+        role: role || 'officer',
+        assignedZoneId: assignedZoneId || null,
+        assignedJunctionId: assignedJunctionId || null,
+        vehicleId: vehicleId || null,
+        apiKey: `blr_staff_${crypto.randomBytes(16).toString('hex')}`,
+      });
+    } else {
+      if (role) user.role = role;
+      if (assignedZoneId !== undefined) user.assignedZoneId = assignedZoneId;
+      if (assignedJunctionId !== undefined) user.assignedJunctionId = assignedJunctionId;
+      if (vehicleId !== undefined) user.vehicleId = vehicleId;
+    }
+
+    await user.save();
+
     res.json({
       success: true,
+      message: `Account for ${email} updated successfully`,
       user: {
-        id: 'guest-operator-01',
-        name: 'Guest Mission Operator',
-        email: 'operator@hyperpulse.io',
-        role: 'operator',
-        apiKey: 'hp_key_demo_public_operator',
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        assignedZoneId: user.assignedZoneId,
+        assignedJunctionId: user.assignedJunctionId,
+        vehicleId: user.vehicleId,
       },
     });
   } catch (err) {
-    res.status(401).json({ success: false, error: 'Session expired' });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

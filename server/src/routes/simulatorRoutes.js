@@ -1,9 +1,10 @@
 import express from 'express';
 import { simulatorService } from '../services/simulatorService.js';
+import { authenticate, requireRole } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Get status
+// Get status (public view)
 router.get('/status', (req, res) => {
   res.json({
     success: true,
@@ -11,8 +12,8 @@ router.get('/status', (req, res) => {
   });
 });
 
-// Start simulator
-router.post('/start', (req, res) => {
+// Start simulator (Admin only)
+router.post('/start', authenticate, requireRole('admin'), (req, res) => {
   const { rate = 12 } = req.body;
   simulatorService.start(parseInt(rate, 10));
   res.json({
@@ -22,8 +23,8 @@ router.post('/start', (req, res) => {
   });
 });
 
-// Stop simulator
-router.post('/stop', (req, res) => {
+// Stop simulator (Admin only)
+router.post('/stop', authenticate, requireRole('admin'), (req, res) => {
   simulatorService.stop();
   res.json({
     success: true,
@@ -32,8 +33,8 @@ router.post('/stop', (req, res) => {
   });
 });
 
-// Adjust rate
-router.post('/rate', (req, res) => {
+// Adjust rate (Admin only)
+router.post('/rate', authenticate, requireRole('admin'), (req, res) => {
   const { rate } = req.body;
   if (!rate || isNaN(rate)) {
     return res.status(400).json({ success: false, error: 'Valid numeric rate is required' });
@@ -46,8 +47,8 @@ router.post('/rate', (req, res) => {
   });
 });
 
-// Inject chaos / incident
-router.post('/chaos', (req, res) => {
+// Inject chaos / scenario (Admin only)
+router.post('/chaos', authenticate, requireRole('admin'), (req, res) => {
   const { deviceId, junctionId, metric, multiplier = 2.5, durationSec = 20, flags = {} } = req.body;
   const targetId = junctionId || deviceId;
   if (!targetId || !metric) {

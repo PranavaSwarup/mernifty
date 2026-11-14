@@ -22,8 +22,20 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['admin', 'operator', 'viewer'],
-      default: 'operator',
+      enum: ['admin', 'officer', 'ambulance', 'citizen'],
+      default: 'citizen',
+    },
+    assignedZoneId: {
+      type: String,
+      default: null,
+    },
+    assignedJunctionId: {
+      type: String,
+      default: null,
+    },
+    vehicleId: {
+      type: String,
+      default: null,
     },
     apiKey: {
       type: String,

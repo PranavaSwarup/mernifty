@@ -33,18 +33,55 @@ export async function seedInitialData() {
     }
     console.log(`[Seed] Seeded / verified ${INITIAL_DEVICES.length} Bengaluru Smart City Traffic Junctions.`);
 
-    // 2. Seed Default Admin & Operator accounts
-    const existingAdmin = await User.findOne({ email: 'admin@hyperpulse.io' });
-    if (!existingAdmin) {
-      await User.create({
+    // 2. Seed Default Accounts for each of the 4 Roles
+    const DEMO_USERS = [
+      {
         name: 'Bengaluru Traffic Operations Commander',
         email: 'admin@hyperpulse.io',
         password: 'AdminPassword123!',
         role: 'admin',
         apiKey: 'blr_traffic_key_live_command_center_2026',
-      });
-      console.log('[Seed] Default traffic operator account seeded: admin@hyperpulse.io / AdminPassword123!');
+      },
+      {
+        name: 'South Bengaluru Traffic Officer',
+        email: 'officer.south@metropulse.blr',
+        password: 'Officer123!',
+        role: 'officer',
+        assignedZoneId: 'south-bangalore',
+        apiKey: 'blr_officer_south_key_2026',
+      },
+      {
+        name: 'Silk Board Junction Field Officer',
+        email: 'officer.junction@metropulse.blr',
+        password: 'Officer123!',
+        role: 'officer',
+        assignedJunctionId: 'JNC-BLR-001',
+        apiKey: 'blr_officer_junction_key_2026',
+      },
+      {
+        name: 'Emergency Response Ambulance Driver',
+        email: 'ambulance@metropulse.blr',
+        password: 'Ambulance123!',
+        role: 'ambulance',
+        vehicleId: 'AMB-BLR-01',
+        apiKey: 'blr_ambulance_01_key_2026',
+      },
+      {
+        name: 'Bengaluru Citizen Commuter',
+        email: 'citizen@metropulse.blr',
+        password: 'Citizen123!',
+        role: 'citizen',
+        apiKey: 'blr_citizen_demo_key_2026',
+      },
+    ];
+
+    for (const u of DEMO_USERS) {
+      const existing = await User.findOne({ email: u.email });
+      if (!existing) {
+        await User.create(u);
+      }
     }
+    console.log('[Seed] Seeded / verified 5 role-based demo accounts (admin, officer.south, officer.junction, ambulance, citizen).');
   } catch (err) {
     console.warn('[Seed] Warning during data seed:', err.message);
   }

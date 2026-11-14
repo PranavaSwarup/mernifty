@@ -15,6 +15,7 @@ import alertRoutes from './routes/alertRoutes.js';
 import simulatorRoutes from './routes/simulatorRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import copilotRoutes from './routes/copilotRoutes.js';
+import corridorRoutes from './routes/corridorRoutes.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -54,6 +55,7 @@ app.use('/api/devices', deviceRoutes);
 app.use('/api/junctions', deviceRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/simulator', simulatorRoutes);
+app.use('/api/corridor', corridorRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/copilot', copilotRoutes);
 
