@@ -84,9 +84,13 @@ class SocketService {
         socket.emit('unsubscribed', { room: 'city' });
       });
 
-      // 2. Zonal Room Subscription (Officers & Zone views)
+      // 2. Zonal Room Subscription (Officers & Zone views & Stream Tap)
       socket.on('subscribe:zone', (zoneId) => {
-        if (zoneId && zoneId !== 'all') {
+        if (zoneId === 'all') {
+          const allZones = ['south-bangalore', 'east-bangalore', 'north-bangalore', 'central-bangalore'];
+          allZones.forEach((z) => socket.join(`zone:${z}`));
+          socket.emit('subscribed', { room: 'zone:all' });
+        } else if (zoneId) {
           const room = `zone:${zoneId}`;
           socket.join(room);
           socket.emit('subscribed', { room });
@@ -94,7 +98,11 @@ class SocketService {
       });
 
       socket.on('unsubscribe:zone', (zoneId) => {
-        if (zoneId) {
+        if (zoneId === 'all') {
+          const allZones = ['south-bangalore', 'east-bangalore', 'north-bangalore', 'central-bangalore'];
+          allZones.forEach((z) => socket.leave(`zone:${z}`));
+          socket.emit('unsubscribed', { room: 'zone:all' });
+        } else if (zoneId) {
           const room = `zone:${zoneId}`;
           socket.leave(room);
           socket.emit('unsubscribed', { room });

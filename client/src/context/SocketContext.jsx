@@ -262,10 +262,15 @@ export function SocketProvider({ children }) {
         leaveRoom(r);
       }
     }
-    if (zoneId && zoneId !== 'all') {
+    if (zoneId) {
       joinRoom(`zone:${zoneId}`);
     }
   }, [joinRoom, leaveRoom]);
+
+  const clearEvents = useCallback(() => {
+    pendingBufferRef.current = [];
+    setRecentEvents([]);
+  }, []);
 
   const subscribeJunction = useCallback((junctionId) => {
     if (junctionId) joinRoom(`junction:${junctionId}`);
@@ -294,6 +299,7 @@ export function SocketProvider({ children }) {
         setAlerts,
         latestByDevice,
         recentEvents,
+        clearEvents,
         isPaused,
         togglePause,
         soundEnabled,

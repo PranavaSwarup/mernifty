@@ -18,12 +18,20 @@ import { useSocket } from '../context/SocketContext';
 import { api } from '../services/api';
 
 export function PerformanceBenchmark() {
-  const { stats, clientLatency } = useSocket();
+  const { stats, clientLatency, joinRoom, leaveRoom } = useSocket();
   const [isStressTesting, setIsStressTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [fps, setFps] = useState(60);
   const [actionLogs, setActionLogs] = useState([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
+  // Subscribe to 'system' metrics room while viewing throughput engine
+  useEffect(() => {
+    joinRoom('system');
+    return () => {
+      leaveRoom('system');
+    };
+  }, [joinRoom, leaveRoom]);
 
   // Client-side FPS measurement
   const frameCountRef = useRef(0);

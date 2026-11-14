@@ -24,7 +24,17 @@ function MainApp() {
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [copilotDevice, setCopilotDevice] = useState(null);
   const [alertsList, setAlertsList] = useState([]);
-  const { alerts } = useSocket();
+  const { alerts, joinRoom, leaveRoom } = useSocket();
+
+  // Maintain 'city' room telemetry stream when viewing dashboard
+  useEffect(() => {
+    if (activeTab === 'dashboard') {
+      joinRoom('city');
+      return () => {
+        leaveRoom('city');
+      };
+    }
+  }, [activeTab, joinRoom, leaveRoom]);
 
   // Load devices on mount
   const loadDevices = async () => {
