@@ -186,38 +186,28 @@ export function classifyLinkSpeed(speedKmph, isDark = true) {
       band: 'free',
       label: '>=25 km/h',
       hex: isDark ? '#10b981' : '#047857',
-      weight: 3.2,
+      weight: 3.5,
       dashArray: undefined,
-      opacity: 0.85,
+      opacity: 0.88,
     };
   }
-  if (spd >= 18) {
+  if (spd >= 15) {
     return {
       band: 'moderate',
-      label: '18-24 km/h',
+      label: '15-24 km/h',
       hex: isDark ? '#eab308' : '#b45309',
-      weight: 3.2,
-      dashArray: undefined,
-      opacity: 0.82,
-    };
-  }
-  if (spd >= 11) {
-    return {
-      band: 'slow',
-      label: '11-17 km/h',
-      hex: isDark ? '#f97316' : '#c2410c',
-      weight: 3.8,
+      weight: 3.5,
       dashArray: undefined,
       opacity: 0.88,
     };
   }
   return {
-    band: 'gridlock',
-    label: '<11 km/h',
+    band: 'congested',
+    label: '<15 km/h',
     hex: isDark ? '#ef4444' : '#b91c1c',
-    weight: 4.8,
-    dashArray: '8 4',
-    opacity: 0.94,
+    weight: 4.5,
+    dashArray: undefined,
+    opacity: 0.95,
   };
 }
 

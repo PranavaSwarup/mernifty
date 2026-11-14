@@ -997,21 +997,39 @@ class SimulatorService {
         const approachBaseKmph =
           toApp && fromApp
             ? Math.max(toApp.avgSpeedKmph, fromApp.avgSpeedKmph) * 0.4 + Math.min(toApp.avgSpeedKmph, fromApp.avgSpeedKmph) * 0.6
-            : toApp?.avgSpeedKmph ?? fromApp?.avgSpeedKmph ?? 32;
+            : toApp?.avgSpeedKmph ?? fromApp?.avgSpeedKmph ?? 28;
         const vc = Math.max(0, Number(toApp?.vOverC || 0));
         const qLen = Math.max(0, Number(toApp?.queueLengthM || 0));
-        const isExpressway = l.corridor.includes('ORR') || l.corridor.includes('Bellary');
-        const freeFlowArterial = isExpressway ? 46 : 38;
-        const bprFactor = 1 + 0.18 * Math.pow(Math.min(2.5, vc), 2.0) + Math.min(1.2, qLen / 75);
+
+        // Differentiate corridor capacity tiers for realistic 3-color map display:
+        // 1. High-speed expressways & bypass diversion routes (Bellary NH 44 Expressway, ORR South bypass, Koramangala)
+        const isBypass =
+          (l.corridor.includes('Bellary') && !l.corridor.includes('Central')) ||
+          l.corridor === 'ORR South' ||
+          l.corridor.includes('Koramangala');
+
+        // 2. Severe bottleneck corridors (Silk Board ORR East, Tin Factory / KR Puram, Central CBD)
+        const isBottleneck =
+          (l.fromJunction === 'JNC-BLR-001' && l.toJunction === 'JNC-BLR-005') ||
+          (l.fromJunction === 'JNC-BLR-005' && l.toJunction === 'JNC-BLR-001') ||
+          (l.toJunction === 'JNC-BLR-006' || l.fromJunction === 'JNC-BLR-006') ||
+          l.corridor === 'Central';
+
+        const freeFlowArterial = isBypass ? 48 : isBottleneck ? 22 : 36;
+        const bprFactor = 1 + (isBottleneck ? 0.35 : 0.18) * Math.pow(Math.min(2.5, vc), 2.0) + Math.min(1.5, qLen / 60);
         const weatherCap = world.weather?.speedFactor ?? 1;
         const traversalKmph = (freeFlowArterial / bprFactor) * weatherCap;
+        const baseSpeed = isBottleneck
+          ? Math.min(approachBaseKmph, traversalKmph, 13.5)
+          : isBypass
+          ? Math.max(27.0, traversalKmph * 0.7 + approachBaseKmph * 0.3)
+          : traversalKmph * 0.6 + approachBaseKmph * 0.4;
+
         const speedKmph = Number(
           clamp(
-            vc >= 1.05 || qLen > 60
-              ? Math.min(approachBaseKmph, traversalKmph)
-              : traversalKmph * 0.65 + approachBaseKmph * 0.35,
-            3,
-            44
+            baseSpeed,
+            isBottleneck ? 8 : isBypass ? 26 : 16,
+            isBottleneck ? 14.5 : isBypass ? 44 : 24.5
           ).toFixed(1)
         );
         const vOverC = Number(vc.toFixed(2));
