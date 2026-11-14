@@ -33,24 +33,12 @@ function checkReportRateLimit(userId) {
 }
 
 // 1. Submit a Citizen Incident Report (Section 5.11) (Requires login, role: citizen / any)
-router.post('/', authenticate, async (req, res) => {
+router.post('/', authenticate, requireAuth, async (req, res) => {
   try {
     const userId = req.user.id || req.user._id?.toString() || req.user.email;
-    if (!userId) {
-      return res.status(401).json({ success: false, error: 'Authentication required to submit an incident report' });
-    }
-
-    // Rate limit check: 3 per 10 minutes per account
-    if (!checkReportRateLimit(userId)) {
-      return res.status(429).json({
-        success: false,
-        error: 'Report submission rate limit exceeded. Maximum 3 incident reports allowed per 10 minutes.',
-      });
-    }
-
     const { category, latitude, longitude, junctionId, note = '' } = req.body;
 
-    // Validate Category
+    // Validate Category FIRST before applying rate limiter
     if (!category || !VALID_CATEGORIES.includes(category)) {
       return res.status(400).json({
         success: false,
@@ -61,7 +49,7 @@ router.post('/', authenticate, async (req, res) => {
     // Validate Note (max 200 chars, strip HTML tags for sanitization)
     const sanitizedNote = String(note).replace(/<[^>]*>?/gm, '').slice(0, 200).trim();
 
-    // Determine nearest junction and validate proximity
+    // Determine nearest junction and validate proximity BEFORE consuming rate limit
     let targetJunctionId = junctionId;
     let targetLat = latitude;
     let targetLon = longitude;
@@ -91,12 +79,21 @@ router.post('/', authenticate, async (req, res) => {
       });
     }
 
+    // Rate limit check: 3 per 10 minutes per account (applied only after validation passes)
+    if (!checkReportRateLimit(userId)) {
+      return res.status(429).json({
+        success: false,
+        error: 'Report submission rate limit exceeded. Maximum 3 incident reports allowed per 10 minutes.',
+      });
+    }
+
     const zoneId = JUNCTION_COORDINATES[targetJunctionId]?.zoneId || 'south-bangalore';
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
 
     // Grouping Duplicates (Section 5.11):
     // If an open report with the same category already exists at the same junction within last 10 minutes
     let reportDoc = null;
+    let isGroupUpdate = false;
     const existingGroup = await Report.findOne({
       nearestJunctionId: targetJunctionId,
       category,
@@ -109,6 +106,7 @@ router.post('/', authenticate, async (req, res) => {
       existingGroup.reportCount += 1;
       await existingGroup.save();
       reportDoc = existingGroup;
+      isGroupUpdate = true;
     } else {
       const reportId = `RPT-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
       reportDoc = await Report.create({
@@ -125,28 +123,52 @@ router.post('/', authenticate, async (req, res) => {
       });
     }
 
-    // Link to open alerts at that junction (Section 5.11)
-    const openAlert = await Alert.findOne({
+    // Link only to incident alerts in preference order: sudden_blockage > jam > congestion_building
+    let targetAlert = await Alert.findOne({
       junctionId: targetJunctionId,
       resolved: false,
+      metric: 'sudden_blockage',
     }).sort({ timestamp: -1 });
 
-    if (openAlert) {
-      reportDoc.linkedAlertId = openAlert.alertId;
+    if (!targetAlert) {
+      targetAlert = await Alert.findOne({
+        junctionId: targetJunctionId,
+        resolved: false,
+        metric: 'jam',
+      }).sort({ timestamp: -1 });
+    }
+
+    if (!targetAlert) {
+      targetAlert = await Alert.findOne({
+        junctionId: targetJunctionId,
+        resolved: false,
+        metric: 'congestion_building',
+      }).sort({ timestamp: -1 });
+    }
+
+    if (targetAlert) {
+      reportDoc.linkedAlertId = targetAlert.alertId;
+      reportDoc.status = 'verified';
       await reportDoc.save();
 
-      // Set alert cause from citizen report
-      openAlert.cause = category;
-      openAlert.causeSource = 'citizen_report';
-      await openAlert.save();
+      // Always increment the alert's citizen report count
+      targetAlert.citizenReportCount = (targetAlert.citizenReportCount || 0) + 1;
+
+      // Never overwrite a cause that an officer has set
+      if (targetAlert.causeSource !== 'officer') {
+        targetAlert.cause = category;
+        targetAlert.causeSource = 'citizen_report';
+      }
+      await targetAlert.save();
 
       if (socketService?.io) {
         socketService.broadcastAlertUpdate({
-          alertId: openAlert.alertId,
-          cause: openAlert.cause,
-          causeSource: openAlert.causeSource,
-          junctionId: openAlert.junctionId,
-          zoneId: openAlert.zoneId,
+          alertId: targetAlert.alertId,
+          cause: targetAlert.cause,
+          causeSource: targetAlert.causeSource,
+          citizenReportCount: targetAlert.citizenReportCount,
+          junctionId: targetAlert.junctionId,
+          zoneId: targetAlert.zoneId,
         });
       }
     }
@@ -167,8 +189,9 @@ router.post('/', authenticate, async (req, res) => {
     };
 
     if (socketService?.io) {
+      const eventName = isGroupUpdate ? 'report:updated' : 'report:new';
       // Emit to junction and zone rooms
-      socketService.io.to(`zone:${zoneId}`).to(`junction:${targetJunctionId}`).emit('report:new', publicPayload);
+      socketService.io.to(`zone:${zoneId}`).to(`junction:${targetJunctionId}`).emit(eventName, publicPayload);
       // Emit to reporter's private room for live status tracking
       socketService.io.to(`user:${userId}`).emit('report:my_update', publicPayload);
     }

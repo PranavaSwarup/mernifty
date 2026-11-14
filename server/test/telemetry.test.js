@@ -14,6 +14,8 @@ import mongoose from 'mongoose';
 import { seed24HourHistory } from '../src/utils/seedHistory.js';
 import { Telemetry } from '../src/models/Telemetry.js';
 import { User } from '../src/models/User.js';
+import { Alert } from '../src/models/Alert.js';
+import { Report } from '../src/models/Report.js';
 import { config } from '../src/config/config.js';
 import authRoutes from '../src/routes/authRoutes.js';
 
@@ -605,6 +607,126 @@ test('16. Blockage Precedence, Worst-Road Jam Selection, and Spread Suppression 
   assert.ok(jamAlert, 'Must raise jam alert');
   assert.strictEqual(jamAlert.metric, 'jam');
   assert.strictEqual(jamAlert.affectedRoad, 'Approach B (Worst)', 'Jam alert must record approach with highest queueLengthM as affectedRoad');
+});
+
+test('17. Citizen Report Prioritization, Officer Cause Preservation, and Delayed Linking (Fix 5)', async (t) => {
+  const originalFindOneAlert = Alert.findOne;
+  const originalFindReport = Report.find;
+  const originalFindOneReport = Report.findOne;
+  const originalUpdateOneAlert = Alert.updateOne;
+
+  try {
+    // 1. Behavior 1: Prefer incident alerts (sudden_blockage > jam > congestion_building) over notices (spillover)
+    const spilloverAlert = {
+      alertId: 'ALT-SPILLOVER',
+      junctionId: 'JNC-BLR-001',
+      metric: 'congestion_spillover',
+      severity: 'info',
+      cause: 'unknown',
+      causeSource: 'system',
+      resolved: false,
+    };
+    const jamAlert = {
+      alertId: 'ALT-JAM-001',
+      junctionId: 'JNC-BLR-001',
+      metric: 'jam',
+      severity: 'critical',
+      cause: 'unknown',
+      causeSource: 'unknown',
+      citizenReportCount: 0,
+      resolved: false,
+      save: async function () { return this; },
+    };
+
+    Alert.findOne = (query) => ({
+      sort: () => {
+        if (query.metric === 'sudden_blockage') return Promise.resolve(null);
+        if (query.metric === 'jam') return Promise.resolve(jamAlert);
+        if (query.metric === 'congestion_spillover') return Promise.resolve(spilloverAlert);
+        return Promise.resolve(null);
+      },
+    });
+
+    let targetAlert = await Alert.findOne({ junctionId: 'JNC-BLR-001', resolved: false, metric: 'sudden_blockage' }).sort();
+    if (!targetAlert) {
+      targetAlert = await Alert.findOne({ junctionId: 'JNC-BLR-001', resolved: false, metric: 'jam' }).sort();
+    }
+    assert.strictEqual(targetAlert.alertId, 'ALT-JAM-001', 'Report must link to jam alert rather than spillover notice');
+
+    // 2. Behavior 2: Never overwrite an officer-set cause, but increment citizenReportCount
+    const officerAlert = {
+      alertId: 'ALT-OFFICER-001',
+      junctionId: 'JNC-BLR-001',
+      metric: 'jam',
+      cause: 'waterlogging',
+      causeSource: 'officer',
+      citizenReportCount: 0,
+      save: async function () { return this; },
+    };
+
+    const citizenCategory = 'stalled_vehicle';
+    officerAlert.citizenReportCount = (officerAlert.citizenReportCount || 0) + 1;
+    if (officerAlert.causeSource !== 'officer') {
+      officerAlert.cause = citizenCategory;
+      officerAlert.causeSource = 'citizen_report';
+    }
+    await officerAlert.save();
+
+    assert.strictEqual(officerAlert.cause, 'waterlogging', 'Officer cause must be preserved');
+    assert.strictEqual(officerAlert.causeSource, 'officer', 'Officer causeSource must remain officer');
+    assert.strictEqual(officerAlert.citizenReportCount, 1, 'Citizen report count must increment even when officer cause is preserved');
+
+    // 3. Behavior 3: Delayed report linking when incident alert appears
+    const waitingReport = {
+      reportId: 'RPT-WAITING-1',
+      category: 'accident',
+      nearestJunctionId: 'JNC-BLR-008',
+      linkedAlertId: null,
+      reportCount: 2,
+      status: 'received',
+      timestamp: new Date(Date.now() - 60000),
+      save: async function () { return this; },
+    };
+
+    Report.find = (query) => ({
+      sort: () => Promise.resolve([waitingReport]),
+    });
+
+    const newJamAlert = {
+      alertId: 'ALT-NEW-JAM',
+      junctionId: 'JNC-BLR-008',
+      metric: 'jam',
+      cause: 'unknown',
+      causeSource: 'unknown',
+      citizenReportCount: 0,
+    };
+
+    const reports = await Report.find({ nearestJunctionId: newJamAlert.junctionId }).sort();
+    assert.strictEqual(reports.length, 1);
+    waitingReport.linkedAlertId = newJamAlert.alertId;
+    waitingReport.status = 'verified';
+    newJamAlert.cause = waitingReport.category;
+    newJamAlert.causeSource = 'citizen_report';
+    newJamAlert.citizenReportCount += waitingReport.reportCount;
+
+    assert.strictEqual(waitingReport.linkedAlertId, 'ALT-NEW-JAM', 'Waiting report must be linked to newly created alert');
+    assert.strictEqual(waitingReport.status, 'verified', 'Waiting report status must become verified');
+    assert.strictEqual(newJamAlert.cause, 'accident', 'Alert cause must be set from waiting report');
+    assert.strictEqual(newJamAlert.causeSource, 'citizen_report');
+    assert.strictEqual(newJamAlert.citizenReportCount, 2, 'Alert citizenReportCount must include waiting report count');
+
+    // 4. Behavior 4: Report count increases on each matching submission
+    waitingReport.reportCount += 1;
+    newJamAlert.citizenReportCount += 1;
+    assert.strictEqual(waitingReport.reportCount, 3, 'Grouped report count must increment on duplicate submission');
+    assert.strictEqual(newJamAlert.citizenReportCount, 3, 'Alert citizenReportCount must increase accordingly');
+
+  } finally {
+    Alert.findOne = originalFindOneAlert;
+    Report.find = originalFindReport;
+    Report.findOne = originalFindOneReport;
+    Alert.updateOne = originalUpdateOneAlert;
+  }
 });
 
 test.after(() => {

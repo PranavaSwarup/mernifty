@@ -290,20 +290,27 @@ class AnomalyEngine {
   async checkAndLinkWaitingReports(alertDoc) {
     if (mongoose.connection?.readyState !== 1) return;
     try {
-      const waitingReport = await Report.findOne({
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+      const waitingReports = await Report.find({
         nearestJunctionId: alertDoc.junctionId,
         linkedAlertId: null,
-        status: { $in: ['received', 'verified'] },
+        timestamp: { $gte: tenMinutesAgo },
       }).sort({ timestamp: -1 });
 
-      if (waitingReport) {
-        waitingReport.linkedAlertId = alertDoc.alertId;
-        waitingReport.status = 'verified';
-        await waitingReport.save();
+      if (waitingReports.length > 0) {
+        let totalCount = alertDoc.citizenReportCount || 0;
+        for (const rpt of waitingReports) {
+          rpt.linkedAlertId = alertDoc.alertId;
+          rpt.status = 'verified';
+          await rpt.save();
+          totalCount += (rpt.reportCount || 1);
+        }
 
-        alertDoc.cause = waitingReport.category;
-        alertDoc.causeSource = 'citizen_report';
-        alertDoc.citizenReportCount = waitingReport.reportCount;
+        alertDoc.citizenReportCount = totalCount;
+        if (alertDoc.causeSource !== 'officer') {
+          alertDoc.cause = waitingReports[0].category;
+          alertDoc.causeSource = 'citizen_report';
+        }
 
         await Alert.updateOne(
           { alertId: alertDoc.alertId },
