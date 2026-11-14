@@ -1,184 +1,211 @@
-# MetroPulse BLR: Smart City Traffic Architecture & Design Document
+# MetroPulse BLR: System Architecture & Technical Design
 
-> **Centralized Camera Telemetry Ingestion, Gridlock Detection & Adaptive Signal Control**  
+> **High-Throughput Optical Traffic Telemetry, Gridlock Detection & Emergency Green Corridor Engine**  
 > MERNIFY Hackathon 2026 • Track: High-Throughput Streams & Telemetry
 
 ---
 
-## 1. System Architecture Diagram
+## 1. End-to-End System Architecture
 
 ```mermaid
 graph TD
-    subgraph Bengaluru Roadside Infrastructure
-        CAM1["Silk Board (Hosur Rd / ORR)<br/>4x Optical CCTV / ANPR"]
-        CAM2["Tin Factory (Old Madras Rd)<br/>4x Optical CCTV / ANPR"]
-        CAM3["Hebbal Flyover (Bellary Rd)<br/>4x Optical CCTV / ANPR"]
-        CAM4["Bellandur EcoSpace (ORR)<br/>4x Optical CCTV / ANPR"]
+    subgraph Data Sources & Telemetry Emitters
+        SIM["Virtual Traffic Simulator<br/>(12 Bengaluru Arterial Junctions)"]
+        PROD["External Producer / Stress Test<br/>(HTTP Ingestion / API Key Auth)"]
+        AMB["Ambulance GPS Telemetry<br/>(2 Hz GPS Position Emitter)"]
+        CITIZEN["Citizen Incident Reports<br/>(Accident / Blockage / Waterlogging)"]
     end
 
-    subgraph Central Traffic Data Center GPU Cluster
-        RTSP["High-Speed Municipal Dark Fiber Ring<br/>RTSP / H.264 Video Stream Concentrator"]
-        YOLO["GPU Vision Worker Cluster<br/>Optical Flow & YOLO-v9 Vehicle Tracking<br/>Vehicle Classification: 2W, Car, Bus, Truck<br/>Queue Length (m) & Velocity (km/h) Extraction"]
+    subgraph Node.js & Express Ingestion Pipeline
+        API["REST Ingestion & Reporting Routes<br/>POST /api/telemetry/ingest<br/>POST /api/telemetry/batch<br/>POST /api/reports"]
+        VAL["Strict Schema Validator<br/>Validates approach bounds & timestamp window"]
+        DEDUP["Bounded Event ID Set<br/>Capacity 50,000 FIFO Deduplication"]
+        RL["Per-Source Rate Limiter<br/>35 events/sec per junction limit"]
+        ENRICH["Server Enrichment Layer<br/>Assigns true zone, junction name, computed score"]
     end
 
-    subgraph Node.js & Express High-Throughput Ingestion
-        API["HTTP REST Ingestion Endpoints<br/>POST /api/telemetry/ingest<br/>POST /api/telemetry/batch"]
-        VAL["Traffic Schema Normalizer & Validator<br/>Validates junctionId, zoneId, approaches"]
-        RL["Sliding-Window Rate Limiter<br/>Backpressure Guard (10,000 capacity)"]
-        DEDUP["Frame Deduplicator<br/>Drops duplicate sequence / camera frames"]
+    subgraph Real-Time Processing & Anomaly Engine
+        BUFFER["Write-Behind Buffer<br/>Flushes 200 events / 500ms via bulkWrite()"]
+        ANOMALY["Incident Detection Engine<br/>sudden_blockage | jam | congestion_building"]
+        SPREAD["1-Hop Jam Spreading Model<br/>Propagates pressure to graph neighbours"]
+        REMED["1-Second Deadline Scanner<br/>Auto-remediation loop (extend_green, divert)"]
+        CORRIDOR["Ambulance Corridor Service<br/>Lookahead preemption & arrival green hold"]
     end
 
-    subgraph Real-Time Processing & Anomaly Pipeline
-        BUFFER["Write-Behind Batch Buffer<br/>Flushes 200 events / 500ms via bulkWrite()"]
-        ANOMALY["Traffic Anomaly & Gridlock Engine<br/>Z-Score Surge Detector (|Z| >= 3.0)<br/>Stalled Vehicle & Ambulance Preemption"]
-        SOCKET_SRV["Socket.IO Zonal Broadcast Engine<br/>80ms Micro-Batching window"]
+    subgraph Storage Layer: MongoDB
+        C_TEL[("Telemetry Collection<br/>Compound Time-Series Indexes")]
+        C_DEV[("Device / Junction Matrix<br/>Signal states, adaptive modes")]
+        C_ALT[("Alerts Collection<br/>Incident type, cause, actionApplied")]
+        C_LOG[("ActionLog Collection<br/>Accountability audit trail")]
+        C_REP[("Report Collection<br/>Grouped citizen reports")]
+        C_TRIP[("CorridorTrip Collection<br/>Saved trip summaries & GPS path")]
+        C_BASE[("Baseline Collection<br/>Hourly normal traffic baselines")]
     end
 
-    subgraph Database Layer
-        MONGO[("MongoDB Database<br/>Compound Time-Series Indexes")]
-        COLL_TEL["Telemetry Collection<br/>junctionId + zoneId + timestamp"]
-        COLL_DEV["Junction Matrix<br/>status, healthScore, lastData, approaches"]
-        COLL_ALT["Incident Alerts Store<br/>gridlock, stalledVehicle, ambulance"]
+    subgraph Real-Time Delivery: Socket.IO
+        SOCK["Socket.IO Server Engine<br/>80ms Micro-Batching & Chained Emits"]
+        R_CITY["Room: city<br/>(Slim 1 Hz City Map Feed)"]
+        R_ZONE["Room: zone:ID<br/>(Zonal Desks Full Stream)"]
+        R_JUNC["Room: junction:ID<br/>(Junction Detail Modal)"]
+        R_CORR["Room: corridor<br/>(Ambulance GPS Position)"]
+        R_SYS["Room: system<br/>(Admin System Health)"]
+        R_USER["Room: user:userId<br/>(Private Citizen Feedback)"]
     end
 
-    subgraph Command Operations & Dispatch
-        CLIENT1["City-Wide Operations HQ<br/>Room: global + alerts"]
-        CLIENT2["South Zone Traffic Desk<br/>Room: zone:south-bangalore"]
-        CLIENT3["East Zone Traffic Desk<br/>Room: zone:east-bangalore"]
-        COPILOT["AI Traffic Copilot<br/>Autonomous Adaptive Green Wave & Tow Dispatch"]
-    end
+    SIM --> ENRICH
+    PROD --> API
+    CITIZEN --> API
+    AMB --> CORRIDOR
 
-    CAM1 --> RTSP
-    CAM2 --> RTSP
-    CAM3 --> RTSP
-    CAM4 --> RTSP
+    API --> VAL --> DEDUP --> RL --> ENRICH
 
-    RTSP --> YOLO
-    YOLO -->|Structured JSON Stream| API
+    ENRICH --> BUFFER
+    ENRICH --> ANOMALY
+    ENRICH --> SOCK
 
-    API --> VAL --> RL --> DEDUP
+    ANOMALY --> SPREAD
+    ANOMALY --> REMED
+    ANOMALY --> C_ALT
 
-    DEDUP --> BUFFER
-    DEDUP --> ANOMALY
-    DEDUP --> SOCKET_SRV
+    BUFFER --> C_TEL
+    BUFFER --> C_DEV
+    REMED --> C_LOG
+    API --> C_REP
+    CORRIDOR --> C_TRIP
 
-    BUFFER --> COLL_TEL
-    BUFFER --> COLL_DEV
-    ANOMALY --> COLL_ALT
-
-    SOCKET_SRV --> CLIENT1
-    SOCKET_SRV --> CLIENT2
-    SOCKET_SRV --> CLIENT3
-    COLL_ALT --> COPILOT
+    SOCK --> R_CITY
+    SOCK --> R_ZONE
+    SOCK --> R_JUNC
+    SOCK --> R_CORR
+    SOCK --> R_SYS
+    SOCK --> R_USER
 ```
 
 ---
 
-## 2. Core Architectural Decisions
+## 2. Ingestion, Processing, Storage & Broadcasting Data-Flow
 
-### A. Centralized Data Center Processing vs. Edge Junction Compute
-- **The Challenge:** Roadside controller cabinets on Bangalore roads endure extreme humidity, monsoonal flooding, 40°C summer dust, and unstable grid power. Deploying high-power GPU accelerators on every junction pole would incur catastrophic failure rates and enormous replacement costs.
-- **The Solution:** Roadside cameras act purely as ruggedized RTSP optical emitters streaming video over municipal fiber to the **Centralized City Data Center**. Scalable GPU vision clusters perform object detection, optical flow queue calculation, and vehicle classification in an air-conditioned, redundant environment, emitting structured JSON telemetry into the ingestion pipeline.
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Source as Camera / Producer / Simulator
+    participant Ingest as Express Ingestion & Validator
+    participant Buffer as Write-Behind Buffer
+    participant Anomaly as Anomaly Engine
+    participant DB as MongoDB Database
+    participant Sockets as Socket.IO Zonal Engine
+    participant Client as React Dashboard Client
 
-### B. Strategic Scope: Focusing Compute Resources on High-Impact Traffic (Air Pollution Omitted)
-- **The Challenge:** Air pollution fluctuates across vast multi-kilometer regional zones and is not directly actionable on sub-minute timescales (traffic cannot realistically be diverted onto a 15km detour to avoid a particulate pocket without exacerbating city-wide gridlock).
-- **The Solution:** Air pollution monitoring was deliberately omitted to dedicate 100% of GPU compute, network bandwidth, and database I/O to **actionable congestion relief: dynamic adaptive signal splits, incident/stalled vehicle tow dispatch, and emergency ambulance green corridors**.
+    Source->>Ingest: HTTP POST /api/telemetry/batch (Raw Approach Records)
+    Ingest->>Ingest: Validate bounds, parse timestamps, drop FIFO duplicates
+    Ingest->>Ingest: Enrich zoneId, junctionName, congestionScore
+    
+    par Asynchronous Ingestion & Detection
+        Ingest->>Buffer: Enqueue into in-memory ring buffer (<1ms)
+        Ingest->>Anomaly: Evaluate road speeds & queues against baselines
+        Ingest->>Sockets: Queue into zonal micro-batch buffers
+    end
 
----
+    opt Threshold Crossed (Sudden Blockage / Jam / Unusual)
+        Anomaly->>DB: Persist Alert document with suggestedAction & deadline
+        Anomaly->>Sockets: Emit alert:new to zone and junction rooms
+    end
 
-## 3. High-Throughput Write-Behind Ingestion Pattern
+    critical Database Write-Behind Flush (Every 500ms or 200 items)
+        Buffer->>DB: bulkWrite({ insertOne: event }) with ordered: false
+    end
 
-Directly persisting 1,000+ camera frames per second into disk causes thread pool exhaustion and write lockups:
-
-1. **In-Memory Ring Queue:** Ingestion calls (`POST /api/telemetry/ingest` and `/batch`) enqueue validated frames into memory with zero disk delay ($< 1\text{ms}$).
-2. **Micro-Batch Flushing:** An asynchronous timer drains up to **200 events** every **500ms** (or when the buffer hits the batch ceiling).
-3. **Unordered Bulk Write:** Executed via `Telemetry.bulkWrite()` and `Device.bulkWrite()` with `ordered: false`, reducing disk I/O operations by **95%** while sustaining **7,000+ events/sec**.
-
----
-
-## 4. Canonical Traffic Data Model Specification
-
-Each ingested frame represents one traffic junction cycle emitted by the Centralized Vision Workers:
-
-```json
-{
-  "eventId": "EVT-1731512400000-abcd",
-  "junctionId": "JNC-BLR-001",
-  "zoneId": "south-bangalore",
-  "timestamp": "2026-11-13T20:40:00.000Z",
-  "sequence": 1420,
-  "data": {
-    "approaches": [
-      {
-        "road": "Hosur Rd (from south)",
-        "vehiclesPerMin": 38,
-        "queueLengthM": 180,
-        "avgSpeedKmph": 6,
-        "signal": "red",
-        "greenTimeSec": 45
-      },
-      {
-        "road": "ORR (from east)",
-        "vehiclesPerMin": 52,
-        "queueLengthM": 60,
-        "avgSpeedKmph": 22,
-        "signal": "green",
-        "greenTimeSec": 50
-      },
-      {
-        "road": "Hosur Rd (from north)",
-        "vehiclesPerMin": 30,
-        "queueLengthM": 90,
-        "avgSpeedKmph": 14,
-        "signal": "red",
-        "greenTimeSec": 35
-      },
-      {
-        "road": "BTM Rd (from west)",
-        "vehiclesPerMin": 21,
-        "queueLengthM": 40,
-        "avgSpeedKmph": 18,
-        "signal": "red",
-        "greenTimeSec": 30
-      }
-    ],
-    "vehicleMix": {
-      "twoWheeler": 0.55,
-      "car": 0.30,
-      "bus": 0.05,
-      "truck": 0.10
-    },
-    "stalledVehicleDetected": false,
-    "ambulanceDetected": false,
-    "totalFlowVehiclesPerMin": 141,
-    "maxQueueLengthM": 180,
-    "avgSpeedKmph": 15.0,
-    "congestionScore": 76,
-    "cameraProcessingLatencyMs": 14
-  }
-}
+    critical WebSocket Micro-Batch Flush (Every 80ms)
+        Sockets->>Client: Emit telemetry:batch to subscribed rooms (zone / junction)
+        Sockets->>Client: Emit city slim summary to city room (1 Hz)
+    end
 ```
 
 ---
 
-## 5. Zonal Socket.IO Room Topology
+## 3. MongoDB Collections, Schemas & Indexes
 
-Downstream clients subscribe selectively to eliminate client-side packet congestion:
+The persistence layer is structured into 8 collections designed for high write throughput and indexed lookups:
 
-| Room Pattern | Subscribed Clients | Transmitted Slices | Bandwidth Impact |
-| :--- | :--- | :--- | :--- |
-| `global` | City Operations Center | City KPI snapshot, emergency alerts | Baseline |
-| `zone:south-bangalore` | South Desk (BTM / Silk Board / Koramangala) | Only South corridor junctions | **~75% reduction** |
-| `zone:east-bangalore` | East Desk (Bellandur / Tin Factory / KR Puram)| Only East corridor junctions | **~75% reduction** |
-| `junction:JNC-BLR-001` | Modal Inspection & Signal Override | Granular single-junction camera feed | **~92% reduction** |
+### 1. `Telemetry` (`Telemetry.js`)
+Stores raw time-stamped junction frames for historical charting and baseline calculation.
+- **Fields**: `eventId` (String, unique), `junctionId` (String), `zoneId` (String), `timestamp` (Date), `sequence` (Number), `data` (Object with approaches, speeds, queues, congestionScore), `status` (String), `seeded` (Boolean).
+- **Indexes**:
+  - `{ junctionId: 1, timestamp: -1 }` (powers junction history modal)
+  - `{ zoneId: 1, timestamp: -1 }` (powers zonal analytics)
+  - `{ eventId: 1 }` (unique deduplication index)
+  - `{ timestamp: -1 }` (powers aggregate time queries)
+
+### 2. `Device` (`Device.js`)
+Maintains the latest operational state for each of the 12 monitored junctions.
+- **Fields**: `deviceId` (String, unique), `name` (String), `zoneId` (String), `location` (GeoJSON / lat-lon), `status` (online, degraded, offline), `adaptiveSignalMode` (dynamic-ai, emergency-corridor, manual-override), `lastMetrics` (Object).
+- **Index**: `{ deviceId: 1 }` (unique).
+
+### 3. `Alert` (`Alert.js`)
+Tracks operational traffic incidents, suggested remedies, human causes, and resolution status.
+- **Fields**: `alertId` (String, unique), `junctionId` (String), `zoneId` (String), `severity` (info, warning, critical), `type` (jam, sudden_blockage, congestion_building, unusual_for_this_hour, congestion_spillover), `cause` (accident, road_blocked, waterlogging, etc., default 'unknown'), `causeSource` (citizen_report, officer, system), `status` (open, acknowledged, action_applied, auto_applied, overridden, resolved), `suggestedAction` (Object with action and deadline), `actionApplied` (String), `timestamp` (Date).
+- **Indexes**:
+  - `{ junctionId: 1, status: 1 }`
+  - `{ status: 1, timestamp: -1 }`
+
+### 4. `ActionLog` (`ActionLog.js`)
+Provides an immutable accountability audit trail for all automatic system fixes and officer overrides.
+- **Fields**: `logId` (String), `alertId` (String), `junctionId` (String), `action` (extend_green, divert, hold_upstream, manual_override), `actor` (system or User ID), `actorRole` (system, admin, officer), `previousState` (String), `newState` (String), `timestamp` (Date).
+- **Index**: `{ junctionId: 1, timestamp: -1 }`.
+
+### 5. `Report` (`Report.js`)
+Records citizen-submitted incident reports grouped by location.
+- **Fields**: `reportId` (String, unique), `userId` (String, indexed for rate limiting, never broadcast), `category` (accident, road_blocked, waterlogging, signal_not_working, construction, other), `coordinates` (lat, lon), `nearestJunctionId` (String), `zoneId` (String), `note` (sanitized text, max 200 chars), `status` (received, verified, action_taken, dismissed), `reportCount` (Number, duplicate grouping counter), `linkedAlertId` (String).
+- **Indexes**:
+  - `{ userId: 1, createdAt: -1 }` (rate limiter: 3 per 10 mins)
+  - `{ nearestJunctionId: 1, category: 1, status: 1 }` (duplicate grouping within 10 mins)
+
+### 6. `CorridorTrip` (`CorridorTrip.js`)
+Records historical emergency ambulance trips and GPS tracks for replay.
+- **Fields**: `tripId` (String, unique), `vehicleId` (String), `startJunctionId` (String), `destinationJunctionId` (String), `routeJunctionIds` (Array of Strings), `status` (active, completed, cancelled), `startTime` (Date), `endTime` (Date), `durationSeconds` (Number), `positions` (Array of GPS coordinate snapshots).
+- **Index**: `{ tripId: 1 }` (unique).
+
+### 7. `Baseline` (`Baseline.js`)
+Pre-aggregated hourly traffic profiles per junction for baseline deviation comparisons.
+- **Fields**: `junctionId` (String), `hour` (Number, 0–23), `avgCongestionScore` (Number), `avgSpeedKmph` (Number), `avgMaxQueueM` (Number), `sampleCount` (Number).
+- **Compound Index**: `{ junctionId: 1, hour: 1 }` (unique).
+
+### 8. `User` (`User.js`)
+Role-based access accounts with assigned jurisdiction areas.
+- **Fields**: `name` (String), `email` (String, unique), `password` (bcrypt hash), `role` (admin, officer, ambulance, citizen), `assignedZoneId` (String, optional), `assignedJunctionId` (String, optional), `vehicleId` (String, optional).
 
 ---
 
-## 6. AI Traffic Copilot Runbook Engine
+## 4. Socket.IO Room Topology & Selective Distribution
 
-When anomalous bottlenecks occur, the Copilot Engine evaluates root causes and surfaces automated 1-click runbooks:
+To keep client memory bounded and reduce unnecessary network payloads, clients join strictly what is relevant to their open view:
 
-1. **Dynamic Green Split Optimization:** Reallocates +25s green time to the saturated approach to dissolve queues.
-2. **Automated Emergency Green Wave Corridor:** Pre-emptively holds conflicting cross-streets at RED and establishes continuous green wave for ambulances.
-3. **BTP Rapid Incident Tow Dispatch:** Dispatches nearest recovery crane and pushes warnings to upstream electronic Variable Message Signs (VMS).
-4. **Upstream Arterial Diversion:** Siphons 35% of incoming volume onto peripheral bypass ring roads.
+```
+[Client App]
+   ├── Opens City Map                ──> Joins "city", "corridor"
+   ├── Selects South Bangalore Zone  ──> Leaves previous zone, joins "zone:south-bangalore"
+   ├── Opens Silk Board Modal        ──> Joins "junction:JNC-BLR-001" (leaves on close)
+   ├── Opens Health Desk             ──> Joins "system"
+   └── Citizen logs in               ──> Joins private room "user:<userId>"
+```
+
+### Room Specifications
+- **`city`**: Receives slim whole-city summaries (junctionId, score, speed, max queue) every 1,000ms. Omit approach arrays to keep map traffic lightweight.
+- **`zone:<zoneId>`**: Receives full micro-batched events for junctions in that zone every 80ms (~12 Hz).
+- **`junction:<junctionId>`**: Dedicated high-frequency stream for the modal camera viewport and approach queues.
+- **`corridor`**: Receives 2 Hz ambulance position coordinates (`latitude`, `longitude`, `speedKmph`, `progressPct`) and corridor lifecycle events (`started`, `ended`).
+- **`system`**: Receives 1 Hz health snapshots for ingestion rate, persistence rate, latency, and drop counters.
+
+---
+
+## 5. Architectural Optimizations & Rationale
+
+| Optimization | Implementation Detail | Architectural Rationale |
+| :--- | :--- | :--- |
+| **Write-Behind Ring Buffer** | In-memory queue flushes up to 200 items every 500ms using unordered `bulkWrite()` | Decouples incoming network requests from disk write latency; eliminates MongoDB write locks. |
+| **Micro-Batched WebSockets** | Server flushes queued room messages every 80ms (~12 FPS) | Prevents flooding the Node.js event loop with thousands of individual socket emits. |
+| **Client-Side Throttling** | `SocketContext.jsx` accumulates batches in an in-memory buffer and flushes to React state every 100ms (10 FPS) | Prevents browser re-render thrashing; keeps Chrome DevTools running at a smooth 60 FPS. |
+| **Bounded Deduplication** | `BoundedEventIdSet` (capacity 50,000) using FIFO ring eviction | Replaces unbounded Sets that consume arbitrary RAM; sub-millisecond duplicate detection. |
+| **Subscribe-Then-Fetch Reconciliation** | Modal subscribes to WebSocket before requesting MongoDB history, buffering in-flight events | Eliminates race-condition gaps between history request return and live socket initialization. |
+| **1-Second Deadline Loop** | Single global server timer scans active alerts every 1,000ms | Avoids scheduling thousands of individual Node timers that risk memory leaks and crash on restarts. |
+| **Chained Room Broadcasting** | `io.to(zone).to(junction).emit(...)` | Native Socket.IO room chaining guarantees exactly one delivery per physical socket connection. |
