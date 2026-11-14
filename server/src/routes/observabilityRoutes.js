@@ -32,6 +32,8 @@ router.get('/traces', publicReadOrAuth, (req, res) => {
 // GET /api/observability/metrics
 router.get('/metrics', publicReadOrAuth, async (req, res) => {
   const snapshot = await metricsService.getSnapshotAsync();
+  const mem = process.memoryUsage();
+  const cpu = process.cpuUsage();
   res.json({
     success: true,
     metrics: snapshot,
@@ -39,6 +41,21 @@ router.get('/metrics', publicReadOrAuth, async (req, res) => {
     counters: snapshot.otel?.counters || {},
     gauges: snapshot.otel?.gauges || {},
     bucketBoundaries: HISTOGRAM_BOUNDARIES,
+    process: {
+      pid: process.pid,
+      uptimeSec: Number(process.uptime().toFixed(2)),
+      memoryUsage: {
+        rssBytes: mem.rss,
+        rssMb: Number((mem.rss / (1024 * 1024)).toFixed(2)),
+        heapUsedBytes: mem.heapUsed,
+        heapUsedMb: Number((mem.heapUsed / (1024 * 1024)).toFixed(2)),
+        heapTotalBytes: mem.heapTotal,
+        externalBytes: mem.external,
+      },
+      cpuUsageMicros: cpu,
+      eventLoopLagMs: snapshot.eventLoopLagMs || 0,
+      eventLoopLagP99Ms: snapshot.eventLoopLagP99Ms || 0,
+    },
   });
 });
 

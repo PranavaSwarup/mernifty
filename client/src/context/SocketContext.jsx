@@ -156,6 +156,7 @@ export function SocketProvider({ children }) {
   const [clientLatency, setClientLatency] = useState(0);
   const [clientE2eStats, setClientE2eStats] = useState({ p50: 0, p95: 0, p99: 0, count: 0, clockOffsetMs: 0 });
   const [obsUpdate, setObsUpdate] = useState(null);
+  const [benchProgress, setBenchProgress] = useState(null);
   const [schema, setSchema] = useState(DEFAULT_WIRE_SCHEMA);
   const [lastReplayStats, setLastReplayStats] = useState(null);
   const [socketError, setSocketError] = useState(null);
@@ -304,6 +305,10 @@ export function SocketProvider({ children }) {
         hotStore.setStats(payload.metrics);
       }
       setObsUpdate(payload || null);
+    });
+
+    socket.on('bench:progress', (progress) => {
+      setBenchProgress(progress || null);
     });
 
     socket.on('cf:update', (cf) => {
@@ -547,6 +552,7 @@ export function SocketProvider({ children }) {
         clientLatency,
         clientE2eStats,
         obsUpdate,
+        benchProgress,
         schema,
         lastReplayStats,
         socketError,

@@ -102,6 +102,11 @@ export const api = {
   remediate: (payload) =>
     fetchJson('/api/copilot/remediate', { method: 'POST', body: JSON.stringify(payload) }),
 
+  // Benchmarks
+  getBenchmarks: () => fetchJson('/api/benchmarks'),
+  runLiveBenchmark: (payload = { durationSec: 10 }) =>
+    fetchJson('/api/benchmarks/live', { method: 'POST', body: JSON.stringify(payload) }),
+
   // Auth
   login: (email, password) =>
     fetchJson('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),

@@ -5,10 +5,8 @@
 
 ![MetroPulse Architecture](https://img.shields.io/badge/Stack-MERN%20+%20Socket.IO-emerald)
 ![License](https://img.shields.io/badge/License-MIT-blue)
-![Real-time](https://img.shields.io/badge/WebSocket-Sub--5ms%20Latency-cyan)
-![Throughput](https://img.shields.io/badge/Throughput-7%2C320+%20events%2Fsec-purple)
-![Tests](https://img.shields.io/badge/Tests-Passing%20(100%25)-success)
 ![Focus](https://img.shields.io/badge/Focus-Bengaluru%20Smart%20Traffic-orange)
+<!-- TODO(T09): populate verified throughput, latency, fan-out savings, and test count badges from benchmarks/results/latest.md -->
 
 ---
 
@@ -26,8 +24,8 @@ Deploying a real-time smart traffic telemetry command center introduces three fu
 **MetroPulse BLR** is a smart city traffic telemetry ingestion, gridlock detection, and adaptive signal coordination platform:
 - **Centralized Video Analytics Architecture**: Roadside CCTV/ANPR cameras stream optical video over municipal dark fiber to the **Centralized City Data Center**, where GPU worker clusters perform vehicle classification (two-wheelers, cars, buses, commercial trucks) and optical queue calculation, emitting structured JSON telemetry.
 - **Dedicated Resource Allocation**: Air pollution was deliberately omitted to dedicate 100% of GPU compute, network bandwidth, and database I/O to high-impact traffic bottlenecks, adaptive green split optimization, and emergency ambulance corridors.
-- **High-Throughput Write-Behind Ingestion**: Accumulates junction frames in an in-memory ring queue and flushes micro-batches every 500ms via `bulkWrite()` with `ordered: false`, sustaining **7,300+ events/sec** without event-loop blocking.
-- **Selective Zonal Socket.IO Partitioning**: Emits frames into partitioned rooms (`zone:south-bangalore`, `zone:east-bangalore`, `junction:ID`), reducing client network payload by **~75%**.
+- **High-Throughput Write-Behind Ingestion**: Accumulates junction frames in an in-memory ring queue and flushes micro-batches via `bulkWrite()` / `insertMany()` with `ordered: false` without event-loop blocking. <!-- TODO(T09): insert measured Atlas throughput from benchmarks/results/latest.md -->
+- **Selective Zonal Socket.IO Partitioning**: Emits frames into partitioned rooms (`zone:south-bangalore`, `zone:east-bangalore`, `junction:ID`) using compact Wire v1 tuples to cut client network payload. <!-- TODO(T09): insert measured egress reduction from benchmarks/results/latest.md -->
 - **Real-Time Anomaly Engine & AI Copilot**: Flags gridlocks ($Z \ge 3.0$), stalled vehicles, and approaching ambulances with **1-click automated runbook remediation** (Adaptive Green Wave, Tow Dispatch, Emergency Corridor Preemption).
 
 ---
@@ -122,7 +120,7 @@ The platform comes pre-configured with 12 authentic, high-traffic Bengaluru junc
   - *Automated Emergency Green Wave Corridor* (preemptive green wave for ambulances)
   - *BTP Rapid Incident Tow Dispatch* (clears stalled vehicles)
   - *Upstream Variable Message Sign (VMS) Diversion* (reroutes 35% traffic to bypass corridors)
-- **Multi-Desk Zonal Sync View**: Demonstrates two independent dispatchers (South Zone Desk vs East Zone Desk) receiving only their subscribed room frames, cutting network payload by **75%**.
+- **Multi-Desk Zonal Sync View**: Demonstrates two independent dispatchers (South Zone Desk vs East Zone Desk) receiving only their subscribed room frames. <!-- TODO(T09): insert measured zonal reduction from benchmarks/results/latest.md -->
 - **Camera Stream Tap / Terminal Inspector**: Live packet stream showing formatted JSON frames with regex filtering and clipboard copying.
 - **Chaos & Stress Lab**: 1-click incident injection (Silk Board Surge, Stalled BMTC Bus on ORR, Hebbal Ambulance Corridor, Monsoonal Slowdown).
 

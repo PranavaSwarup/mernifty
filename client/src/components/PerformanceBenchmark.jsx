@@ -18,6 +18,7 @@ export function PerformanceBenchmark() {
     clientLatency,
     clientE2eStats,
     obsUpdate,
+    benchProgress,
     isConnected,
     lastReplayStats,
     disconnectCountdownSec,
@@ -25,6 +26,9 @@ export function PerformanceBenchmark() {
   } = useSocket();
   const [isStressTesting, setIsStressTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const [recordedRuns, setRecordedRuns] = useState([]);
+  const [benchError, setBenchError] = useState(null);
+  const [isProbingLive, setIsProbingLive] = useState(false);
   const [fps, setFps] = useState(60);
 
   // Client-side FPS measurement to verify zero UI degradation
@@ -48,6 +52,33 @@ export function PerformanceBenchmark() {
     animId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animId);
   }, []);
+
+  const loadRecordedBenchmarks = async () => {
+    try {
+      const data = await api.getBenchmarks();
+      if (Array.isArray(data?.runs)) {
+        setRecordedRuns(data.runs.filter((r) => r.kind === 'load-benchmark'));
+      }
+    } catch {
+      // Ignore if endpoint unavailable
+    }
+  };
+
+  useEffect(() => {
+    loadRecordedBenchmarks();
+  }, []);
+
+  const runLiveEngineeringProbe = async () => {
+    setIsProbingLive(true);
+    setBenchError(null);
+    try {
+      await api.runLiveBenchmark({ durationSec: 10 });
+    } catch (err) {
+      setBenchError(err.message);
+    } finally {
+      setIsProbingLive(false);
+    }
+  };
 
   const runBrowserStressTest = async (count = 500) => {
     setIsStressTesting(true);
@@ -401,6 +432,76 @@ export function PerformanceBenchmark() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Recorded Reproducible Benchmark Runs & Live 10s Engineering Probe */}
+      <div className="rounded-xl border border-slate-800 bg-[#0B101D] p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div>
+            <h3 className="font-bold text-base text-slate-100">
+              Recorded Reproducible Benchmark Suites
+            </h3>
+            <p className="text-xs text-slate-400">
+              Distinguishes HTTP-accepted/s, async persisted-to-DB/s, and Socket.IO fan-out delivered frames/s
+            </p>
+          </div>
+          <button
+            onClick={runLiveEngineeringProbe}
+            disabled={isProbingLive}
+            className="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-xs font-bold text-slate-950 transition-colors disabled:opacity-60"
+          >
+            {isProbingLive ? 'Probing 10s (Engineering)...' : 'Run 10s Live Probe'}
+          </button>
+        </div>
+
+        {benchError && (
+          <div className="p-2.5 rounded border border-rose-500/40 bg-rose-500/10 text-rose-300 text-xs font-mono">
+            {benchError}
+          </div>
+        )}
+
+        {benchProgress && (
+          <div className="p-3 rounded-lg bg-slate-950/80 border border-cyan-500/30 font-mono text-xs space-y-1">
+            <div className="flex items-center justify-between text-cyan-300 font-semibold">
+              <span>Live Engineering Probe ({benchProgress.status})</span>
+              <span>{benchProgress.elapsedSec}s / {benchProgress.totalSec}s</span>
+            </div>
+            <div className="text-slate-300">
+              Accepted: {benchProgress.acceptedEventsPerSec || 0}/s ({benchProgress.acceptedEvents || 0}) ·
+              Persisted: {benchProgress.persistedEventsPerSec || 0}/s ({benchProgress.persistedDelta || 0}) ·
+              Delivered ({benchProgress.clientCount || 0} clients): {benchProgress.deliveredFramesPerSec || 0} frames/s ·
+              RTT p95: {benchProgress.rttP95Ms || 0} ms
+            </div>
+          </div>
+        )}
+
+        {recordedRuns.length === 0 ? (
+          <div className="text-xs text-slate-500 font-mono">
+            No load benchmark JSON files found in benchmarks/results/ yet.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {recordedRuns.map((run) => (
+              <div
+                key={run.filename}
+                className="p-3 rounded-lg bg-slate-950/70 border border-slate-800 font-mono text-xs flex flex-col gap-1"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-slate-200 font-semibold">{run.filename}</span>
+                  <span className="text-slate-400">
+                    {run.metadata?.target} · {run.metadata?.mongoTarget} ·{' '}
+                    {run.metadata?.otelEnabled ? `OTel (${run.metadata?.otelSampleRatio})` : 'OTel Off'}
+                  </span>
+                </div>
+                <div className="text-slate-300">
+                  Peak Accepted: <span className="text-emerald-400 font-semibold">{(run.summary?.peakAcceptedEventsPerSec || 0).toLocaleString()}/s</span> ({run.summary?.peakAcceptedConfig}) ·
+                  Peak Persisted: <span className="text-amber-300 font-semibold">{(run.summary?.peakPersistedEventsPerSec || 0).toLocaleString()}/s</span> ·
+                  Fan-out 200: <span className="text-cyan-300 font-semibold">{(run.summary?.fanout200FramesPerSec || 0).toLocaleString()} frames/s</span> (p95 {run.summary?.fanout200LatencyP95Ms || 0} ms)
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

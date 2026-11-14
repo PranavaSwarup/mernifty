@@ -1039,6 +1039,11 @@ class SocketService {
     this._emitToRoomRaw('city', 'cf:update', comparison, 1);
   }
 
+  broadcastEngineeringEvent(eventName, payload) {
+    if (!this.io) return 0;
+    return this._emitToRoomRaw('engineering', eventName, payload, 1);
+  }
+
   shutdown() {
     if (this.flushTimer) {
       clearInterval(this.flushTimer);

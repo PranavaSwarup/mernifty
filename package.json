@@ -17,6 +17,7 @@
     "test": "npm --prefix server test"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "socket.io-client": "^4.8.4"
   }
 }
