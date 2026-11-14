@@ -8,7 +8,7 @@ const router = express.Router();
 // 1. Start an ambulance green corridor trip (Admin or Ambulance role)
 router.post('/start', authenticate, requireRole(['admin', 'ambulance']), async (req, res) => {
   try {
-    let { vehicleId, startJunctionId, destinationJunctionId, durationSeconds } = req.body;
+    let { vehicleId, startJunctionId, destinationJunctionId, durationSeconds, avoidJams } = req.body;
 
     // Ambulance role can only initiate a trip for its own vehicle
     if (req.user.role === 'ambulance') {
@@ -20,6 +20,7 @@ router.post('/start', authenticate, requireRole(['admin', 'ambulance']), async (
       startJunctionId: startJunctionId || 'JNC-BLR-008',
       destinationJunctionId: destinationJunctionId || 'JNC-BLR-004',
       durationSeconds: durationSeconds ? parseInt(durationSeconds, 10) : 75,
+      avoidJams: avoidJams !== undefined ? Boolean(avoidJams) : true,
     });
     res.json(result);
   } catch (err) {

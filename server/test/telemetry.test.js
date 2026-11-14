@@ -4,7 +4,7 @@ import { ingestionBuffer } from '../src/services/ingestionBuffer.js';
 import { anomalyEngine } from '../src/services/anomalyEngine.js';
 import { metricsService } from '../src/services/metricsService.js';
 import { normalizeTrafficEvent, validateTrafficEvent } from '../src/middleware/validator.js';
-import { JUNCTION_GRAPH, getShortestRoute, findNearestJunction } from '../src/data/junctionGraph.js';
+import { JUNCTION_GRAPH, getShortestRoute, getCongestionAwareRoute, findNearestJunction } from '../src/data/junctionGraph.js';
 import { corridorService } from '../src/services/corridorService.js';
 import { simulatorService } from '../src/services/simulatorService.js';
 import { checkAreaAuthorization, requireDataSourceKey, requireAuth } from '../src/middleware/auth.js';
@@ -771,6 +771,41 @@ test('18. Anonymous Report 401, Pre-Validation Rate Limiter, and Socket Auth (Fi
   const officerSocket = { user: decodedOfficer, isAuthenticated: true };
   const officerAllowed = officerSocket.isAuthenticated && ['admin', 'officer'].includes(officerSocket.user?.role);
   assert.strictEqual(officerAllowed, true, 'Officer socket must be permitted to subscribe to system metrics');
+});
+
+test('19. Ambulance Congestion Bypass, Approach Preemption, and Clearance Timestamps', async (t) => {
+  // 1. Dynamic rerouting avoiding jammed junctions
+  const normalRoute = getShortestRoute('JNC-BLR-008', 'JNC-BLR-004');
+  assert.deepStrictEqual(normalRoute, ['JNC-BLR-008', 'JNC-BLR-010', 'JNC-BLR-012', 'JNC-BLR-011', 'JNC-BLR-003', 'JNC-BLR-004']);
+
+  const rerouted = getCongestionAwareRoute('JNC-BLR-008', 'JNC-BLR-004', {
+    avoidJams: true,
+    jammedJunctionIds: ['JNC-BLR-010', 'JNC-BLR-012'],
+  });
+  assert.ok(rerouted, 'A viable reroute must be found');
+  assert.strictEqual(rerouted.includes('JNC-BLR-010'), false, 'Reroute must bypass jammed Mekhri Circle');
+  assert.strictEqual(rerouted.includes('JNC-BLR-012'), false, 'Reroute must bypass jammed Town Hall');
+
+  // 2. Approach road preemption and junctionEvents recording
+  const tripRes = await corridorService.startTrip({
+    vehicleId: 'AMB-TEST-TIMESTAMP',
+    startJunctionId: 'JNC-BLR-008',
+    destinationJunctionId: 'JNC-BLR-004',
+    durationSeconds: 30,
+    avoidJams: false,
+  });
+
+  const preemptionInfo = corridorService.getPreemptionInfo('JNC-BLR-010');
+  assert.ok(preemptionInfo, 'Preemption info must exist for lookahead junction');
+  assert.strictEqual(preemptionInfo.incomingRoad, 'Bellary Rd (from north)', 'Incoming road approach must be Bellary Rd');
+
+  // End trip and verify junctionEvents
+  const summary = await corridorService.endTrip('AMB-TEST-TIMESTAMP', 'completed');
+  assert.ok(Array.isArray(summary.junctionEvents), 'Summary must contain junctionEvents array');
+  const event008 = summary.junctionEvents.find((e) => e.junctionId === 'JNC-BLR-008');
+  assert.ok(event008, 'Junction event for start junction must exist');
+  assert.ok(event008.preemptedAt, 'preemptedAt timestamp must be recorded');
+  assert.ok(event008.clearedAt, 'clearedAt timestamp must be recorded');
 });
 
 test.after(() => {

@@ -50,12 +50,19 @@
 ---
 
 ### Scene 4: Ambulance Emergency Green Corridor — Centrepiece Demo (1:50 – 3:00)
-- **On Screen**: In Window 1 (Admin/Officer), navigate to Camera & Chaos Lab. Click **"Send Ambulance"** (preset: Hebbal Flyover `JNC-BLR-008` ➔ Jayadeva Hospital `JNC-BLR-004`).
+- **On Screen**: In Window 1 (Admin/Officer), navigate to Bengaluru Traffic Map. Click **"🚑 Send Ambulance (Hebbal ➔ Jayadeva)"** (with "Avoid Jams" enabled).
 - **Speaker 1 (Student A)**:
-  > *"Now for our evaluation centrepiece: the Ambulance Green Corridor. An emergency cardiac ambulance departs Hebbal Flyover heading to Jayadeva Hospital across 6 junctions spanning the North, Central, and South zones.*  
-  > *Watch the Leaflet map: as the ambulance moves along the shortest Dijkstra route at 2 Hz GPS updates, our lookahead logic detects junctions 15 seconds ahead. Mekhri Circle and Town Hall preemptively turn green on the arrival road, holding cross-streets on red to drain the approach queue.*  
-  > *Simultaneously, look at Window 2: any citizen or driver viewing an upcoming junction receives an immediate give-way notice: 'Ambulance approaching from Bellary Road. Give way. About 12 seconds away.'*  
-  > *As the ambulance clears each junction, the signal returns to dynamic AI timing, and when it reaches Jayadeva Hospital, the complete trip summary is persisted to MongoDB for audit replay."*
+  > *"Now for our evaluation centrepiece: the Ambulance Green Corridor. Pitch in one line: 'When an ambulance starts a trip, our system clears its path one junction at a time and warns the people ahead, and you can watch it happen live.'*  
+  > *An emergency cardiac ambulance departs Hebbal Flyover heading to Jayadeva Hospital across 6 connected junctions: Hebbal ➔ Mekhri ➔ Town Hall ➔ Richmond ➔ Dairy Circle ➔ Jayadeva.*  
+  > *Watch the live map: as the ambulance moves at 2 Hz GPS updates, our lookahead logic detects junctions ahead. Mekhri Circle and Town Hall preemptively lock green on the incoming corridor approach, holding cross-streets on red to flush the queue before arrival.*  
+  > *Here is the critical realism note: We do NOT rely on drivers being considerate or looking at a smartphone in bumper-to-bumper Bengaluru traffic. We clear the queue ahead with the traffic light itself. When the signal turns green, drivers naturally move forward because the light is in their favour, while cross-traffic stops on red.*  
+  > *Notice what each persona sees in real time:*  
+  > *1. The Ambulance Driver sees their live navigation HUD with locked green signals ahead.*  
+  > *2. The Traffic Police Officer stationed at the junction gets an advance tactical alert banner to hold cross-traffic and keep the road shoulder clear.*  
+  > *3. Citizens viewing that junction receive a subtle public advisory notice with an arrival ETA.*  
+  > *4. Citizens watching off-route junctions receive nothing, maintaining clean room isolation.*  
+  > *And if a junction along the corridor is heavily gridlocked, our real-time graph router dynamically reroutes the ambulance around the jam using live telemetry.*  
+  > *As the ambulance clears each junction, it returns to dynamic AI timing, and upon arrival at Jayadeva Hospital, the trip summary—including exact preemption and clearance timestamps for each junction—is saved to MongoDB for audit replay."*
 
 ---
 

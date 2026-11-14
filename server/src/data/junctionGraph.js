@@ -83,11 +83,40 @@ function buildSymmetricGraph() {
 
 export const JUNCTION_GRAPH = buildSymmetricGraph();
 
-// Find shortest route between two junctions using Dijkstra with distance edge weights
-export function getShortestRoute(startId, endId) {
+// Map of canonical approach roads for emergency green corridor wave
+export const CORRIDOR_APPROACH_MAP = {
+  'JNC-BLR-008->JNC-BLR-010': 'Bellary Rd (from north)',
+  'JNC-BLR-010->JNC-BLR-012': 'KG Road (from north)',
+  'JNC-BLR-012->JNC-BLR-011': 'Residency Rd (from north)',
+  'JNC-BLR-011->JNC-BLR-003': 'Dr. Marigowda Rd (from north)',
+  'JNC-BLR-003->JNC-BLR-004': 'Bannerghatta Rd (from north)',
+  // Bypass detour links:
+  'JNC-BLR-008->JNC-BLR-009': 'Tumkur Rd NH48 (from north)',
+  'JNC-BLR-009->JNC-BLR-010': 'CV Raman Rd (from west)',
+  'JNC-BLR-008->JNC-BLR-006': 'Old Madras Rd (from east)',
+  'JNC-BLR-006->JNC-BLR-007': 'ORR (from north)',
+  'JNC-BLR-007->JNC-BLR-005': 'ORR (from north)',
+  'JNC-BLR-005->JNC-BLR-001': 'ORR (from north)',
+  'JNC-BLR-001->JNC-BLR-004': 'ORR (from east)',
+  'JNC-BLR-001->JNC-BLR-003': 'Hosur Rd (from south)',
+  'JNC-BLR-002->JNC-BLR-003': 'Hosur Rd (from east)',
+};
+
+export function getIncomingApproachRoad(fromId, toId) {
+  if (!fromId) {
+    if (toId === 'JNC-BLR-008') return 'Bellary Rd (from north)';
+    return 'Main Approach Corridor';
+  }
+  const key = `${fromId}->${toId}`;
+  return CORRIDOR_APPROACH_MAP[key] || 'Main Approach Corridor';
+}
+
+// Find route with live congestion / gridlock avoidance
+export function getCongestionAwareRoute(startId, endId, { avoidJams = true, jammedJunctionIds = [] } = {}) {
   if (startId === endId) return [startId];
   if (!JUNCTION_GRAPH[startId] || !JUNCTION_GRAPH[endId]) return null;
 
+  const jammedSet = new Set(jammedJunctionIds);
   const distances = {};
   const previous = {};
   const unvisited = new Set(Object.keys(JUNCTION_GRAPH));
@@ -125,7 +154,9 @@ export function getShortestRoute(startId, endId) {
         nbrCoords.latitude,
         nbrCoords.longitude
       );
-      const alt = distances[current] + dist;
+      // Penalize severely jammed or blocked nodes when avoidJams is requested (+25 km equivalent delay)
+      const penalty = avoidJams && jammedSet.has(neighbor) && neighbor !== endId ? 25.0 : 0;
+      const alt = distances[current] + dist + penalty;
       if (alt < distances[neighbor]) {
         distances[neighbor] = alt;
         previous[neighbor] = current;
@@ -144,6 +175,11 @@ export function getShortestRoute(startId, endId) {
   }
 
   return path;
+}
+
+// Find shortest route between two junctions using Dijkstra with distance edge weights
+export function getShortestRoute(startId, endId) {
+  return getCongestionAwareRoute(startId, endId, { avoidJams: false });
 }
 
 // Format graph for client /api/junctions/graph

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { MapPin, Navigation, Car, AlertTriangle, ShieldCheck, Activity, Sparkles, Layers, Eye, RefreshCw, Sun, Moon, Play, Square, Siren } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { CitizenReportModal } from './CitizenReportModal';
 import L from 'leaflet';
@@ -306,7 +307,16 @@ const ARTERIAL_CORRIDORS = [
 ];
 
 export function FleetMapView({ devices = [] }) {
-  const { latestByDevice, activeCorridorTrip, corridorGiveway, preemptedJunctions, joinRoom, leaveRoom } = useSocket();
+  const { user } = useAuth();
+  const {
+    latestByDevice,
+    activeCorridorTrip,
+    corridorGiveway,
+    corridorOfficerAlert,
+    preemptedJunctions,
+    joinRoom,
+    leaveRoom,
+  } = useSocket();
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const tileLayerRef = useRef(null);
@@ -324,6 +334,7 @@ export function FleetMapView({ devices = [] }) {
   const [colorMode, setColorMode] = useState('current'); // 'current' | 'deviation' (Section 5.14)
   const [cityDeviations, setCityDeviations] = useState({});
   const [isStartingCorridor, setIsStartingCorridor] = useState(false);
+  const [avoidJams, setAvoidJams] = useState(true);
   const [showCitizenReport, setShowCitizenReport] = useState(false);
 
   // Section 5.14: Fetch city baseline deviations when deviation mode is active
@@ -376,7 +387,16 @@ export function FleetMapView({ devices = [] }) {
     const speed = m.avgSpeedKmph || junc.defaultSpeed || 18;
     const status = live?.status || (queue > 140 ? 'gridlock' : queue > 80 ? 'congested' : junc.defaultStatus || 'healthy');
     const isPreempted = preemptedJunctions?.has(junc.deviceId || junc.junctionId) || m.adaptiveSignalMode === 'emergency-corridor';
-    const approaches = live?.data?.approaches || junc.approaches || junc.baseApproaches || [];
+    let approaches = live?.data?.approaches || junc.approaches || junc.baseApproaches || [];
+    
+    // When preempted for emergency green wave: incoming corridor approach locked green, cross traffic locked red
+    if (isPreempted && approaches.length > 0) {
+      approaches = approaches.map((app, idx) => ({
+        ...app,
+        signal: idx === 0 ? 'green' : 'red',
+        isCorridorLocked: true,
+      }));
+    }
     const vehicleMix = live?.data?.vehicleMix || junc.vehicleMix || { twoWheeler: 45, car: 35, bus: 14, truck: 6 };
 
     return { loc, queue, speed, status, isPreempted, approaches, vehicleMix };
@@ -699,7 +719,8 @@ export function FleetMapView({ devices = [] }) {
         vehicleId: 'AMB-BLR-01',
         startJunctionId: 'JNC-BLR-008', // Hebbal Flyover
         destinationJunctionId: 'JNC-BLR-004', // Jayadeva Hospital
-        durationSeconds: 70,
+        durationSeconds: 60, // Sped up (~1 min) for live hackathon demo
+        avoidJams: Boolean(avoidJams),
       });
     } catch (err) {
       alert(`Could not start corridor: ${err.message}`);
@@ -747,15 +768,29 @@ export function FleetMapView({ devices = [] }) {
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {/* Section 5.2: Demo Centrepiece Dispatch Ambulance Corridor Button */}
           {!activeCorridorTrip ? (
-            <button
-              onClick={handleDispatchAmbulance}
-              disabled={isStartingCorridor}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-mono font-bold transition-all bg-blue-600/30 border-blue-500/60 text-blue-200 hover:bg-blue-600/40 shadow-lg shadow-blue-500/20 animate-pulse"
-              title="Launch Hackathon Demo Centrepiece: Hebbal to Jayadeva Green Corridor"
-            >
-              <Siren className="w-4 h-4 text-blue-400" />
-              <span>{isStartingCorridor ? 'Dispatching...' : '🚑 Send Ambulance (Hebbal ➔ Jayadeva)'}</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={handleDispatchAmbulance}
+                disabled={isStartingCorridor}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-mono font-bold transition-all bg-blue-600/30 border-blue-500/60 text-blue-200 hover:bg-blue-600/40 shadow-lg shadow-blue-500/20 animate-pulse"
+                title="Launch Hackathon Demo Centrepiece: Hebbal to Jayadeva Green Corridor"
+              >
+                <Siren className="w-4 h-4 text-blue-400" />
+                <span>{isStartingCorridor ? 'Dispatching...' : '🚑 Send Ambulance (Hebbal ➔ Jayadeva)'}</span>
+              </button>
+              <label
+                className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-300 cursor-pointer hover:border-slate-700"
+                title="Calculate congestion-aware bypass route avoiding jammed junctions"
+              >
+                <input
+                  type="checkbox"
+                  checked={avoidJams}
+                  onChange={(e) => setAvoidJams(e.target.checked)}
+                  className="rounded text-blue-500 focus:ring-0 bg-slate-800 border-slate-700"
+                />
+                <span>Avoid Jams</span>
+              </label>
+            </div>
           ) : (
             <button
               onClick={handleCancelAmbulance}
@@ -826,17 +861,106 @@ export function FleetMapView({ devices = [] }) {
         </div>
       </div>
 
-      {/* Section 5.2: Give-Way Alert Banner for drivers/viewers */}
-      {corridorGiveway && (
-        <div className="rounded-xl border border-blue-500/60 bg-blue-950/60 p-3 flex items-center justify-between text-xs font-mono text-blue-200 shadow-xl animate-bounce">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🚨</span>
-            <span className="font-bold text-white uppercase tracking-wider">EMERGENCY GIVE WAY NOTICE:</span>
-            <span>{corridorGiveway.message}</span>
+      {/* Role View: Ambulance Driver HUD */}
+      {user?.role === 'ambulance' && (
+        <div className="rounded-2xl border border-blue-500/50 bg-[#0B1528] p-4 text-xs font-mono shadow-2xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-blue-900/50">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/40 flex items-center justify-center text-xl shadow-lg">
+                🚑
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold text-white text-sm">AMBULANCE NAVIGATION HUD</span>
+                  <span className="px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-300 border border-blue-400/40 font-bold text-[10px]">
+                    {user.vehicleId || 'AMB-BLR-01'}
+                  </span>
+                  {activeCorridorTrip?.isDynamicRerouted && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold">
+                      🧭 CONGESTION BYPASS ACTIVE
+                    </span>
+                  )}
+                </div>
+                <p className="text-slate-300 text-xs mt-0.5">
+                  Route: <strong className="text-white">Hebbal (JNC-BLR-008) ➔ Jayadeva Hospital (JNC-BLR-004)</strong>
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 text-right">
+              <div>
+                <span className="block text-[10px] text-slate-400 uppercase font-bold">Progress</span>
+                <span className="text-base font-extrabold text-blue-300">
+                  {activeCorridorTrip ? `${activeCorridorTrip.progressPct || 0}%` : 'STANDBY'}
+                </span>
+              </div>
+              <div>
+                <span className="block text-[10px] text-slate-400 uppercase font-bold">Signals Ahead</span>
+                <span className="text-base font-extrabold text-emerald-400">
+                  {activeCorridorTrip ? '🟢 GREEN WAVE LOCKED' : 'STANDBY'}
+                </span>
+              </div>
+            </div>
           </div>
-          <span className="px-2 py-0.5 rounded bg-blue-500/30 border border-blue-400/50 text-blue-200 font-bold">
-            ETA ~{corridorGiveway.etaToNextSec || 15}s
-          </span>
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+            <div className="flex items-center gap-1.5 text-blue-200">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Automated Signal Flush: Signals turn green ahead to drain queues. Independent of driver cooperation.</span>
+            </div>
+            {activeCorridorTrip?.rerouteReason && (
+              <span className="text-amber-300 font-semibold">{activeCorridorTrip.rerouteReason}</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Role View: Traffic Police Officer Tactical Banner */}
+      {user?.role === 'officer' && (
+        <div className="rounded-2xl border border-amber-500/50 bg-[#1A1207] p-4 text-xs font-mono shadow-2xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-xl shadow-lg">
+                👮
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold text-amber-200 text-sm">BTP OFFICER TACTICAL ALERT</span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300 border border-amber-400/40 font-bold text-[10px] animate-pulse">
+                    EMERGENCY CORRIDOR DISPATCHED
+                  </span>
+                </div>
+                <p className="text-amber-100/90 text-xs mt-1">
+                  {activeCorridorTrip
+                    ? `Emergency responder approaching corridor. Signals locked GREEN on incoming road to drain queue.`
+                    : `Post: ${user.assignedJunctionId || user.assignedZoneId || 'Bangalore City'}. Preemption triggers automatically when emergency responder approaches.`}
+                </p>
+              </div>
+            </div>
+            <div className="px-3 py-1.5 rounded-lg bg-amber-950/80 border border-amber-500/30 text-amber-200 text-right">
+              <span className="block text-[10px] text-amber-400 font-bold uppercase">Officer Action</span>
+              <span className="font-bold text-white">Hold cross-traffic & maintain clear lane</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Public Citizen Traffic Advisory Notice (Demoted from headline to clean notice) */}
+      {corridorGiveway && user?.role !== 'ambulance' && user?.role !== 'officer' && (
+        <div className="rounded-xl border border-blue-500/40 bg-[#0B1528]/95 backdrop-blur-md p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono text-slate-300 shadow-xl">
+          <div className="flex items-center gap-2.5">
+            <span className="text-base text-blue-400">ℹ️</span>
+            <div>
+              <span className="font-bold text-white uppercase tracking-wider text-[11px] mr-2">Public Traffic Advisory:</span>
+              <span className="text-slate-200">{corridorGiveway.message}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <span className="text-[10px] text-slate-400 font-sans italic hidden md:inline">
+              Queue clears via automated green signal phase
+            </span>
+            <span className="px-2.5 py-0.5 rounded-md bg-blue-500/20 border border-blue-400/40 text-blue-300 font-bold">
+              ETA ~{corridorGiveway.etaToNextSec || 12}s
+            </span>
+          </div>
         </div>
       )}
 
@@ -968,6 +1092,16 @@ export function FleetMapView({ devices = [] }) {
                     <span className="text-slate-300 truncate max-w-[120px]">
                       {app.road.split('(')[0]}
                     </span>
+                    {app.isCorridorLocked && app.signal === 'green' && (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-bold border border-emerald-500/30">
+                        GREEN WAVE
+                      </span>
+                    )}
+                    {app.isCorridorLocked && app.signal === 'red' && (
+                      <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 text-[9px] font-bold border border-rose-500/30">
+                        HOLD RED
+                      </span>
+                    )}
                     <span className={`font-bold ${app.queueLengthM > 120 ? 'text-rose-400' : app.queueLengthM > 80 ? 'text-amber-400' : 'text-slate-300'}`}>
                       {app.queueLengthM}m
                     </span>

@@ -40,6 +40,7 @@ export function SocketProvider({ children }) {
   // Section 5.2: Live Ambulance Green Corridor State
   const [activeCorridorTrip, setActiveCorridorTrip] = useState(null);
   const [corridorGiveway, setCorridorGiveway] = useState(null);
+  const [corridorOfficerAlert, setCorridorOfficerAlert] = useState(null);
   const [preemptedJunctions, setPreemptedJunctions] = useState(new Set());
 
   // Section 5.13: Simulation Clock State
@@ -160,9 +161,16 @@ export function SocketProvider({ children }) {
       setTimeout(() => setCorridorGiveway(null), 8000);
     });
 
+    socket.on('corridor:officer_alert', (notice) => {
+      setCorridorOfficerAlert(notice);
+      setTimeout(() => setCorridorOfficerAlert(null), 10000);
+    });
+
     socket.on('corridor:ended', () => {
       setActiveCorridorTrip(null);
       setPreemptedJunctions(new Set());
+      setCorridorGiveway(null);
+      setCorridorOfficerAlert(null);
     });
 
     // 6. Simulation Clock Updates (Section 5.13)
@@ -317,6 +325,7 @@ export function SocketProvider({ children }) {
         unsubscribeDevice,
         activeCorridorTrip,
         corridorGiveway,
+        corridorOfficerAlert,
         preemptedJunctions,
         simClock,
       }}

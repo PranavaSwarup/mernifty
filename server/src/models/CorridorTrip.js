@@ -14,11 +14,14 @@ const CorridorTripSchema = new mongoose.Schema(
     junctionEvents: [
       {
         junctionId: { type: String },
+        incomingRoad: { type: String },
         preemptedAt: { type: Date },
         clearedAt: { type: Date },
       },
     ],
     positions: [{ type: mongoose.Schema.Types.Mixed }],
+    isDynamicRerouted: { type: Boolean, default: false },
+    rerouteReason: { type: String },
   },
   { timestamps: true }
 );
