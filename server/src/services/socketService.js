@@ -41,8 +41,9 @@ class SocketService {
     });
 
     this.io.on('connection', (socket) => {
-      // By default, join global room
+      // By default, join global, city (counterfactual aggregate), and alerts rooms
       socket.join('global');
+      socket.join('city');
       socket.join('alerts');
       metricsService.setConnectedSockets(this.io.engine.clientsCount);
 
@@ -50,6 +51,15 @@ class SocketService {
 
       // Send initial metrics snapshot
       socket.emit('metrics:snapshot', metricsService.getSnapshot());
+
+      socket.on('subscribe:city', () => {
+        socket.join('city');
+        socket.emit('subscribed', { room: 'city' });
+      });
+
+      socket.on('unsubscribe:city', () => {
+        socket.leave('city');
+      });
 
       // Room subscription handlers for Zones / Categories
       socket.on('subscribe:zone', (zoneId) => {
@@ -169,6 +179,11 @@ class SocketService {
       this.io.to(`device:${juncId}`).emit('device:status_change', device);
       this.io.to(`junction:${juncId}`).emit('device:status_change', device);
     }
+  }
+
+  broadcastCounterfactual(comparison) {
+    if (!this.io) return;
+    this.io.to('city').emit('cf:update', comparison);
   }
 
   flushBroadcasts() {

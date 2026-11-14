@@ -53,6 +53,8 @@ export function normalizeTrafficEvent(raw) {
     avgSpeedKmph: data.avgSpeedKmph || avgSpeed,
     congestionScore: data.congestionScore || congestionScore,
     cameraProcessingLatencyMs: data.cameraProcessingLatencyMs || 12,
+    ...(data.control ? { control: data.control } : {}),
+    ...(data.kpi ? { kpi: data.kpi } : {}),
   };
 
   const metrics = {
@@ -87,6 +89,7 @@ export function normalizeTrafficEvent(raw) {
     category: zoneId,
     timestamp,
     sequence,
+    source: raw.source || 'external',
     data: enrichedData,
     metrics,
     status,

@@ -85,6 +85,7 @@ class IngestionBuffer {
             category: item.category || item.zoneId,
             timestamp: new Date(item.timestamp),
             sequence: item.sequence || 0,
+            source: item.source || 'external',
             metrics: item.metrics || {},
             data: item.data || {},
             status: item.status || 'healthy',

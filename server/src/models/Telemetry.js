@@ -37,6 +37,10 @@ const telemetrySchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    source: {
+      type: String,
+      default: 'external',
+    },
     metrics: {
       type: mongoose.Schema.Types.Mixed,
       required: true,

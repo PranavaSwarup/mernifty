@@ -14,6 +14,7 @@
  */
 
 import { getTodPeriod } from './demand.js';
+import { loadStudyPolicy, recommendControllerForRegime } from './studyPolicy.js';
 
 export const INTERGREEN_SEC = 4; // 3s amber + 1s all-red clearance
 export const MIN_GREEN_SEC = 10;
@@ -241,6 +242,20 @@ class RealisedTimingTracker {
       phaseSwitches: totalEpisodes,
     };
   }
+
+  clone() {
+    const copy = new RealisedTimingTracker(this.numPhases, this.intergreenSec, this.windowSec);
+    copy.slices = this.slices.map((s) => ({ ...s }));
+    copy.episodes = this.episodes.map((e) => ({ ...e }));
+    copy.cycleLengths = this.cycleLengths.map((c) => ({ ...c }));
+    copy._activeEpisodeStart = this._activeEpisodeStart;
+    copy._activePhase = this._activePhase;
+    copy._activeInIntergreen = this._activeInIntergreen;
+    copy._lastCycleStartSec = this._lastCycleStartSec;
+    copy._sawNonZeroPhase = this._sawNonZeroPhase;
+    copy._lastNowSec = this._lastNowSec;
+    return copy;
+  }
 }
 
 /**
@@ -398,6 +413,29 @@ export class FixedTimeController {
       intergreenRemainingSec: Math.max(0, Math.round(this.intergreenRemainingSec)),
     };
   }
+
+  clone() {
+    const copy = Object.create(FixedTimeController.prototype);
+    copy.mode = this.mode;
+    copy.name = this.name;
+    copy.label = this.label;
+    copy.intergreenSec = this.intergreenSec;
+    copy.startTimeMs = this.startTimeMs;
+    copy.numPhases = this.numPhases;
+    copy.naiveSplits = [...this.naiveSplits];
+    copy.todPlans = this.todPlans;
+    copy.activePeriodId = this.activePeriodId;
+    copy.splits = [...this.splits];
+    copy.cycleSec = this.cycleSec;
+    copy.phaseIndex = this.phaseIndex;
+    copy.greenRemainingSec = this.greenRemainingSec;
+    copy.inIntergreen = this.inIntergreen;
+    copy.intergreenRemainingSec = this.intergreenRemainingSec;
+    copy.pendingPhaseIndex = this.pendingPhaseIndex;
+    copy._lastNowSec = this._lastNowSec;
+    copy._tracker = this._tracker.clone();
+    return copy;
+  }
 }
 
 /**
@@ -551,6 +589,36 @@ export class WebsterController {
       inIntergreen: this.inIntergreen,
       intergreenRemainingSec: Math.max(0, Math.round(this.intergreenRemainingSec)),
     };
+  }
+
+  clone() {
+    const copy = Object.create(WebsterController.prototype);
+    copy.name = this.name;
+    copy.intergreenSec = this.intergreenSec;
+    copy.minCycleSec = this.minCycleSec;
+    copy.maxCycleSec = this.maxCycleSec;
+    copy.minGreenSec = this.minGreenSec;
+    copy.maxGreenSec = this.maxGreenSec;
+    copy.s0 = this.s0;
+    copy.ewmaTimeConstantSec = this.ewmaTimeConstantSec;
+    copy.numPhases = this.numPhases;
+    copy.saturationFlows = [...this.saturationFlows];
+    copy.ewmaFlows = [...this.ewmaFlows];
+    copy.splits = [...this.splits];
+    copy.cycleSec = this.cycleSec;
+    copy.lastPlan = {
+      ...this.lastPlan,
+      splits: [...this.lastPlan.splits],
+      flowRatios: [...this.lastPlan.flowRatios],
+    };
+    copy.phaseIndex = this.phaseIndex;
+    copy.greenRemainingSec = this.greenRemainingSec;
+    copy.inIntergreen = this.inIntergreen;
+    copy.intergreenRemainingSec = this.intergreenRemainingSec;
+    copy.pendingPhaseIndex = this.pendingPhaseIndex;
+    copy._lastNowSec = this._lastNowSec;
+    copy._tracker = this._tracker.clone();
+    return copy;
   }
 }
 
@@ -810,10 +878,292 @@ export class MaxPressureController {
       pressures,
     };
   }
+
+  clone() {
+    const copy = Object.create(MaxPressureController.prototype);
+    copy.capacityAware = this.capacityAware;
+    copy.name = this.name;
+    copy.intergreenSec = this.intergreenSec;
+    copy.minGreenSec = this.minGreenSec;
+    copy.maxGreenSec = this.maxGreenSec;
+    copy.maxRedSec = this.maxRedSec;
+    copy.evalIntervalSec = this.evalIntervalSec;
+    copy.eta = this.eta;
+    copy.theta = this.theta;
+    copy.s0 = this.s0;
+    copy.numPhases = this.numPhases;
+    copy.saturationFlows = [...this.saturationFlows];
+    copy.storageCaps = [...this.storageCaps];
+    copy.phaseIndex = this.phaseIndex;
+    copy.greenElapsedSec = this.greenElapsedSec;
+    copy.nextEvalAtSec = this.nextEvalAtSec;
+    copy.inIntergreen = this.inIntergreen;
+    copy.intergreenRemainingSec = this.intergreenRemainingSec;
+    copy.pendingPhaseIndex = this.pendingPhaseIndex;
+    copy.redElapsedSec = [...this.redElapsedSec];
+    copy.lastPressures = [...this.lastPressures];
+    copy._lastNowSec = this._lastNowSec;
+    copy._tracker = this._tracker.clone();
+    return copy;
+  }
+}
+
+/**
+ * Evidence-Driven Supervisory Auto Controller (`auto`)
+ *
+ * Monitors live EWMA critical flow ratio (Y = sum(q_k / S_k)), downstream spillback,
+ * and active lane incidents every cycle wrap, selecting among `fixed-tod`, `webster`,
+ * and `max-pressure-ca` using thresholds derived from the committed study JSON.
+ * Enforces >= 2 full cycles hysteresis before switching modes and logs every transition
+ * with its study-backed justification.
+ */
+export class AutoSupervisoryController {
+  constructor(junctionConfig, options = {}) {
+    this.name = 'auto';
+    this.intergreenSec = options.intergreenSec ?? INTERGREEN_SEC;
+    this.ewmaTimeConstantSec = options.ewmaTimeConstantSec ?? 45;
+    this.minHoldCycles = Math.max(2, options.minHoldCycles ?? 2);
+    this.s0 = options.s0 ?? SATURATION_PER_LANE_VEH_PER_SEC;
+    this.policy = options.studyPolicy || loadStudyPolicy();
+
+    const approaches = junctionConfig?.approaches || junctionConfig?.baseApproaches || [];
+    this.numPhases = Math.max(1, approaches.length);
+    this.saturationFlows = approaches.map(
+      (a) => a.saturationFlowPerSec ?? (a.lanes || 2) * this.s0
+    );
+    this.storageCaps = approaches.map((a) => a.storageCapVeh ?? 150);
+    this.ewmaFlows = approaches.map((a) =>
+      options.zeroInitFlows ? 0 : (a.baseDemandPerSec ?? 0)
+    );
+
+    this.delegates = {
+      'fixed-tod': new FixedTimeController(junctionConfig, { ...options, mode: 'tod' }),
+      webster: new WebsterController(junctionConfig, options),
+      'max-pressure-ca': new MaxPressureController(junctionConfig, { ...options, capacityAware: true }),
+    };
+
+    const initY = this._computeFlowRatioY();
+    const initRec = recommendControllerForRegime({ flowRatioY: initY }, this.policy);
+    this.activeMode = options.initialMode || initRec.recommendedController;
+    this.lastFlowRatioY = initY;
+    this.lastReason = initRec.reason;
+    this.cyclesSinceSwitch = 0;
+    this._sawNonZeroPhaseInCycle = false;
+    this._prevPhase = null;
+    this._prevInIntergreen = false;
+    this._lastNowSec = null;
+    this._tracker = new RealisedTimingTracker(this.numPhases, this.intergreenSec);
+    this.switchLog = [
+      {
+        atSec: 0,
+        from: null,
+        to: this.activeMode,
+        flowRatioY: Number(initY.toFixed(3)),
+        reason: initRec.reason,
+        studyCell: initRec.studyCell,
+      },
+    ];
+  }
+
+  _computeFlowRatioY() {
+    let sumY = 0;
+    for (let i = 0; i < this.numPhases; i++) {
+      const S = this.saturationFlows[i] || this.s0 * 2;
+      sumY += Math.max(0, this.ewmaFlows[i]) / S;
+    }
+    return sumY;
+  }
+
+  _updateEwma(approaches, dt) {
+    if (!Array.isArray(approaches) || dt <= 0) return;
+    const alpha = 1 - Math.exp(-dt / this.ewmaTimeConstantSec);
+    for (let i = 0; i < this.numPhases; i++) {
+      const app = approaches[i];
+      if (!app) continue;
+      let instRate = null;
+      if (typeof app.arrivalRateVehPerSec === 'number') {
+        instRate = app.arrivalRateVehPerSec;
+      } else if (typeof app.arrivalsThisStep === 'number') {
+        instRate = app.arrivalsThisStep / dt;
+      }
+      if (instRate !== null) {
+        this.ewmaFlows[i] = alpha * instRate + (1 - alpha) * this.ewmaFlows[i];
+      }
+    }
+  }
+
+  _handoffState(fromCtrl, toCtrl, nowSec) {
+    toCtrl.phaseIndex = fromCtrl.phaseIndex;
+    toCtrl.inIntergreen = fromCtrl.inIntergreen;
+    toCtrl.intergreenRemainingSec = fromCtrl.intergreenRemainingSec;
+    toCtrl.pendingPhaseIndex = fromCtrl.pendingPhaseIndex;
+    toCtrl._lastNowSec = nowSec;
+    if (typeof toCtrl.greenRemainingSec === 'number' && Array.isArray(toCtrl.splits)) {
+      toCtrl.greenRemainingSec = toCtrl.splits[toCtrl.phaseIndex] ?? 25;
+    }
+    if (typeof toCtrl.greenElapsedSec === 'number') {
+      toCtrl.greenElapsedSec = 0;
+      toCtrl.nextEvalAtSec = toCtrl.minGreenSec;
+    }
+    if (Array.isArray(toCtrl.ewmaFlows)) {
+      toCtrl.ewmaFlows = [...this.ewmaFlows];
+      if (typeof toCtrl._computePlanFromEwma === 'function') {
+        const plan = toCtrl._computePlanFromEwma();
+        toCtrl.splits = plan.splits;
+        toCtrl.cycleSec = plan.cycleSec;
+        toCtrl.lastPlan = plan;
+        toCtrl.greenRemainingSec = toCtrl.splits[toCtrl.phaseIndex] ?? 25;
+      }
+    }
+  }
+
+  describe() {
+    const nowSec = this._lastNowSec ?? 0;
+    const activeDelegate = this.delegates[this.activeMode];
+    const delDesc = activeDelegate.describe();
+    return {
+      name: this.name,
+      label: `Auto Supervisory (${this.activeMode})`,
+      activeController: this.activeMode,
+      minHoldCycles: this.minHoldCycles,
+      cyclesSinceSwitch: this.cyclesSinceSwitch,
+      flowRatioY: Number(this.lastFlowRatioY.toFixed(3)),
+      lastReason: this.lastReason,
+      recentSwitches: this.switchLog.slice(-10),
+      cycleSec: delDesc.cycleSec,
+      splits: delDesc.splits,
+      planned: delDesc.planned,
+      realised: this._tracker.getSummary(nowSec),
+      studyThresholds: this.policy.thresholds,
+      policySource: this.policy.sourceFile || 'default-fallback',
+    };
+  }
+
+  decide(junctionState = {}, nowSec = 0) {
+    const dt = this._lastNowSec === null ? 0 : Math.max(0, nowSec - this._lastNowSec);
+    this._lastNowSec = nowSec;
+
+    const approaches = junctionState.approaches || [];
+    if (dt > 0) {
+      this._updateEwma(approaches, dt);
+    }
+
+    const liveY = this._computeFlowRatioY();
+    this.lastFlowRatioY = liveY;
+
+    const hasActiveIncident = approaches.some((a) => (a?.capacityFactor ?? 1) < 0.99);
+    const hasSpillback = approaches.some((a, i) => {
+      const qMax = Math.max(1, a?.storageCapVeh ?? this.storageCaps[i] ?? 150);
+      const occ = (a?.queueVeh ?? 0) / qMax;
+      return (a?.downstreamOccupancyPenalty ?? 0) >= 0.65 || occ >= 0.85;
+    });
+
+    // Sync background fixed-tod TOD table if needed and delegate control step
+    const activeCtrl = this.delegates[this.activeMode];
+    const decision = activeCtrl.decide(junctionState, nowSec);
+
+    // Track full cycles for >= 2-cycle hysteresis
+    if (!decision.inIntergreen && decision.phaseIndex !== 0) {
+      this._sawNonZeroPhaseInCycle = true;
+    }
+    const wrappedToPhaseZero =
+      !decision.inIntergreen &&
+      decision.phaseIndex === 0 &&
+      (this._prevInIntergreen || (this._prevPhase !== null && this._prevPhase !== 0)) &&
+      this._sawNonZeroPhaseInCycle;
+
+    if (wrappedToPhaseZero) {
+      this._sawNonZeroPhaseInCycle = false;
+      this.cyclesSinceSwitch += 1;
+
+      if (this.cyclesSinceSwitch >= this.minHoldCycles) {
+        const rec = recommendControllerForRegime(
+          {
+            flowRatioY: liveY,
+            hasActiveIncident,
+            hasSpillback,
+            hasEmergency:
+              junctionState.preemptApproachIdx !== null &&
+              junctionState.preemptApproachIdx !== undefined,
+          },
+          this.policy
+        );
+        this.lastReason = rec.reason;
+
+        if (rec.recommendedController !== this.activeMode && this.delegates[rec.recommendedController]) {
+          const prevMode = this.activeMode;
+          const nextCtrl = this.delegates[rec.recommendedController];
+          this._handoffState(activeCtrl, nextCtrl, nowSec);
+          this.activeMode = rec.recommendedController;
+          this.cyclesSinceSwitch = 0;
+          this.switchLog.push({
+            atSec: Math.round(nowSec),
+            from: prevMode,
+            to: this.activeMode,
+            flowRatioY: Number(liveY.toFixed(3)),
+            hasActiveIncident,
+            hasSpillback,
+            reason: rec.reason,
+            studyCell: rec.studyCell,
+          });
+          if (this.switchLog.length > 30) {
+            this.switchLog.shift();
+          }
+        }
+      }
+    }
+
+    this._prevPhase = decision.phaseIndex;
+    this._prevInIntergreen = decision.inIntergreen;
+
+    this._tracker.record(nowSec, dt, decision.phaseIndex, decision.inIntergreen);
+    const realised = this._tracker.getSummary(nowSec);
+
+    return {
+      ...decision,
+      controller: 'auto',
+      activeController: this.activeMode,
+      flowRatioY: Number(liveY.toFixed(3)),
+      reason: this.lastReason,
+      realised,
+    };
+  }
+
+  clone() {
+    const copy = Object.create(AutoSupervisoryController.prototype);
+    copy.name = this.name;
+    copy.intergreenSec = this.intergreenSec;
+    copy.ewmaTimeConstantSec = this.ewmaTimeConstantSec;
+    copy.minHoldCycles = this.minHoldCycles;
+    copy.s0 = this.s0;
+    copy.policy = this.policy;
+    copy.numPhases = this.numPhases;
+    copy.saturationFlows = [...this.saturationFlows];
+    copy.storageCaps = [...this.storageCaps];
+    copy.ewmaFlows = [...this.ewmaFlows];
+    copy.delegates = {
+      'fixed-tod': this.delegates['fixed-tod'].clone(),
+      webster: this.delegates.webster.clone(),
+      'max-pressure-ca': this.delegates['max-pressure-ca'].clone(),
+    };
+    copy.activeMode = this.activeMode;
+    copy.lastFlowRatioY = this.lastFlowRatioY;
+    copy.lastReason = this.lastReason;
+    copy.cyclesSinceSwitch = this.cyclesSinceSwitch;
+    copy._sawNonZeroPhaseInCycle = this._sawNonZeroPhaseInCycle;
+    copy._prevPhase = this._prevPhase;
+    copy._prevInIntergreen = this._prevInIntergreen;
+    copy._lastNowSec = this._lastNowSec;
+    copy._tracker = this._tracker.clone();
+    copy.switchLog = this.switchLog.map((s) => ({ ...s }));
+    return copy;
+  }
 }
 
 export function createController(type, junctionConfig, options = {}) {
   switch (type) {
+    case 'auto':
+      return new AutoSupervisoryController(junctionConfig, options);
     case 'webster':
       return new WebsterController(junctionConfig, options);
     case 'max-pressure':

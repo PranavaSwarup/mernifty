@@ -11,9 +11,9 @@ router.get('/status', (req, res) => {
   });
 });
 
-// Start simulator
+// Start simulator (`rate` is total telemetry events/sec across all 12 BLR junctions = emitHz * 12)
 router.post('/start', (req, res) => {
-  const { rate = 12 } = req.body;
+  const { rate = 24 } = req.body;
   simulatorService.start(parseInt(rate, 10));
   res.json({
     success: true,
@@ -32,7 +32,7 @@ router.post('/stop', (req, res) => {
   });
 });
 
-// Adjust rate
+// Adjust emission rate (`rate` = events/sec across 12 junctions = emitHz * 12)
 router.post('/rate', (req, res) => {
   const { rate } = req.body;
   if (!rate || isNaN(rate)) {
@@ -46,10 +46,11 @@ router.post('/rate', (req, res) => {
   });
 });
 
-// Inject chaos / incident
+// Inject chaos / physical incident into live & baseline twins (CRN)
 router.post('/chaos', (req, res) => {
   const { deviceId, junctionId, metric, multiplier = 2.5, durationSec = 20, flags = {} } = req.body;
-  const targetId = junctionId || deviceId;
+  const isMonsoon = metric === 'monsoon' || Boolean(flags.monsoon);
+  const targetId = junctionId || deviceId || (isMonsoon ? 'JNC-BLR-001' : null);
   if (!targetId || !metric) {
     return res.status(400).json({ success: false, error: 'junctionId/deviceId and metric are required for chaos injection' });
   }

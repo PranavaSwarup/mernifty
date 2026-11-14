@@ -100,6 +100,63 @@ test('4. Team Traffic JSON Normalization Verification', (t) => {
   assert.ok(normalized.status === 'gridlock' || normalized.status === 'congested', 'Status should reflect congestion');
 });
 
+test('5. Anomaly Engine uses null zScore for discrete event alerts while preserving numeric zScore for queue spikes', () => {
+  const jId = 'JNC-BLR-098';
+  for (let i = 0; i < 12; i++) {
+    anomalyEngine.evaluate({
+      junctionId: jId,
+      deviceId: jId,
+      junctionName: 'Event Test Junction',
+      deviceName: 'Event Test Junction',
+      category: 'east-bangalore',
+      timestamp: new Date().toISOString(),
+      metrics: { maxQueueLengthM: 42 + (i % 3), avgSpeedKmph: 24 },
+    });
+  }
+
+  const stallAlert = anomalyEngine.evaluate({
+    junctionId: 'JNC-BLR-097',
+    deviceId: 'JNC-BLR-097',
+    junctionName: 'Stall Junction',
+    deviceName: 'Stall Junction',
+    category: 'south-bangalore',
+    timestamp: new Date().toISOString(),
+    metrics: { stalledVehicleDetected: true, maxQueueLengthM: 50, avgSpeedKmph: 20 },
+  });
+  assert.ok(stallAlert);
+  assert.strictEqual(stallAlert.metric, 'stalledVehicle');
+  assert.strictEqual(stallAlert.zScore, null, 'Discrete stalledVehicle event must NOT fabricate a numeric zScore');
+  assert.strictEqual(stallAlert.severity, 'critical');
+
+  const ambAlert = anomalyEngine.evaluate({
+    junctionId: 'JNC-BLR-096',
+    deviceId: 'JNC-BLR-096',
+    junctionName: 'Ambulance Junction',
+    deviceName: 'Ambulance Junction',
+    category: 'north-bangalore',
+    timestamp: new Date().toISOString(),
+    data: { emergencySeverity: 'high' },
+    metrics: { ambulanceDetected: true, maxQueueLengthM: 45, avgSpeedKmph: 22 },
+  });
+  assert.ok(ambAlert);
+  assert.strictEqual(ambAlert.metric, 'ambulancePreemption');
+  assert.strictEqual(ambAlert.zScore, null, 'Discrete ambulance event must NOT fabricate a numeric zScore');
+  assert.strictEqual(ambAlert.severity, 'high', 'Event severity should be derived from event payload');
+
+  const statisticalSpike = anomalyEngine.evaluate({
+    junctionId: jId,
+    deviceId: jId,
+    junctionName: 'Event Test Junction',
+    deviceName: 'Event Test Junction',
+    category: 'east-bangalore',
+    timestamp: new Date().toISOString(),
+    metrics: { maxQueueLengthM: 185, avgSpeedKmph: 24 },
+  });
+  assert.ok(statisticalSpike);
+  assert.strictEqual(typeof statisticalSpike.zScore, 'number');
+  assert.ok(statisticalSpike.zScore > 3, `Expected statistical queue spike zScore > 3, got ${statisticalSpike.zScore}`);
+});
+
 test.after(() => {
   setImmediate(() => process.exit(0));
 });

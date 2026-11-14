@@ -15,6 +15,8 @@ import alertRoutes from './routes/alertRoutes.js';
 import simulatorRoutes from './routes/simulatorRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import copilotRoutes from './routes/copilotRoutes.js';
+import simRoutes from './routes/simRoutes.js';
+import actionRoutes from './routes/actionRoutes.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -55,6 +57,8 @@ app.use('/api/alerts', alertRoutes);
 app.use('/api/simulator', simulatorRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/copilot', copilotRoutes);
+app.use('/api/sim', simRoutes);
+app.use('/api/actions', actionRoutes);
 
 // Fallback to client index.html for SPA routing
 app.get('*', (req, res) => {
@@ -98,9 +102,9 @@ async function startServer() {
       console.log(`📊 Health check: http://localhost:${config.port}/api/health`);
       console.log(`====================================================`);
 
-      // 5. Start background virtual device simulator
+      // 5. Start background virtual device simulator (default SIM_EMIT_HZ=2 Hz => 24 events/sec)
       if (config.simulatorEnabled) {
-        simulatorService.start(15); // 15 events/sec default
+        simulatorService.start();
       }
     });
   } catch (err) {

@@ -4,8 +4,10 @@ import {
   FixedTimeController,
   WebsterController,
   MaxPressureController,
+  AutoSupervisoryController,
   computeWebsterPlan,
 } from '../src/sim/controllers.js';
+import { loadStudyPolicy } from '../src/sim/studyPolicy.js';
 import { demandFactor } from '../src/sim/demand.js';
 import {
   buildNetwork,
@@ -15,6 +17,8 @@ import {
 } from '../src/sim/network.js';
 import { TrafficWorld, EMERGENCY_WEAVING_SPEED_KMPH } from '../src/sim/engine.js';
 import { CounterfactualPair } from '../src/sim/twin.js';
+import { simulatorService } from '../src/services/simulatorService.js';
+import { copilotService } from '../src/services/copilotService.js';
 
 // Evening peak timestamp in Bengaluru: 19:00 IST (13:30 UTC)
 const EVENING_PEAK_START = '2026-11-14T13:30:00.000Z';
@@ -609,4 +613,224 @@ test('12. R2 Measured realised timing: reports real rolling 300s green splits wi
       assert.strictEqual(desc.planned.splits.length, 4);
     }
   }
+});
+
+test('13. TrafficWorld.clone(): produces bit-for-bit identical 300-step future rollout with active disruptions', () => {
+  const world = new TrafficWorld({
+    seed: 20261114,
+    controllerFactory: 'auto',
+    startTime: EVENING_PEAK_START,
+  });
+
+  // Warm up 120s and inject storm, incident, surge, and diversion before cloning
+  for (let i = 0; i < 120; i++) world.step();
+  world.injectIncident('JNC-BLR-001', 0, { capacityFactor: 0.35, until: 600 });
+  world.setDemandSurge('JNC-BLR-005', 1.8, 600, 1);
+  world.applyDiversion({ junctionId: 'JNC-BLR-003', approachIdx: 1, reductionFraction: 0.2, until: 600 });
+  world.setGlobalWeather({ type: 'monsoon', capacityFactor: 0.7, speedFactor: 0.75, until: 500 });
+
+  const cloned = world.clone();
+  for (let i = 0; i < 300; i++) {
+    world.step();
+    cloned.step();
+  }
+
+  assert.deepStrictEqual(cloned.snapshot(), world.snapshot());
+});
+
+test('14. AutoSupervisoryController: loads study JSON, enforces >=2 cycle hysteresis, cites study under high Y', () => {
+  const policy = loadStudyPolicy();
+  assert.strictEqual(policy.loadedFromFile, true, 'Expected committed control-study JSON to load from benchmarks/results/');
+  assert.ok(policy.thresholds.heavyFlowRatioY >= 0.5 && policy.thresholds.heavyFlowRatioY <= 0.85);
+
+  const mockJunc = {
+    approaches: [
+      { lanes: 2, saturationFlowPerSec: 1.0, storageCapVeh: 120, baseDemandPerSec: 0.08 },
+      { lanes: 2, saturationFlowPerSec: 1.0, storageCapVeh: 120, baseDemandPerSec: 0.08 },
+      { lanes: 2, saturationFlowPerSec: 1.0, storageCapVeh: 120, baseDemandPerSec: 0.08 },
+      { lanes: 2, saturationFlowPerSec: 1.0, storageCapVeh: 120, baseDemandPerSec: 0.08 },
+    ],
+  };
+
+  const ctrl = new AutoSupervisoryController(mockJunc, {
+    startTimeMs: Date.parse('2026-11-14T08:00:00.000Z'), // midday start -> initially low Y ('max-pressure-ca')
+    minHoldCycles: 2,
+    ewmaTimeConstantSec: 20,
+  });
+  const initialMode = ctrl.describe().activeController;
+  assert.strictEqual(initialMode, 'max-pressure-ca');
+
+  // Drive heavy arrival flow (Y = 0.88 across 4 phases -> well above heavyFlowRatioY)
+  const heavyState = {
+    simTimeMs: Date.parse('2026-11-14T13:30:00.000Z'),
+    approaches: [
+      { queueVeh: 25, saturationFlowPerSec: 1.0, arrivalRateVehPerSec: 0.22, capacityFactor: 1, storageCapVeh: 120 },
+      { queueVeh: 20, saturationFlowPerSec: 1.0, arrivalRateVehPerSec: 0.22, capacityFactor: 1, storageCapVeh: 120 },
+      { queueVeh: 18, saturationFlowPerSec: 1.0, arrivalRateVehPerSec: 0.22, capacityFactor: 1, storageCapVeh: 120 },
+      { queueVeh: 15, saturationFlowPerSec: 1.0, arrivalRateVehPerSec: 0.22, capacityFactor: 1, storageCapVeh: 120 },
+    ],
+  };
+
+  // Observe cycle wraps and verify controller holds >= 2 full cycles before switching
+  let wrapCount = 0;
+  let switchWrapAt = null;
+  let prevPhase = 0;
+  let sawNonZero = false;
+  let prevInIg = false;
+  let clonedCopy = null;
+
+  for (let t = 0; t <= 420; t++) {
+    const d = ctrl.decide(heavyState, t);
+    if (!d.inIntergreen && d.phaseIndex !== 0) sawNonZero = true;
+    const wrapped = !d.inIntergreen && d.phaseIndex === 0 && (prevInIg || prevPhase !== 0) && sawNonZero;
+    if (wrapped) {
+      wrapCount += 1;
+      sawNonZero = false;
+      if (wrapCount === 1) {
+        assert.strictEqual(
+          d.activeController,
+          initialMode,
+          'Hysteresis failed: switched after only 1 cycle instead of holding >= 2 cycles'
+        );
+      }
+    }
+    if (switchWrapAt === null && d.activeController !== initialMode) {
+      switchWrapAt = wrapCount;
+    }
+    prevPhase = d.phaseIndex;
+    prevInIg = d.inIntergreen;
+
+    if (t === 50) clonedCopy = ctrl.clone();
+  }
+
+  const desc = ctrl.describe();
+  assert.ok(switchWrapAt !== null && switchWrapAt >= 2, `Expected switch at wrap >= 2, got ${switchWrapAt}`);
+  assert.ok(
+    desc.activeController === 'webster' || desc.activeController === 'fixed-tod',
+    `Expected study-optimal controller webster/fixed-tod under heavy Y>=0.65, got ${desc.activeController}`
+  );
+  assert.ok(desc.recentSwitches.length >= 2 && desc.lastReason.includes('study'), 'Expected switch reason citing study evidence');
+  assert.strictEqual(clonedCopy.name, 'auto');
+});
+
+test('15. Monsoon chaos & conservation-honest upstream diversion preserve conservation and shift flow', () => {
+  const dryWorld = new TrafficWorld({ seed: 777, controllerFactory: 'fixed-tod', startTime: EVENING_PEAK_START });
+  const monsoonWorld = new TrafficWorld({ seed: 777, controllerFactory: 'fixed-tod', startTime: EVENING_PEAK_START });
+
+  monsoonWorld.setGlobalWeather({ type: 'monsoon', capacityFactor: 0.7, speedFactor: 0.75, until: 400 });
+  for (let i = 0; i < 180; i++) {
+    dryWorld.step();
+    monsoonWorld.step();
+  }
+
+  const drySnap = dryWorld.snapshot();
+  const rainSnap = monsoonWorld.snapshot();
+  assert.ok(
+    rainSnap.network.totalDelayVehSec > drySnap.network.totalDelayVehSec,
+    `Monsoon (0.7 cap, 0.75 speed) must increase delay (${rainSnap.network.totalDelayVehSec} vs ${drySnap.network.totalDelayVehSec})`
+  );
+
+  // Apply 20% upstream diversion onto JNC-BLR-001 approach 1 (which has incoming link LNK-005-001)
+  const div = dryWorld.applyDiversion({
+    junctionId: 'JNC-BLR-001',
+    approachIdx: 1,
+    reductionFraction: 0.2,
+    until: 500,
+  });
+  assert.ok(div && div.targetJunctionId !== 'JNC-BLR-001');
+
+  for (let i = 0; i < 120; i++) dryWorld.step();
+  assert.ok(dryWorld.totalDivertedVeh > 0, 'Expected diverted vehicles to be conserved onto alternate boundary entry');
+
+  // Verify exact vehicle conservation on every approach after diversion
+  for (let j = 0; j < dryWorld.numJunctions; j++) {
+    const off = dryWorld.junctionApproachOffsets[j];
+    const cnt = dryWorld.junctionApproachCounts[j];
+    for (let a = 0; a < cnt; a++) {
+      const f = off + a;
+      const lhs = dryWorld.totalArrived[f];
+      const rhs = dryWorld.totalDeparted[f] + dryWorld.queueVeh[f];
+      assert.ok(Math.abs(lhs - rhs) < 1e-4, `Conservation violated post-diversion at j=${j}, a=${a}: ${lhs} vs ${rhs}`);
+    }
+  }
+});
+
+test('16. Copilot analyzeDevice(): real saturation findings, variable confidence from evidence, 300s MPC delay savings', async () => {
+  // Construct two scenarios with different saturation & R² evidence to prove confidence is never constant
+  simulatorService.reset({ startTime: EVENING_PEAK_START, liveControllerFactory: 'fixed-naive' });
+  // Noisy/early scenario: short history, mild congestion
+  simulatorService.injectChaos('JNC-BLR-001', 'totalFlowVehiclesPerMin', 1.8, 300, { approachIdx: 0 });
+  for (let i = 0; i < 8; i++) simulatorService.stepPhysics();
+  const mildDiag = await copilotService.analyzeDevice('JNC-BLR-001');
+
+  // Sustained overloaded scenario: longer history, higher saturation & stronger monotonic queue growth
+  simulatorService.reset({ startTime: EVENING_PEAK_START, liveControllerFactory: 'fixed-naive' });
+  simulatorService.injectChaos('JNC-BLR-001', 'totalFlowVehiclesPerMin', 2.8, 400, { approachIdx: 0 });
+  for (let i = 0; i < 65; i++) simulatorService.stepPhysics();
+  const heavyDiag = await copilotService.analyzeDevice('JNC-BLR-001');
+
+  assert.ok(heavyDiag.findings.length >= 1, 'Expected findings on saturated junction');
+  const heavyCtrlFinding = heavyDiag.findings.find((f) => f.runbook?.action === 'switch_controller');
+  assert.ok(heavyCtrlFinding, 'Expected switch_controller finding on fixed-naive saturated junction');
+  assert.ok(heavyCtrlFinding.confidenceInputs && heavyCtrlFinding.confidenceInputs.sampleCount >= 30);
+  assert.ok(
+    heavyCtrlFinding.predictedEffect && heavyCtrlFinding.predictedEffect.delayDeltaVehSec < 0,
+    `Expected 300s MPC rollout to project negative delay delta (reduction), got ${heavyCtrlFinding.predictedEffect?.delayDeltaVehSec}`
+  );
+  assert.ok(heavyCtrlFinding.evidence.studyCell, 'Expected switch_controller finding to cite studyCell');
+
+  const mildCtrlFinding = mildDiag.findings.find((f) => f.runbook?.action === 'switch_controller');
+  if (mildCtrlFinding) {
+    assert.notStrictEqual(
+      mildCtrlFinding.confidence,
+      heavyCtrlFinding.confidence,
+      `Confidence must vary with evidence/R² instead of returning constant (${mildCtrlFinding.confidence})`
+    );
+  }
+});
+
+test('17. Copilot executeRemediation(): live-only mutation, 300s realisedEffect auditing, delayed tow clearance', async () => {
+  simulatorService.reset({ startTime: EVENING_PEAK_START, liveControllerFactory: 'fixed-naive' });
+  simulatorService.injectChaos('JNC-BLR-005', 'totalFlowVehiclesPerMin', 2.5, 500, { approachIdx: 0 });
+  for (let i = 0; i < 40; i++) simulatorService.stepPhysics();
+
+  const res = await copilotService.executeRemediation('JNC-BLR-005', 'switch_controller', 'Priya Nair', {
+    controller: 'webster',
+  });
+  assert.strictEqual(res.success, true);
+  assert.strictEqual(res.actionRecord.actor, 'Priya Nair');
+  assert.strictEqual(res.actionRecord.status, 'pending');
+  assert.strictEqual(res.actionRecord.realisedEffect, null);
+
+  // Baseline twin MUST remain fixed-tod untouched
+  assert.strictEqual(
+    simulatorService.pair.live.snapshot('JNC-BLR-005').control.controller,
+    'webster'
+  );
+  assert.strictEqual(
+    simulatorService.pair.baseline.snapshot('JNC-BLR-005').control.controller,
+    'fixed-tod'
+  );
+
+  // Step exactly 300 sim-seconds -> pending action finalizes realisedEffect
+  for (let i = 0; i < 300; i++) simulatorService.stepPhysics();
+  assert.strictEqual(res.actionRecord.status, 'measured');
+  assert.ok(res.actionRecord.realisedEffect !== null);
+  assert.strictEqual(typeof res.actionRecord.realisedEffect.actualDelaySavedVsBaselineDeltaVehSec, 'number');
+
+  // Verify stalled-vehicle dispatch_tow clears LIVE ONLY after depot ETA (90-240s), never instantaneously
+  simulatorService.injectChaos('JNC-BLR-002', 'stalledVehicle', 2.5, 600, { stalled: true, approachIdx: 0 });
+  const towRes = await copilotService.executeRemediation('JNC-BLR-002', 'dispatch_tow', 'Ananya Rao', {});
+  const towEta = towRes.actionRecord.params.towEtaSec;
+  assert.ok(towEta >= 90 && towEta <= 240, `Expected BTP tow ETA in [90,240]s, got ${towEta}s`);
+
+  // Step 30s -> stalled vehicle MUST still be active in BOTH twins
+  for (let i = 0; i < 30; i++) simulatorService.stepPhysics();
+  assert.strictEqual(simulatorService.pair.live.snapshot('JNC-BLR-002').stalledVehicleDetected, true);
+  assert.strictEqual(simulatorService.pair.baseline.snapshot('JNC-BLR-002').stalledVehicleDetected, true);
+
+  // Step remaining seconds past towEta -> LIVE clears, BASELINE remains stalled
+  for (let i = 30; i < towEta + 2; i++) simulatorService.stepPhysics();
+  assert.strictEqual(simulatorService.pair.live.snapshot('JNC-BLR-002').stalledVehicleDetected, false);
+  assert.strictEqual(simulatorService.pair.baseline.snapshot('JNC-BLR-002').stalledVehicleDetected, true);
 });

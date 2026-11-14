@@ -4,54 +4,158 @@ import { anomalyEngine } from './anomalyEngine.js';
 import { socketService } from './socketService.js';
 import { metricsService } from './metricsService.js';
 import { INITIAL_DEVICES } from '../sim/junctions.data.js';
+import { DEFAULT_NETWORK } from '../sim/network.js';
+import { CounterfactualPair } from '../sim/twin.js';
+import { getTodPeriod } from '../sim/demand.js';
+import { loadStudyPolicy } from '../sim/studyPolicy.js';
+import { OperatorAction } from '../models/OperatorAction.js';
 
 export { INITIAL_DEVICES };
 
+const VALID_CONTROLLERS = new Set([
+  'auto',
+  'fixed-tod',
+  'fixed-naive',
+  'fixed-time',
+  'webster',
+  'max-pressure',
+  'max-pressure-ca',
+]);
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
 class SimulatorService {
   constructor() {
-    this.junctions = JSON.parse(JSON.stringify(INITIAL_DEVICES));
+    this.network = DEFAULT_NETWORK;
+    this.junctions = this.network.junctions;
     this.devices = this.junctions; // compatibility alias
-    this.isRunning = false;
-    this.intervalId = null;
-    this.targetRate = 12; // events per second
-    this.sequenceMap = new Map();
-    this.chaosSpikes = new Map(); // junctionId -> { metric, multiplier, expiresAt, stalled, ambulance }
-    this.signalPhases = new Map(); // junctionId -> { activeApproachIndex, phaseTimeRemaining }
+    this.studyPolicy = loadStudyPolicy();
 
-    // Initialize signal phase timers
-    for (const junc of this.junctions) {
-      this.signalPhases.set(junc.junctionId, {
-        activeApproachIndex: 0,
-        phaseTimeRemaining: junc.baseApproaches[0].greenSplitSec || 35,
-      });
-    }
+    this.simSpeed = Math.max(0.25, Math.min(20, parseFloat(process.env.SIM_SPEED) || 1));
+    const defaultEmitHz = Math.max(0.2, Math.min(100, parseFloat(process.env.SIM_EMIT_HZ) || 2));
+    this.emitHz = defaultEmitHz;
+    this.targetRate = Math.round(this.emitHz * this.junctions.length);
+
+    this.isRunning = false;
+    this._physicsTimer = null;
+    this._emitTimer = null;
+    this._cfTimer = null;
+    this._nextPhysicsAt = 0;
+    this._nextEmitAt = 0;
+    this._lastCfBroadcastElapsed = -1;
+
+    this.sequenceMap = new Map();
+    this.queueHistory = new Map(); // junctionId -> [{ elapsedSec, totalQueueVeh, maxQueueLengthM, avgSpeedKmph, maxVOverC }]
+    this.emergencyModeJunctions = new Set();
+    this.scheduledTasks = []; // { targetElapsedSec, fn }
+    this.recentActions = []; // Mirror recent OperatorAction records for fast/test access
+
+    this._initPair();
   }
 
-  start(rate = 12) {
+  _initPair(startTime = new Date()) {
+    const seed = process.env.SIM_SEED ? Number(process.env.SIM_SEED) || process.env.SIM_SEED : 20261114;
+    this.pair = new CounterfactualPair({
+      seed,
+      network: this.network,
+      startTime,
+      dtSec: 1,
+      liveControllerFactory: 'auto',
+      prewarmLinks: true,
+    });
+    this.queueHistory.clear();
+    for (const j of this.junctions) {
+      this.queueHistory.set(j.junctionId, []);
+    }
+    this._recordQueueHistoryPoint();
+  }
+
+  /**
+   * Reset simulation twins (used in tests or restarts).
+   */
+  reset({ startTime = new Date(), liveControllerFactory = 'auto' } = {}) {
+    const wasRunning = this.isRunning;
+    if (wasRunning) this.stop();
+    this.sequenceMap.clear();
+    this.emergencyModeJunctions.clear();
+    this.scheduledTasks = [];
+    this.recentActions = [];
+    this._lastCfBroadcastElapsed = -1;
+
+    const seed = process.env.SIM_SEED ? Number(process.env.SIM_SEED) || process.env.SIM_SEED : 20261114;
+    this.pair = new CounterfactualPair({
+      seed,
+      network: this.network,
+      startTime,
+      dtSec: 1,
+      liveControllerFactory,
+      prewarmLinks: true,
+    });
+    this.queueHistory.clear();
+    for (const j of this.junctions) {
+      this.queueHistory.set(j.junctionId, []);
+    }
+    this._recordQueueHistoryPoint();
+    if (wasRunning) this.start(this.targetRate);
+  }
+
+  /**
+   * Start both the drift-compensated physics loop (1 sim-sec/step * SIM_SPEED)
+   * and decoupled telemetry emission loop (`rate` events/sec = emitHz * 12 junctions).
+   */
+  start(rate = null) {
     if (this.isRunning) {
       this.stop();
     }
-    this.targetRate = Math.max(1, Math.min(2000, rate));
+
+    if (rate !== null && rate !== undefined && Number.isFinite(Number(rate))) {
+      const safeRate = Math.max(1, Math.min(2000, Number(rate)));
+      this.targetRate = safeRate;
+      this.emitHz = Math.max(0.1, safeRate / this.junctions.length);
+    } else {
+      const envHz = parseFloat(process.env.SIM_EMIT_HZ) || 2;
+      this.emitHz = Math.max(0.1, Math.min(100, envHz));
+      this.targetRate = Math.round(this.emitHz * this.junctions.length);
+    }
+
     this.isRunning = true;
+    const now = performance.now();
+    this._nextPhysicsAt = now;
+    this._nextEmitAt = now;
 
-    const tickMs = 100;
-    const eventsPerTick = Math.max(1, Math.round((this.targetRate * tickMs) / 1000));
+    this._schedulePhysicsTick();
+    this._scheduleEmitTick();
 
-    this.intervalId = setInterval(() => {
-      this.generateTick(eventsPerTick);
-    }, tickMs);
+    this._cfTimer = setInterval(() => {
+      if (!this.isRunning) return;
+      if (this.pair.live.elapsedSec !== this._lastCfBroadcastElapsed) {
+        this._lastCfBroadcastElapsed = this.pair.live.elapsedSec;
+        socketService.broadcastCounterfactual(this.getCounterfactual());
+      }
+    }, 1000);
+    if (this._cfTimer.unref) this._cfTimer.unref();
 
     console.log(
-      `[TrafficSimulator] Active. Target: ${this.targetRate} events/sec (${eventsPerTick} events every ${tickMs}ms across 12 BLR junctions).`
+      `[TrafficSimulator] Physics-driven simulator active. Speed=${this.simSpeed}x (dt=1s), Emit=${this.emitHz.toFixed(2)} Hz (${this.targetRate} events/sec across ${this.junctions.length} BLR junctions).`
     );
   }
 
   stop() {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
     this.isRunning = false;
+    if (this._physicsTimer) {
+      clearTimeout(this._physicsTimer);
+      this._physicsTimer = null;
+    }
+    if (this._emitTimer) {
+      clearTimeout(this._emitTimer);
+      this._emitTimer = null;
+    }
+    if (this._cfTimer) {
+      clearInterval(this._cfTimer);
+      this._cfTimer = null;
+    }
     console.log('[TrafficSimulator] Stopped.');
   }
 
@@ -59,184 +163,445 @@ class SimulatorService {
     this.start(rate);
   }
 
-  injectChaos(junctionId, metric, multiplier = 2.5, durationSec = 20, flags = {}) {
-    this.chaosSpikes.set(junctionId, {
-      metric,
-      multiplier,
-      expiresAt: Date.now() + durationSec * 1000,
-      stalled: Boolean(flags.stalled),
-      ambulance: Boolean(flags.ambulance),
-    });
-    console.log(`[TrafficSimulator] Injected traffic chaos on ${junctionId}: ${metric} x${multiplier} for ${durationSec}s`);
-    return {
-      success: true,
-      message: `Chaos active: ${metric} spike on ${junctionId} for ${durationSec}s`,
-    };
+  setSimSpeed(speed) {
+    this.simSpeed = clamp(Number(speed) || 1, 0.25, 20);
+    if (this.isRunning) {
+      this._nextPhysicsAt = performance.now();
+    }
+    return this.simSpeed;
   }
 
-  clearChaos(junctionId) {
-    this.chaosSpikes.delete(junctionId);
+  _schedulePhysicsTick() {
+    if (!this.isRunning) return;
+    const physicsIntervalMs = Math.max(25, 1000 / this.simSpeed);
+    this._nextPhysicsAt += physicsIntervalMs;
+
+    const now = performance.now();
+    // Bound drift recovery so a paused thread does not burst dozens of steps at once
+    if (now - this._nextPhysicsAt > physicsIntervalMs * 4) {
+      this._nextPhysicsAt = now + physicsIntervalMs;
+    }
+    const delayMs = Math.max(1, Math.round(this._nextPhysicsAt - now));
+
+    this._physicsTimer = setTimeout(() => {
+      if (!this.isRunning) return;
+      this.stepPhysics();
+      this._schedulePhysicsTick();
+    }, delayMs);
+    if (this._physicsTimer.unref) this._physicsTimer.unref();
   }
 
-  generateTick(count = 1) {
-    const now = Date.now();
+  /**
+   * Advance counterfactual physics by 1 discrete sim-second and evaluate delayed tasks/rollouts.
+   */
+  stepPhysics() {
+    this.pair.step();
+    this._recordQueueHistoryPoint();
+    this._processScheduledTasks();
+  }
 
-    for (let i = 0; i < count; i++) {
-      // Pick junction round-robin or randomly
-      const juncIndex = Math.floor(Math.random() * this.junctions.length);
-      const junc = this.junctions[juncIndex];
+  _recordQueueHistoryPoint() {
+    const world = this.pair.live;
+    const elapsedSec = world.elapsedSec;
+    const snap = world.snapshot();
 
-      const seq = (this.sequenceMap.get(junc.junctionId) || 0) + 1;
-      this.sequenceMap.set(junc.junctionId, seq);
+    for (let j = 0; j < world.numJunctions; j++) {
+      const junc = world.junctions[j];
+      const jId = junc.junctionId;
+      const offset = world.junctionApproachOffsets[j];
+      const count = world.junctionApproachCounts[j];
 
-      // Compute dynamic traffic data
-      const trafficData = this.computeTrafficData(junc, now);
+      let totalQueueVeh = 0;
+      for (let a = 0; a < count; a++) {
+        totalQueueVeh += world.queueVeh[offset + a];
+      }
+      const jSnap = snap.junctions[jId];
+      const hist = this.queueHistory.get(jId);
+      hist.push({
+        elapsedSec,
+        totalQueueVeh,
+        maxQueueLengthM: jSnap.maxQueueLengthM,
+        avgSpeedKmph: jSnap.avgSpeedKmph,
+        vOverC: jSnap.kpi.degreeOfSaturation,
+      });
+      if (hist.length > 180) {
+        hist.shift();
+      }
+    }
+  }
 
-      const status = this.determineStatus(trafficData);
+  getQueueHistory(junctionId, windowSec = 120) {
+    const hist = this.queueHistory.get(junctionId) || [];
+    if (hist.length === 0) return [];
+    const latestElapsed = hist[hist.length - 1].elapsedSec;
+    const cutoff = latestElapsed - windowSec;
+    return hist.filter((pt) => pt.elapsedSec >= cutoff);
+  }
 
+  _scheduleEmitTick() {
+    if (!this.isRunning) return;
+    // Cap timer frequency at 50 Hz; emit multiple batches per tick when targetRate > 600 e/s
+    const batchesPerCycle = this.emitHz > 50 ? Math.max(1, Math.round(this.emitHz / 50)) : 1;
+    const effectiveHz = this.emitHz / batchesPerCycle;
+    const emitIntervalMs = Math.max(10, 1000 / effectiveHz);
+    this._nextEmitAt += emitIntervalMs;
+
+    const now = performance.now();
+    if (now - this._nextEmitAt > emitIntervalMs * 4) {
+      this._nextEmitAt = now + emitIntervalMs;
+    }
+    const delayMs = Math.max(1, Math.round(this._nextEmitAt - now));
+
+    this._emitTimer = setTimeout(() => {
+      if (!this.isRunning) return;
+      for (let b = 0; b < batchesPerCycle; b++) {
+        this.emitNetworkTelemetry();
+      }
+      this._scheduleEmitTick();
+    }, delayMs);
+    if (this._emitTimer.unref) this._emitTimer.unref();
+  }
+
+  /**
+   * Emit one schema-compatible telemetry event per junction from the current `live` snapshot.
+   */
+  emitNetworkTelemetry() {
+    const world = this.pair.live;
+    const snap = world.snapshot();
+
+    for (const junc of this.junctions) {
+      const jId = junc.junctionId;
+      const jSnap = snap.junctions[jId];
+      const seq = (this.sequenceMap.get(jId) || 0) + 1;
+      this.sequenceMap.set(jId, seq);
+
+      const status = this.determineStatus(jSnap);
       const event = {
-        eventId: `EVT-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
-        junctionId: junc.junctionId,
-        deviceId: junc.junctionId,
+        eventId: `EVT-${Date.now()}-${seq}-${crypto.randomBytes(2).toString('hex')}`,
+        junctionId: jId,
+        deviceId: jId,
         deviceName: junc.name,
         junctionName: junc.name,
         zoneId: junc.zoneId,
         zoneName: junc.zoneName,
         category: junc.zoneId,
-        timestamp: new Date().toISOString(),
+        timestamp: snap.simTime,
         sequence: seq,
-        data: trafficData,
+        source: 'simulated-physics',
+        data: {
+          approaches: jSnap.approaches,
+          vehicleMix: jSnap.vehicleMix,
+          stalledVehicleDetected: jSnap.stalledVehicleDetected,
+          ambulanceDetected: jSnap.ambulanceDetected,
+          totalFlowVehiclesPerMin: jSnap.totalFlowVehiclesPerMin,
+          maxQueueLengthM: jSnap.maxQueueLengthM,
+          avgSpeedKmph: jSnap.avgSpeedKmph,
+          congestionScore: jSnap.congestionScore,
+          control: jSnap.control,
+          kpi: jSnap.kpi,
+        },
         metrics: {
-          totalFlowVehiclesPerMin: trafficData.totalFlowVehiclesPerMin,
-          maxQueueLengthM: trafficData.maxQueueLengthM,
-          avgSpeedKmph: trafficData.avgSpeedKmph,
-          congestionScore: trafficData.congestionScore,
-          stalledVehicleDetected: trafficData.stalledVehicleDetected,
-          ambulanceDetected: trafficData.ambulanceDetected,
+          totalFlowVehiclesPerMin: jSnap.totalFlowVehiclesPerMin,
+          maxQueueLengthM: jSnap.maxQueueLengthM,
+          avgSpeedKmph: jSnap.avgSpeedKmph,
+          congestionScore: jSnap.congestionScore,
+          stalledVehicleDetected: jSnap.stalledVehicleDetected,
+          ambulanceDetected: jSnap.ambulanceDetected,
         },
         status,
         location: junc.location,
       };
 
-      const startT = Date.now();
-
-      // 1. Write-behind ingestion queue
+      const startT = performance.now();
       ingestionBuffer.enqueue(event);
-
-      // 2. Real-time traffic anomaly & gridlock detector
       anomalyEngine.evaluate(event);
-
-      // 3. Low-latency Socket.IO broadcast
       socketService.broadcastTelemetry(event);
-
-      const latency = Date.now() - startT;
+      const latency = Math.max(0, performance.now() - startT);
       metricsService.recordIngest(1, latency);
     }
   }
 
-  computeTrafficData(junc, now) {
-    const chaos = this.chaosSpikes.get(junc.junctionId);
-    const hasActiveChaos = chaos && chaos.expiresAt > now;
-
-    // Advance signal cycle for this junction
-    let phase = this.signalPhases.get(junc.junctionId);
-    if (!phase) {
-      phase = { activeApproachIndex: 0, phaseTimeRemaining: 35 };
-      this.signalPhases.set(junc.junctionId, phase);
+  /**
+   * Build a connected corridor path of 3-4 junctions passing through `junctionId`
+   * using real directed links in DEFAULT_NETWORK.
+   */
+  findCorridorPathThrough(junctionId, targetLength = 4) {
+    const links = this.network.links;
+    const outgoing = new Map();
+    const incoming = new Map();
+    for (const l of links) {
+      if (!outgoing.has(l.fromJunction)) outgoing.set(l.fromJunction, []);
+      if (!incoming.has(l.toJunction)) incoming.set(l.toJunction, []);
+      outgoing.get(l.fromJunction).push(l.toJunction);
+      incoming.get(l.toJunction).push(l.fromJunction);
     }
 
-    // Step cycle down
-    phase.phaseTimeRemaining -= 0.5;
-    if (phase.phaseTimeRemaining <= 0) {
-      phase.activeApproachIndex = (phase.activeApproachIndex + 1) % junc.baseApproaches.length;
-      const nextApproach = junc.baseApproaches[phase.activeApproachIndex];
-      phase.phaseTimeRemaining = nextApproach.greenSplitSec || 35;
+    const path = [junctionId];
+    const visited = new Set(path);
+
+    // Prepend one upstream neighbor if available so emergency approaches *into* `junctionId`
+    const ups = (incoming.get(junctionId) || []).filter((id) => !visited.has(id));
+    if (ups.length > 0) {
+      path.unshift(ups[0]);
+      visited.add(ups[0]);
     }
 
-    // Generate approaches
-    let totalFlow = 0;
-    let maxQueue = 0;
-    let sumSpeed = 0;
+    // Extend downstream up to `targetLength`
+    while (path.length < targetLength) {
+      const tail = path[path.length - 1];
+      const nexts = (outgoing.get(tail) || []).filter((id) => !visited.has(id));
+      if (nexts.length === 0) break;
+      path.push(nexts[0]);
+      visited.add(nexts[0]);
+    }
 
-    const approaches = junc.baseApproaches.map((app, idx) => {
-      const isGreen = idx === phase.activeApproachIndex;
-      const signalState = isGreen ? 'green' : 'red';
+    return path;
+  }
 
-      // Vehicles per minute fluctuates naturally +/- 15%
-      const jitterFactor = 1 + (Math.random() - 0.5) * 0.2;
-      let vehiclesPerMin = Math.round(app.baseVehiclesPerMin * jitterFactor);
+  isCorridorInEmergencyMode(path) {
+    return path.some((jId) => this.emergencyModeJunctions.has(jId));
+  }
 
-      // Queue length: shrinks on green, accumulates on red
-      let queueLengthM = isGreen
-        ? Math.max(15, Math.round(app.baseQueueM * 0.45 * jitterFactor))
-        : Math.min(320, Math.round(app.baseQueueM * 1.15 * jitterFactor));
-
-      // Speed: higher on green, slower on red
-      let avgSpeedKmph = isGreen
-        ? Math.max(16, Math.round(app.baseSpeed * 1.6 * jitterFactor))
-        : Math.max(3, Math.round(app.baseSpeed * 0.75 * jitterFactor));
-
-      // Apply chaos spike if active
-      if (hasActiveChaos) {
-        if (chaos.metric === 'queueLengthM' || chaos.metric === 'congestion') {
-          queueLengthM = Math.min(350, Math.round(queueLengthM * chaos.multiplier));
-          avgSpeedKmph = Math.max(2, Math.round(avgSpeedKmph / chaos.multiplier));
-          vehiclesPerMin = Math.round(vehiclesPerMin * 1.4);
-        } else if (chaos.metric === 'vehiclesPerMin') {
-          vehiclesPerMin = Math.round(vehiclesPerMin * chaos.multiplier);
-        }
+  enableEmergencyModeForPath(path) {
+    for (const jId of path) {
+      this.emergencyModeJunctions.add(jId);
+    }
+    // Enable preemption on any matching en-route ambulances in the LIVE world only (never baseline)
+    for (const em of this.pair.live.emergencies) {
+      if (em.status === 'en-route' && em.path.some((id) => this.emergencyModeJunctions.has(id))) {
+        em.preempt = true;
       }
+    }
+  }
 
-      totalFlow += vehiclesPerMin;
-      if (queueLengthM > maxQueue) maxQueue = queueLengthM;
-      sumSpeed += avgSpeedKmph;
+  /**
+   * Inject chaos/incidents from the Chaos Lab directly into the physical twins.
+   * Applied to BOTH live and baseline twins identically under Common Random Numbers
+   * (baseline NEVER receives emergency signal preemption).
+   */
+  injectChaos(junctionId, metric, multiplier = 2.5, durationSec = 20, flags = {}) {
+    const world = this.pair.live;
+    const safeDur = Math.max(5, Number(durationSec) || 20);
+    const safeMult = Number(multiplier) || 2.5;
+    const untilSec = world.elapsedSec + safeDur;
 
+    // 1. Network-wide monsoon weather condition
+    if (metric === 'monsoon' || flags.monsoon) {
+      const cap = flags.capacityFactor ?? 0.7;
+      const spd = flags.speedFactor ?? 0.75;
+      this.pair.setGlobalWeather({
+        type: 'monsoon',
+        capacityFactor: cap,
+        speedFactor: spd,
+        until: untilSec,
+      });
+      console.log(
+        `[TrafficSimulator] Injected network monsoon on BOTH twins (cap=${cap}, speed=${spd}) for ${safeDur}s`
+      );
       return {
-        road: app.road,
-        vehiclesPerMin,
-        queueLengthM,
-        avgSpeedKmph,
-        signal: signalState,
-        greenTimeSec: app.greenSplitSec,
+        success: true,
+        type: 'monsoon',
+        message: `Monsoon active across all junctions (cap=${cap}, speed=${spd}) for ${safeDur}s`,
       };
-    });
-
-    const avgSpeed = parseFloat((sumSpeed / approaches.length).toFixed(1));
-
-    // Calculate composite Congestion Score (0 to 100)
-    // Weighted by maxQueueLength and low speed
-    const queueFactor = Math.min(100, (maxQueue / 220) * 60);
-    const speedFactor = Math.max(0, (1 - avgSpeed / 30) * 40);
-    let congestionScore = Math.min(100, Math.round(queueFactor + speedFactor));
-
-    let stalledVehicle = hasActiveChaos && chaos.stalled ? true : false;
-    let ambulance = hasActiveChaos && chaos.ambulance ? true : false;
-
-    // Natural random rare occurrence if no chaos (0.2% chance)
-    if (!hasActiveChaos) {
-      if (Math.random() < 0.001) stalledVehicle = true;
-      if (Math.random() < 0.001) ambulance = true;
     }
 
-    // Vehicle mix with subtle fluctuations
-    const vm = junc.vehicleMix;
+    // 2. Stalled vehicle / broken-down bus -> lane capacity reduction incident
+    if (flags.stalled || metric === 'stalledVehicle') {
+      const capFactor = clamp(1 / Math.max(1.5, safeMult), 0.15, 0.55);
+      const approachIdx = Number.isInteger(flags.approachIdx) ? flags.approachIdx : 0;
+      this.pair.injectIncident(junctionId, approachIdx, {
+        type: 'stalled',
+        capacityFactor: capFactor,
+        until: untilSec,
+      });
+      console.log(
+        `[TrafficSimulator] Injected stalled-vehicle incident at ${junctionId} approach ${approachIdx} (capFactor=${capFactor.toFixed(2)}) for ${safeDur}s`
+      );
+      return {
+        success: true,
+        type: 'stalled',
+        junctionId,
+        approachIdx,
+        capacityFactor: Number(capFactor.toFixed(2)),
+        message: `Chaos active: stalled vehicle incident on ${junctionId} approach ${approachIdx} (capFactor=${capFactor.toFixed(2)}) for ${safeDur}s`,
+      };
+    }
+
+    // 3. Emergency responder dispatch along a connected corridor path
+    if (flags.ambulance || metric === 'ambulancePreemption') {
+      const path = Array.isArray(flags.path) && flags.path.length > 0
+        ? flags.path
+        : this.findCorridorPathThrough(junctionId);
+      const preempt =
+        typeof flags.preempt === 'boolean'
+          ? flags.preempt
+          : this.isCorridorInEmergencyMode(path);
+      const { live: emLive } = this.pair.dispatchEmergency({ path, preempt });
+      console.log(
+        `[TrafficSimulator] Dispatched ambulance ${emLive.id} along ${path.join(' -> ')} (live preempt=${preempt}, baseline preempt=false)`
+      );
+      return {
+        success: true,
+        type: 'ambulance',
+        emergencyId: emLive.id,
+        path,
+        preempt,
+        message: `Emergency responder ${emLive.id} dispatched along ${path.join(' -> ')} (preempt=${preempt})`,
+      };
+    }
+
+    // 4. Queue / congestion / arrival demand surge on BOTH twins
+    const approachIdx = Number.isInteger(flags.approachIdx) ? flags.approachIdx : 0;
+    this.pair.setDemandSurge(junctionId, safeMult, untilSec, approachIdx);
+    console.log(
+      `[TrafficSimulator] Injected demand surge on ${junctionId} approach ${approachIdx} (x${safeMult}) for ${safeDur}s`
+    );
+    return {
+      success: true,
+      type: 'surge',
+      junctionId,
+      approachIdx,
+      multiplier: safeMult,
+      message: `Chaos active: demand surge x${safeMult} on ${junctionId} for ${safeDur}s`,
+    };
+  }
+
+  clearChaos(junctionId, { liveOnly = false } = {}) {
+    if (liveOnly) {
+      this.pair.live.clearIncident(junctionId);
+      return;
+    }
+    this.pair.clearIncident(junctionId, null, { liveOnly: false });
+    this.pair.clearDemandSurge(junctionId);
+  }
+
+  setController(junctionId, controllerType, actor = 'Operator') {
+    if (!VALID_CONTROLLERS.has(controllerType)) {
+      throw new Error(
+        `Unsupported controller '${controllerType}'. Allowed: ${[...VALID_CONTROLLERS].join(', ')}`
+      );
+    }
+    const target = junctionId === 'all' || junctionId === '*' ? '*' : junctionId;
+    if (target !== '*' && !this.pair.live.junctionIndexById.has(target)) {
+      throw new Error(`Unknown junctionId: ${junctionId}`);
+    }
+
+    const beforeCtrls = {};
+    for (let j = 0; j < this.pair.live.numJunctions; j++) {
+      const id = this.pair.live.junctions[j].junctionId;
+      if (target === '*' || target === id) {
+        beforeCtrls[id] = this.pair.live.controllers[j].name;
+      }
+    }
+
+    this.pair.setController(target, controllerType);
+    console.log(
+      `[TrafficSimulator] Controller switched by ${actor} for ${target} -> ${controllerType}`
+    );
 
     return {
-      approaches,
-      vehicleMix: {
-        twoWheeler: parseFloat((vm.twoWheeler + (Math.random() - 0.5) * 0.02).toFixed(2)),
-        car: parseFloat((vm.car + (Math.random() - 0.5) * 0.02).toFixed(2)),
-        bus: parseFloat((vm.bus + (Math.random() - 0.5) * 0.01).toFixed(2)),
-        truck: parseFloat((vm.truck + (Math.random() - 0.5) * 0.01).toFixed(2)),
-      },
-      stalledVehicleDetected: stalledVehicle,
-      ambulanceDetected: ambulance,
-      totalFlowVehiclesPerMin: totalFlow,
-      maxQueueLengthM: maxQueue,
-      avgSpeedKmph: avgSpeed,
-      congestionScore,
-      cameraProcessingLatencyMs: Math.round(10 + Math.random() * 8), // 10-18ms GPU Central DC latency
+      target,
+      controller: controllerType,
+      previousControllers: beforeCtrls,
+      state: this.getState(),
     };
+  }
+
+  scheduleDelayedTask(delaySimSec, fn) {
+    const targetElapsedSec = this.pair.live.elapsedSec + Math.max(1, Math.round(delaySimSec));
+    this.scheduledTasks.push({ targetElapsedSec, fn });
+  }
+
+  registerPendingAction(actionRecord) {
+    this.recentActions.unshift(actionRecord);
+    if (this.recentActions.length > 100) {
+      this.recentActions.pop();
+    }
+
+    const horizon = actionRecord.targetMeasureElapsedSec - actionRecord.elapsedSecAtAction;
+    this.scheduleDelayedTask(horizon, async () => {
+      await this._finalizeActionRealisedEffect(actionRecord.actionId);
+    });
+  }
+
+  async _finalizeActionRealisedEffect(actionId) {
+    const rec = this.recentActions.find((a) => a.actionId === actionId);
+    if (!rec || rec.status !== 'pending') return;
+
+    const world = this.pair.live;
+    const jSnap = world.snapshot(rec.junctionId);
+    const netSnap = world.snapshot();
+    if (!jSnap) return;
+
+    const base = rec.baselineMetricsAtAction || {};
+    const actualDelayDeltaVehSec = Number(
+      (jSnap.kpi.delayVehSec - (base.junctionDelayVehSec ?? 0) - (rec.predictedEffect?.baselineFutureDelayDeltaVehSec ?? 0)).toFixed(2)
+    );
+    const actualMaxQueueDeltaM = Number(
+      (jSnap.maxQueueLengthM - (base.maxQueueLengthM ?? jSnap.maxQueueLengthM)).toFixed(2)
+    );
+    const actualAvgSpeedDeltaKmph = Number(
+      (jSnap.avgSpeedKmph - (base.avgSpeedKmph ?? jSnap.avgSpeedKmph)).toFixed(2)
+    );
+
+    // Compare actual vs baseline twin at same junction over the identical elapsed window
+    const cf = this.pair.comparison();
+    const jCf = cf.byJunction[rec.junctionId];
+    const cfDelaySavedDelta = jCf
+      ? Number(
+          (jCf.delaySavedVehSec - (base.cfDelaySavedVehSecAtAction ?? 0)).toFixed(2)
+        )
+      : actualDelayDeltaVehSec;
+
+    const predDelayDelta = rec.predictedEffect?.delayDeltaVehSec ?? 0;
+    const absErr = Math.abs(cfDelaySavedDelta - -predDelayDelta);
+    const denom = Math.max(10, Math.abs(predDelayDelta), Math.abs(cfDelaySavedDelta));
+    const predictionAccuracyPct = Number(clamp(100 * (1 - absErr / denom), 0, 100).toFixed(1));
+
+    const realisedEffect = {
+      horizonSec: 300,
+      measuredAtElapsedSec: world.elapsedSec,
+      measuredSimTime: new Date(world.simTimeMs).toISOString(),
+      endMaxQueueLengthM: jSnap.maxQueueLengthM,
+      endAvgSpeedKmph: jSnap.avgSpeedKmph,
+      endCongestionScore: jSnap.congestionScore,
+      endAvgDelayPerVehSec: jSnap.kpi.avgDelayPerVehSec,
+      actualMaxQueueDeltaM,
+      actualAvgSpeedDeltaKmph,
+      actualDelaySavedVsBaselineDeltaVehSec: cfDelaySavedDelta,
+      networkAvgDelayPerVehSec: netSnap.network.avgDelayPerVehSec,
+      predictionAccuracyPct,
+    };
+
+    rec.realisedEffect = realisedEffect;
+    rec.status = 'measured';
+
+    try {
+      await OperatorAction.updateOne(
+        { actionId },
+        { $set: { realisedEffect, status: 'measured' } }
+      );
+    } catch {
+      // Safe no-op when running unit tests without active MongoDB connection
+    }
+  }
+
+  _processScheduledTasks() {
+    if (this.scheduledTasks.length === 0) return;
+    const elapsed = this.pair.live.elapsedSec;
+    const remaining = [];
+    for (const task of this.scheduledTasks) {
+      if (elapsed >= task.targetElapsedSec) {
+        try {
+          task.fn();
+        } catch (err) {
+          console.warn('[TrafficSimulator] Scheduled task notice:', err.message);
+        }
+      } else {
+        remaining.push(task);
+      }
+    }
+    this.scheduledTasks = remaining;
   }
 
   determineStatus(trafficData) {
@@ -259,9 +624,80 @@ class SimulatorService {
     return {
       isRunning: this.isRunning,
       targetRate: this.targetRate,
-      deviceCount: this.junctions.length,
-      junctionCount: this.junctions.length,
-      activeChaosCount: Array.from(this.chaosSpikes.values()).filter((c) => c.expiresAt > Date.now()).length,
+      emitHz: Number(this.emitHz.toFixed(2)),
+      simSpeed: this.simSpeed,
+      simTime: new Date(this.pair.live.simTimeMs).toISOString(),
+      elapsedSec: this.pair.live.elapsedSec,
+      junctionsCount: this.junctions.length,
+      activeEmergencies: this.pair.live.emergencies.filter((e) => e.status === 'en-route').length,
+      weatherActive: this.pair.live.weather.active,
+      sequences: Object.fromEntries(this.sequenceMap),
+    };
+  }
+
+  getState() {
+    const world = this.pair.live;
+    const snap = world.snapshot();
+    const todPeriod = getTodPeriod(world.simTimeMs);
+
+    const junctions = world.junctions.map((junc, idx) => {
+      const jId = junc.junctionId;
+      const ctrl = world.controllers[idx];
+      const jSnap = snap.junctions[jId];
+      return {
+        junctionId: jId,
+        name: junc.name,
+        zoneId: junc.zoneId,
+        controller: ctrl.name,
+        emergencyMode: this.emergencyModeJunctions.has(jId),
+        describe: typeof ctrl.describe === 'function' ? ctrl.describe() : { name: ctrl.name },
+        control: jSnap.control,
+        kpi: jSnap.kpi,
+        congestionScore: jSnap.congestionScore,
+        maxQueueLengthM: jSnap.maxQueueLengthM,
+        avgSpeedKmph: jSnap.avgSpeedKmph,
+      };
+    });
+
+    return {
+      isRunning: this.isRunning,
+      simTime: snap.simTime,
+      elapsedSec: world.elapsedSec,
+      simSpeed: this.simSpeed,
+      emitHz: Number(this.emitHz.toFixed(2)),
+      targetRate: this.targetRate,
+      todPeriod: {
+        id: todPeriod.id,
+        label: todPeriod.label,
+      },
+      weather: world.weather.active ? { ...world.weather } : { active: false },
+      activeIncidentsCount: world.incidents.size,
+      activeSurgesCount: world.surges.size,
+      activeDiversionsCount: world.diversions.size,
+      activeEmergencies: world.emergencies
+        .filter((e) => e.status === 'en-route')
+        .map((e) => ({
+          id: e.id,
+          path: e.path,
+          legIndex: e.legIndex,
+          remainingDistM: Math.round(e.remainingDistM),
+          preempt: e.preempt,
+          waitingAtRedSec: e.waitingAtRedSec,
+        })),
+      junctions,
+      supervisoryPolicy: this.studyPolicy,
+    };
+  }
+
+  getCounterfactual() {
+    const comp = this.pair.comparison();
+    const todPeriod = getTodPeriod(this.pair.live.simTimeMs);
+    return {
+      ...comp,
+      simSpeed: this.simSpeed,
+      emitHz: Number(this.emitHz.toFixed(2)),
+      todPeriod: todPeriod.id,
+      weatherActive: this.pair.live.weather.active,
     };
   }
 }

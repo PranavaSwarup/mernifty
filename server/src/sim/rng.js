@@ -26,12 +26,17 @@ export function deriveSeed(baseSeed, label = '') {
  */
 export function mulberry32(seed) {
   let state = typeof seed === 'number' ? (seed >>> 0) : deriveSeed(seed);
-  return function next() {
+  function next() {
     state = (state + 0x6d2b79f5) | 0;
     let t = Math.imul(state ^ (state >>> 15), 1 | state);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  next.getState = () => state >>> 0;
+  next.setState = (nextState) => {
+    state = nextState >>> 0;
   };
+  return next;
 }
 
 /**
@@ -70,10 +75,18 @@ export function poisson(lambda, randFn) {
  */
 export function createRng(seed) {
   const rand = mulberry32(seed);
-  return {
+  const bundle = {
     next: rand,
     poisson: (lambda) => poisson(lambda, rand),
     nextInt: (maxExclusive) => Math.floor(rand() * maxExclusive),
     derive: (label) => createRng(deriveSeed(seed, label)),
+    getState: () => rand.getState(),
+    setState: (s) => rand.setState(s),
+    clone: () => {
+      const copy = createRng(seed);
+      copy.setState(rand.getState());
+      return copy;
+    },
   };
+  return bundle;
 }

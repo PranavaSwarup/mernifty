@@ -25,7 +25,7 @@ export class CounterfactualPair {
     network = DEFAULT_NETWORK,
     startTime = '2026-11-14T13:30:00.000Z',
     dtSec = 1,
-    liveControllerFactory = 'max-pressure',
+    liveControllerFactory = 'auto',
     prewarmLinks = true,
   } = {}) {
     this.seed = seed;
@@ -96,6 +96,31 @@ export class CounterfactualPair {
   clearDemandSurge(junctionId) {
     this.live.clearDemandSurge(junctionId);
     this.baseline.clearDemandSurge(junctionId);
+  }
+
+  /**
+   * Apply identical network-wide weather impact (e.g. monsoon) to both twins.
+   */
+  setGlobalWeather(opts) {
+    const l = this.live.setGlobalWeather(opts);
+    const b = this.baseline.setGlobalWeather(opts);
+    return { live: l, baseline: b };
+  }
+
+  clearGlobalWeather() {
+    this.live.clearGlobalWeather();
+    this.baseline.clearGlobalWeather();
+  }
+
+  /**
+   * Apply upstream diversion (defaults to live twin only as an operator remediation).
+   */
+  applyDiversion(opts, { liveOnly = true } = {}) {
+    const l = this.live.applyDiversion(opts);
+    if (!liveOnly) {
+      this.baseline.applyDiversion(opts);
+    }
+    return l;
   }
 
   /**

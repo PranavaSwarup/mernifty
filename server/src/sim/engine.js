@@ -53,6 +53,7 @@ export class TrafficWorld {
     startTime = '2026-11-14T13:30:00.000Z', // 19:00 IST (evening peak) default
     dtSec = 1,
     prewarmLinks = true,
+    _skipControllers = false,
   } = {}) {
     this.seed = seed;
     this.network = network;
@@ -187,11 +188,6 @@ export class TrafficWorld {
 
     for (let j = 0; j < this.numJunctions; j++) {
       const junc = this.junctions[j];
-      this.controllers[j] =
-        typeof controllerFactory === 'function'
-          ? controllerFactory(junc)
-          : createController(controllerFactory, junc, { startTimeMs: this.startTimeMs });
-
       const count = this.junctionApproachCounts[j];
       const offset = this.junctionApproachOffsets[j];
       const scratchApproaches = new Array(count);
@@ -217,16 +213,106 @@ export class TrafficWorld {
         preemptApproachIdx: null,
         approaches: scratchApproaches,
       };
-      this.lastDecisions[j] = this.controllers[j].decide(this.junctionStates[j], 0);
+
+      if (!_skipControllers) {
+        this.controllers[j] =
+          typeof controllerFactory === 'function'
+            ? controllerFactory(junc)
+            : createController(controllerFactory, junc, { startTimeMs: this.startTimeMs });
+        this.lastDecisions[j] = this.controllers[j].decide(this.junctionStates[j], 0);
+      }
     }
 
-    // Active incidents, surges, and emergency vehicle agents
+    // Active incidents, surges, diversions, global weather (monsoon), and emergency vehicle agents
     this.incidents = new Map(); // flatIdx -> { type, capacityFactor, untilSec, untilMs }
     this.surges = new Map(); // junctionId -> { factor, approachIdx, untilSec, untilMs }
+    this.diversions = new Map(); // flatIdx -> { junctionId, approachIdx, targetJunctionId, targetApproachIdx, targetFlatIdx, reductionFraction, untilSec, untilMs }
+    this.weather = {
+      active: false,
+      type: null,
+      capacityFactor: 1.0,
+      speedFactor: 1.0,
+      untilSec: Infinity,
+      untilMs: Infinity,
+    };
+    this.totalDivertedVeh = 0;
     this.emergencies = [];
     this._nextEmergencySeq = 1;
     this.preemptRequests = new Int32Array(this.numJunctions);
     this.preemptRequests.fill(-1);
+  }
+
+  /**
+   * Create an exact deep clone of the entire simulation state (PRNG states, queues,
+   * link ring buffers, active incidents/surges/diversions/weather/emergencies, and controllers)
+   * for zero-side-effect model-predictive lookahead rollouts.
+   */
+  clone() {
+    const copy = new TrafficWorld({
+      seed: this.seed,
+      network: this.network,
+      startTime: this.startTimeMs,
+      dtSec: this.dtSec,
+      prewarmLinks: false,
+      _skipControllers: true,
+    });
+
+    copy.simTimeMs = this.simTimeMs;
+    copy.elapsedSec = this.elapsedSec;
+    copy.stepIndex = this.stepIndex;
+    copy.rollingCursor = this.rollingCursor;
+    copy._nextEmergencySeq = this._nextEmergencySeq;
+    copy.totalDivertedVeh = this.totalDivertedVeh;
+
+    copy.queueVeh.set(this.queueVeh);
+    copy.totalArrived.set(this.totalArrived);
+    copy.totalExternalArrived.set(this.totalExternalArrived);
+    copy.totalDeparted.set(this.totalDeparted);
+    copy.delayVehSec.set(this.delayVehSec);
+    copy.maxQueueVeh.set(this.maxQueueVeh);
+    copy.arrivalsThisStep.set(this.arrivalsThisStep);
+    copy.departuresThisStep.set(this.departuresThisStep);
+    copy.capacityFactor.set(this.capacityFactor);
+    copy.rollingBuffer.set(this.rollingBuffer);
+    copy.rollingSum.set(this.rollingSum);
+    copy.preemptRequests.set(this.preemptRequests);
+
+    for (let i = 0; i < this.totalApproaches; i++) {
+      copy.approachRngs[i] = this.approachRngs[i].clone();
+    }
+    for (let l = 0; l < this.links.length; l++) {
+      copy.links[l].ringBuffer.set(this.links[l].ringBuffer);
+    }
+
+    for (const [k, v] of this.incidents.entries()) {
+      copy.incidents.set(k, { ...v });
+    }
+    for (const [k, v] of this.surges.entries()) {
+      copy.surges.set(k, { ...v });
+    }
+    for (const [k, v] of this.diversions.entries()) {
+      copy.diversions.set(k, { ...v });
+    }
+    copy.weather = { ...this.weather };
+    copy.emergencies = this.emergencies.map((em) => ({
+      ...em,
+      path: [...em.path],
+      legs: em.legs.map((leg) => ({ ...leg })),
+    }));
+
+    for (let j = 0; j < this.numJunctions; j++) {
+      const ctrl = this.controllers[j];
+      copy.controllers[j] = typeof ctrl.clone === 'function' ? ctrl.clone() : ctrl;
+      const d = this.lastDecisions[j];
+      copy.lastDecisions[j] = d
+        ? {
+            ...d,
+            splits: Array.isArray(d.splits) ? [...d.splits] : [],
+          }
+        : null;
+    }
+
+    return copy;
   }
 
   /**
@@ -349,6 +435,93 @@ export class TrafficWorld {
   }
 
   /**
+   * Apply network-wide weather impairment (e.g., monsoon: capacityFactor=0.7, speedFactor=0.75).
+   */
+  setGlobalWeather({ type = 'monsoon', capacityFactor = 0.7, speedFactor = 0.75, until = null } = {}) {
+    const { untilSec, untilMs } = this._normalizeUntil(until);
+    this.weather = {
+      active: true,
+      type,
+      capacityFactor: Math.max(0.2, Math.min(1.0, capacityFactor)),
+      speedFactor: Math.max(0.25, Math.min(1.0, speedFactor)),
+      untilSec,
+      untilMs,
+    };
+    return this.weather;
+  }
+
+  clearGlobalWeather() {
+    this.weather = {
+      active: false,
+      type: null,
+      capacityFactor: 1.0,
+      speedFactor: 1.0,
+      untilSec: Infinity,
+      untilMs: Infinity,
+    };
+  }
+
+  /**
+   * Apply conservation-honest upstream diversion: reduces demand on `(junctionId, approachIdx)`
+   * by `reductionFraction` (default 20%) and shifts the diverted volume onto an alternate entry
+   * `(targetJunctionId, targetApproachIdx)` so total network demand is conserved.
+   */
+  applyDiversion({
+    junctionId,
+    approachIdx = 0,
+    reductionFraction = 0.2,
+    targetJunctionId = null,
+    targetApproachIdx = 0,
+    until = null,
+  } = {}) {
+    const fromJ = this.junctionIndexById.get(junctionId);
+    if (fromJ === undefined) return false;
+    const fromCount = this.junctionApproachCounts[fromJ];
+    const safeAppIdx = Math.max(0, Math.min(fromCount - 1, approachIdx || 0));
+    const fromFlatIdx = this.junctionApproachOffsets[fromJ] + safeAppIdx;
+
+    // Pick alternate boundary junction entry if no explicit target supplied
+    let destJ = targetJunctionId ? this.junctionIndexById.get(targetJunctionId) : undefined;
+    let destAppIdx = targetApproachIdx ?? 0;
+    if (destJ === undefined) {
+      // Find a distinct junction with an external boundary entry
+      for (let j = 0; j < this.numJunctions; j++) {
+        if (j === fromJ) continue;
+        const offset = this.junctionApproachOffsets[j];
+        const cnt = this.junctionApproachCounts[j];
+        for (let a = 0; a < cnt; a++) {
+          if (this.hasUpstream[offset + a] === 0) {
+            destJ = j;
+            destAppIdx = a;
+            break;
+          }
+        }
+        if (destJ !== undefined) break;
+      }
+      if (destJ === undefined) {
+        destJ = (fromJ + 1) % this.numJunctions;
+        destAppIdx = 0;
+      }
+    }
+
+    const destSafeApp = Math.max(0, Math.min(this.junctionApproachCounts[destJ] - 1, destAppIdx));
+    const targetFlatIdx = this.junctionApproachOffsets[destJ] + destSafeApp;
+    const { untilSec, untilMs } = this._normalizeUntil(until);
+
+    this.diversions.set(fromFlatIdx, {
+      junctionId,
+      approachIdx: safeAppIdx,
+      targetJunctionId: this.junctions[destJ].junctionId,
+      targetApproachIdx: destSafeApp,
+      targetFlatIdx,
+      reductionFraction: Math.max(0.05, Math.min(0.6, reductionFraction)),
+      untilSec,
+      untilMs,
+    });
+    return this.diversions.get(fromFlatIdx);
+  }
+
+  /**
    * Dispatch an emergency vehicle along a sequence of junctionIds.
    * @param {object} opts
    * @param {string[]} opts.path Ordered list of junctionIds
@@ -447,22 +620,26 @@ export class TrafficWorld {
     const q = this.queueVeh[flatIdx];
     const qMax = this.storageCapVeh[flatIdx];
     const occ = qMax > 0 ? Math.min(1, q / qMax) : 0;
-    return MIN_SPEED_KMPH + (FREE_FLOW_SPEED_KMPH - MIN_SPEED_KMPH) * Math.pow(1 - occ, 1.5);
+    const baseSpeed = MIN_SPEED_KMPH + (FREE_FLOW_SPEED_KMPH - MIN_SPEED_KMPH) * Math.pow(1 - occ, 1.5);
+    return baseSpeed * this.weather.speedFactor;
   }
 
   /**
    * Emergency vehicle kinematics:
-   * - Upstream of back-of-queue (`remainingDistM > queueLengthM`): travels at 40 km/h free-flow.
+   * - Upstream of back-of-queue (`remainingDistM > queueLengthM`): travels at 40 km/h free-flow (scaled by weather).
    * - Inside/weaving past stopped queue along the road shoulder (`remainingDistM <= queueLengthM`):
-   *   travels at max(12 km/h, approachSpeed) rather than decelerating to the mixed-traffic 3 km/h tail.
+   *   travels at max(12 km/h * weatherSpeed, approachSpeed) rather than decelerating to the mixed-traffic 3 km/h tail.
    */
   _emergencySpeedMps(em, flatIdx) {
     const q = this.queueVeh[flatIdx];
     const queueLengthM = (q * EFFECTIVE_VEH_LENGTH_M) / Math.max(1, this.lanes[flatIdx]);
     if (em.remainingDistM > queueLengthM) {
-      return FREE_FLOW_SPEED_KMPH / 3.6;
+      return (FREE_FLOW_SPEED_KMPH * this.weather.speedFactor) / 3.6;
     }
-    const speedKmph = Math.max(EMERGENCY_WEAVING_SPEED_KMPH, this._approachSpeedKmph(flatIdx));
+    const speedKmph = Math.max(
+      EMERGENCY_WEAVING_SPEED_KMPH * this.weather.speedFactor,
+      this._approachSpeedKmph(flatIdx)
+    );
     return speedKmph / 3.6;
   }
 
@@ -478,6 +655,17 @@ export class TrafficWorld {
         this.surges.delete(junctionId);
       }
     }
+    for (const [flatIdx, div] of this.diversions.entries()) {
+      if (this.elapsedSec >= div.untilSec || this.simTimeMs >= div.untilMs) {
+        this.diversions.delete(flatIdx);
+      }
+    }
+    if (
+      this.weather.active &&
+      (this.elapsedSec >= this.weather.untilSec || this.simTimeMs >= this.weather.untilMs)
+    ) {
+      this.clearGlobalWeather();
+    }
   }
 
   _preparePreemptionRequests() {
@@ -489,7 +677,10 @@ export class TrafficWorld {
       const flatIdx = this.junctionApproachOffsets[leg.junctionIdx] + leg.approachIdx;
       const speedMps = this._emergencySpeedMps(em, flatIdx);
       const etaSec = em.remainingDistM / Math.max(0.5, speedMps);
-      const effSat = Math.max(0.5, this.saturationFlowPerSec[flatIdx] * this.capacityFactor[flatIdx]);
+      const effSat = Math.max(
+        0.5,
+        this.saturationFlowPerSec[flatIdx] * this.capacityFactor[flatIdx] * this.weather.capacityFactor
+      );
       const queueClearanceSec = this.queueVeh[flatIdx] / effSat;
       if (etaSec <= PREEMPT_LEAD_WINDOW_SEC + queueClearanceSec) {
         this.preemptRequests[leg.junctionIdx] = leg.approachIdx;
@@ -543,13 +734,21 @@ export class TrafficWorld {
     // 2. Compute arrival packets for all approaches before signal updates & discharge
     this.arrivalsThisStep.fill(0);
 
-    // 2a. Pop delayed upstream departures from link ring buffers
+    // 2a. Pop delayed upstream departures from link ring buffers (applying active diversions honestly)
     for (let l = 0; l < this.links.length; l++) {
       const link = this.links[l];
       const slot = this.stepIndex % link.delaySteps;
       const arrivedFromLink = link.ringBuffer[slot];
       link.ringBuffer[slot] = 0;
-      this.arrivalsThisStep[link.toFlatIdx] += arrivedFromLink;
+      const div = this.diversions.get(link.toFlatIdx);
+      if (div && arrivedFromLink > 0) {
+        const shifted = arrivedFromLink * div.reductionFraction;
+        this.arrivalsThisStep[link.toFlatIdx] += arrivedFromLink - shifted;
+        this.arrivalsThisStep[div.targetFlatIdx] += shifted;
+        this.totalDivertedVeh += shifted;
+      } else {
+        this.arrivalsThisStep[link.toFlatIdx] += arrivedFromLink;
+      }
     }
 
     // 2b. Sample external Poisson arrivals for boundary approaches
@@ -561,33 +760,57 @@ export class TrafficWorld {
 
       for (let a = 0; a < count; a++) {
         const flatIdx = offset + a;
+        const div = this.diversions.get(flatIdx);
         if (this.hasUpstream[flatIdx] === 0) {
           let surgeMult = 1.0;
           if (surge && (surge.approachIdx === null || surge.approachIdx === undefined || surge.approachIdx === a)) {
             surgeMult = surge.factor;
           }
           const lambda = this.baseDemandPerSec[flatIdx] * stepDemandMult * surgeMult * dt;
-          const extArr = this.approachRngs[flatIdx].poisson(lambda);
-          this.arrivalsThisStep[flatIdx] += extArr;
-          this.totalExternalArrived[flatIdx] += extArr;
+          if (div) {
+            const kept = this.approachRngs[flatIdx].poisson(lambda * (1 - div.reductionFraction));
+            const diverted = this.approachRngs[flatIdx].poisson(lambda * div.reductionFraction);
+            this.arrivalsThisStep[flatIdx] += kept;
+            this.totalExternalArrived[flatIdx] += kept;
+            this.arrivalsThisStep[div.targetFlatIdx] += diverted;
+            this.totalExternalArrived[div.targetFlatIdx] += diverted;
+            this.totalDivertedVeh += diverted;
+          } else {
+            const extArr = this.approachRngs[flatIdx].poisson(lambda);
+            this.arrivalsThisStep[flatIdx] += extArr;
+            this.totalExternalArrived[flatIdx] += extArr;
+          }
         } else if (surge && surge.approachIdx === a) {
           // Optional targeted surge on an internal approach if explicitly requested
           const extraLambda = this.baseDemandPerSec[flatIdx] * stepDemandMult * Math.max(0, surge.factor - 1) * dt;
           if (extraLambda > 0) {
             const extraArr = this.approachRngs[flatIdx].poisson(extraLambda);
-            this.arrivalsThisStep[flatIdx] += extraArr;
-            this.totalExternalArrived[flatIdx] += extraArr;
+            if (div) {
+              const kept = extraArr * (1 - div.reductionFraction);
+              const diverted = extraArr - kept;
+              this.arrivalsThisStep[flatIdx] += kept;
+              this.totalExternalArrived[flatIdx] += kept;
+              this.arrivalsThisStep[div.targetFlatIdx] += diverted;
+              this.totalExternalArrived[div.targetFlatIdx] += diverted;
+              this.totalDivertedVeh += diverted;
+            } else {
+              this.arrivalsThisStep[flatIdx] += extraArr;
+              this.totalExternalArrived[flatIdx] += extraArr;
+            }
           }
         }
-
-        const arr = this.arrivalsThisStep[flatIdx];
-        this.totalArrived[flatIdx] += arr;
-
-        // Maintain rolling 60s arrivals buffer
-        const rbIdx = flatIdx * this.rollingSteps + this.rollingCursor;
-        this.rollingSum[flatIdx] += arr - this.rollingBuffer[rbIdx];
-        this.rollingBuffer[rbIdx] = arr;
       }
+    }
+
+    // Separate accumulation pass so diverted arrivals added to downstream/alternate targetFlatIdx are accounted once
+    for (let flatIdx = 0; flatIdx < this.totalApproaches; flatIdx++) {
+      const arr = this.arrivalsThisStep[flatIdx];
+      this.totalArrived[flatIdx] += arr;
+
+      // Maintain rolling 60s arrivals buffer
+      const rbIdx = flatIdx * this.rollingSteps + this.rollingCursor;
+      this.rollingSum[flatIdx] += arr - this.rollingBuffer[rbIdx];
+      this.rollingBuffer[rbIdx] = arr;
     }
 
     this.rollingCursor = (this.rollingCursor + 1) % this.rollingSteps;
@@ -610,7 +833,7 @@ export class TrafficWorld {
         appScratch.queueVeh = this.queueVeh[flatIdx];
         appScratch.arrivalsThisStep = this.arrivalsThisStep[flatIdx];
         appScratch.arrivalRateVehPerSec = this.arrivalsThisStep[flatIdx] / dt;
-        appScratch.capacityFactor = this.capacityFactor[flatIdx];
+        appScratch.capacityFactor = this.capacityFactor[flatIdx] * this.weather.capacityFactor;
 
         let penalty = 0;
         let occPenalty = 0;
@@ -644,7 +867,11 @@ export class TrafficWorld {
 
         let dep = 0;
         if (isGreen) {
-          const maxDischarge = this.saturationFlowPerSec[flatIdx] * this.capacityFactor[flatIdx] * dt;
+          const maxDischarge =
+            this.saturationFlowPerSec[flatIdx] *
+            this.capacityFactor[flatIdx] *
+            this.weather.capacityFactor *
+            dt;
           let downstreamSpace = Infinity;
           const outs = this.outgoingLinks[flatIdx];
           for (let m = 0; m < outs.length; m++) {
@@ -782,7 +1009,10 @@ export class TrafficWorld {
 
       const greenShare = decision.cycleSec > 0 ? greenTimeSec / decision.cycleSec : 0.25;
       const approachCapVehPerSec =
-        this.saturationFlowPerSec[flatIdx] * this.capacityFactor[flatIdx] * greenShare;
+        this.saturationFlowPerSec[flatIdx] *
+        this.capacityFactor[flatIdx] *
+        this.weather.capacityFactor *
+        greenShare;
       const arrivalVehPerSec = (this.rollingSum[flatIdx] * windowScale) / 60;
       const vOverC = approachCapVehPerSec > 0 ? arrivalVehPerSec / approachCapVehPerSec : 1.5;
       if (vOverC > maxSatRatio) maxSatRatio = vOverC;
@@ -800,6 +1030,8 @@ export class TrafficWorld {
         avgSpeedKmph: Number(speedKmph.toFixed(1)),
         signal,
         greenTimeSec,
+        vOverC: Number(Math.min(3.0, vOverC).toFixed(3)),
+        storageRatio: Number(storageRatio.toFixed(3)),
       };
     }
 
@@ -833,6 +1065,9 @@ export class TrafficWorld {
       congestionScore,
       control: {
         controller: ctrl.name,
+        activeController: decision.activeController ?? ctrl.name,
+        flowRatioY: decision.flowRatioY ?? null,
+        reason: decision.reason ?? null,
         cycleSec: decision.cycleSec,
         phaseIndex: decision.phaseIndex,
         greenRemainingSec: decision.greenRemainingSec,

@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Alert } from '../models/Alert.js';
 import { Device } from '../models/Device.js';
 import crypto from 'crypto';
@@ -91,28 +92,28 @@ class AnomalyEngine {
       }
     };
 
-    // 1. Stalled Vehicle Incident Detection
+    // 1. Stalled Vehicle Incident Detection (event-driven, severity from event; no fabricated statistical z-score)
     if (trafficMetrics.stalledVehicleDetected || data?.stalledVehicleDetected) {
       anomalies.push({
         metric: 'stalledVehicle',
         triggerValue: 1,
         thresholdValue: 0,
-        severity: 'critical',
-        zScore: 4.5,
+        severity: data?.stalledSeverity || trafficMetrics.severity || 'critical',
+        zScore: null,
         unit: 'event',
         customTitle: `Stalled Vehicle Obstacle at ${juncName}`,
         customMsg: `Vision camera detected an immobilized / stalled vehicle blocking arterial lanes. Emergency towing dispatch recommended.`,
       });
     }
 
-    // 2. Emergency Vehicle (Ambulance / Fire) Corridor Preemption
+    // 2. Emergency Vehicle (Ambulance / Fire) Corridor Preemption (event-driven, no fabricated statistical z-score)
     if (trafficMetrics.ambulanceDetected || data?.ambulanceDetected) {
       anomalies.push({
         metric: 'ambulancePreemption',
         triggerValue: 1,
         thresholdValue: 0,
-        severity: 'critical',
-        zScore: 5.0,
+        severity: data?.emergencySeverity || trafficMetrics.severity || 'critical',
+        zScore: null,
         unit: 'event',
         customTitle: `Emergency Vehicle Approaching ${juncName}`,
         customMsg: `Ambulance transponder & camera beacon active. Automated Green Corridor Preemption recommended.`,
@@ -177,6 +178,7 @@ class AnomalyEngine {
       metric: highestAnomaly.metric,
       triggerValue: highestAnomaly.triggerValue,
       thresholdValue: highestAnomaly.thresholdValue,
+      zScore: highestAnomaly.zScore,
       timestamp: new Date(timestamp || now),
       resolved: false,
     };
@@ -188,16 +190,18 @@ class AnomalyEngine {
 
   async persistAndBroadcastAlert(alertDoc) {
     try {
-      await Alert.create(alertDoc);
+      if (mongoose.connection?.readyState === 1) {
+        await Alert.create(alertDoc);
 
-      const penalty = alertDoc.severity === 'critical' ? 25 : 10;
-      await Device.updateOne(
-        { deviceId: alertDoc.deviceId },
-        {
-          $inc: { healthScore: -penalty },
-          $set: { status: alertDoc.severity === 'critical' ? 'critical' : 'warning' },
-        }
-      );
+        const penalty = alertDoc.severity === 'critical' ? 25 : 10;
+        await Device.updateOne(
+          { deviceId: alertDoc.deviceId },
+          {
+            $inc: { healthScore: -penalty },
+            $set: { status: alertDoc.severity === 'critical' ? 'critical' : 'warning' },
+          }
+        );
+      }
 
       if (this.socketBroadcastCallback) {
         this.socketBroadcastCallback(alertDoc);
