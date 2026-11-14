@@ -950,12 +950,16 @@ export function NetworkWorkspace({
             )}
             <label
               className="inline-flex items-center gap-1"
-              title="Switch realistic Bengaluru traffic scenario across both CRN twins"
+              title={
+                user?.anonymous
+                  ? 'Read-only mode: Switch to Admin or Operator to change simulation scenarios'
+                  : 'Switch realistic Bengaluru traffic scenario across both CRN twins'
+              }
             >
               <select
                 aria-label="Traffic scenario preset"
                 value={simMeta?.scenario || simState?.scenario || 'pm-peak'}
-                disabled={quickBusy}
+                disabled={user?.anonymous || quickBusy}
                 onChange={(e) => handleQuickScenario(e.target.value)}
                 className="px-1.5 py-0.5 rounded border border-hairline bg-inset text-ink-primary font-mono text-[11px] disabled:opacity-60 cursor-pointer"
               >
@@ -968,9 +972,13 @@ export function NetworkWorkspace({
             </label>
             <button
               type="button"
-              disabled={corridorDispatching || (simState?.activeEmergencies?.length > 0) || Boolean(activeCorridorTrip)}
+              disabled={user?.anonymous || corridorDispatching || (simState?.activeEmergencies?.length > 0) || Boolean(activeCorridorTrip)}
               onClick={handleDispatchCorridor}
-              title="Dispatch Emergency Responder Green Corridor from Hebbal Flyover (008) to Jayadeva Hospital (004)"
+              title={
+                user?.anonymous
+                  ? 'Read-only mode: Switch to Admin or Operator to dispatch emergency corridors'
+                  : 'Dispatch Emergency Responder Green Corridor from Hebbal Flyover (008) to Jayadeva Hospital (004)'
+              }
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/80 font-mono text-[11px] font-semibold transition-colors disabled:opacity-50 cursor-pointer"
             >
               <span>🚑</span>
