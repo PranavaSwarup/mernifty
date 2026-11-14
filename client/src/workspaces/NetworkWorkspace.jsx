@@ -280,49 +280,6 @@ export function NetworkWorkspace({
     };
   }, []);
 
-  const handleQuickScenario = useCallback(
-    async (scenarioId) => {
-      if (!scenarioId || quickBusy) return;
-      setQuickBusy(true);
-      try {
-        if (!localStorage.getItem('hp_token')) {
-          try {
-            const loginRes = await api.demoLogin('admin');
-            if (loginRes?.token) {
-              localStorage.setItem('hp_token', loginRes.token);
-            }
-          } catch (_) {}
-        }
-
-        const res = await api.applyScenario(scenarioId);
-        if (res?.success) {
-          const m = res.meta || res;
-          setSimMeta((prev) => ({
-            ...prev,
-            scenario: m.scenario ?? prev?.scenario,
-            scenarioLabel: m.scenarioLabel ?? prev?.scenarioLabel,
-            simClockIst: m.simClockIst ?? prev?.simClockIst,
-            simStartNote: m.simStartNote ?? null,
-            simSpeed: m.simSpeed ?? prev?.simSpeed,
-          }));
-          if (res.state?.junctions) {
-            setSimState(res.state);
-          } else {
-            fetchSimOverview();
-          }
-        }
-      } catch (err) {
-        console.warn('[NetworkWorkspace] Error applying scenario:', err.message);
-        if (scenarioId === 'ambulance-corridor') {
-          await handleDispatchCorridor();
-        }
-      } finally {
-        setQuickBusy(false);
-      }
-    },
-    [quickBusy, setSimMeta, fetchSimOverview, handleDispatchCorridor]
-  );
-
   const handleDispatchCorridor = useCallback(async () => {
     if (corridorDispatching) return;
     setCorridorDispatching(true);
@@ -371,6 +328,49 @@ export function NetworkWorkspace({
       setCorridorDispatching(false);
     }
   }, [corridorDispatching, corridorAvoidJams, fetchSimOverview]);
+
+  const handleQuickScenario = useCallback(
+    async (scenarioId) => {
+      if (!scenarioId || quickBusy) return;
+      setQuickBusy(true);
+      try {
+        if (!localStorage.getItem('hp_token')) {
+          try {
+            const loginRes = await api.demoLogin('admin');
+            if (loginRes?.token) {
+              localStorage.setItem('hp_token', loginRes.token);
+            }
+          } catch (_) {}
+        }
+
+        const res = await api.applyScenario(scenarioId);
+        if (res?.success) {
+          const m = res.meta || res;
+          setSimMeta((prev) => ({
+            ...prev,
+            scenario: m.scenario ?? prev?.scenario,
+            scenarioLabel: m.scenarioLabel ?? prev?.scenarioLabel,
+            simClockIst: m.simClockIst ?? prev?.simClockIst,
+            simStartNote: m.simStartNote ?? null,
+            simSpeed: m.simSpeed ?? prev?.simSpeed,
+          }));
+          if (res.state?.junctions) {
+            setSimState(res.state);
+          } else {
+            fetchSimOverview();
+          }
+        }
+      } catch (err) {
+        console.warn('[NetworkWorkspace] Error applying scenario:', err.message);
+        if (scenarioId === 'ambulance-corridor') {
+          await handleDispatchCorridor();
+        }
+      } finally {
+        setQuickBusy(false);
+      }
+    },
+    [quickBusy, setSimMeta, fetchSimOverview, handleDispatchCorridor]
+  );
 
   const handleQuickSpeed = useCallback(
     async (speedVal) => {
