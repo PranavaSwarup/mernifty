@@ -1,7 +1,7 @@
 import { Device } from '../models/Device.js';
 import { User } from '../models/User.js';
 import { INITIAL_DEVICES } from '../data/junctionDevices.js';
-
+import { config } from '../config/config.js';
 import { seed24HourHistory } from './seedHistory.js';
 
 export async function seedInitialData() {
