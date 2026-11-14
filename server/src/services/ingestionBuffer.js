@@ -16,13 +16,15 @@ class IngestionBuffer {
     this.timer = setInterval(() => {
       this.flush();
     }, this.flushIntervalMs);
+    if (this.timer.unref) this.timer.unref();
 
     // Periodic cleanup of deduplication set
-    setInterval(() => {
+    this.cleanupTimer = setInterval(() => {
       if (this.recentEventIds.size > 50000) {
         this.recentEventIds.clear();
       }
     }, 60000);
+    if (this.cleanupTimer.unref) this.cleanupTimer.unref();
   }
 
   enqueue(event) {

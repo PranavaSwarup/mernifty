@@ -9,7 +9,7 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const { category, zoneId, status } = req.query;
-    const filter = {};
+    const filter = { junctionId: { $exists: true } };
     const targetZone = zoneId || category;
     if (targetZone && targetZone !== 'all') {
       filter.category = targetZone;

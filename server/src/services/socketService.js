@@ -15,16 +15,18 @@ class SocketService {
     });
 
     // Micro-batch flush timer
-    setInterval(() => {
+    this.flushTimer = setInterval(() => {
       this.flushBroadcasts();
     }, this.broadcastIntervalMs);
+    if (this.flushTimer.unref) this.flushTimer.unref();
 
     // Metric broadcast timer (1s)
-    setInterval(() => {
+    this.metricTimer = setInterval(() => {
       if (this.io) {
         this.io.to('global').emit('metrics:snapshot', metricsService.getSnapshot());
       }
     }, 1000);
+    if (this.metricTimer.unref) this.metricTimer.unref();
   }
 
   init(httpServer, clientUrl) {

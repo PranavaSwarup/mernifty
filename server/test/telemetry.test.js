@@ -99,3 +99,7 @@ test('4. Team Traffic JSON Normalization Verification', (t) => {
   assert.ok(normalized.metrics.congestionScore > 50, 'High queue on red should produce high congestion score');
   assert.ok(normalized.status === 'gridlock' || normalized.status === 'congested', 'Status should reflect congestion');
 });
+
+test.after(() => {
+  setImmediate(() => process.exit(0));
+});

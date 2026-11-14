@@ -40,6 +40,7 @@ class MetricsService {
         this.latencies = this.latencies.slice(-500); // keep recent sample
       }
     }, 1000);
+    if (this.rateInterval.unref) this.rateInterval.unref();
   }
 
   recordIngest(count = 1, latencyMs = 0) {

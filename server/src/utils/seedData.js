@@ -4,6 +4,10 @@ import { INITIAL_DEVICES } from '../services/simulatorService.js';
 
 export async function seedInitialData() {
   try {
+    // 0. Clean up legacy non-traffic devices
+    const trafficIds = INITIAL_DEVICES.map((d) => d.deviceId);
+    await Device.deleteMany({ deviceId: { $nin: trafficIds } });
+
     // 1. Seed Initial Bengaluru Traffic Junctions
     for (const dev of INITIAL_DEVICES) {
       await Device.findOneAndUpdate(
