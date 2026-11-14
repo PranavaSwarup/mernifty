@@ -154,6 +154,8 @@ export function SocketProvider({ children }) {
   const [counterfactual, setCounterfactual] = useState(null);
   const [isPaused, setIsPaused] = useState(false);
   const [clientLatency, setClientLatency] = useState(0);
+  const [clientE2eStats, setClientE2eStats] = useState({ p50: 0, p95: 0, p99: 0, count: 0, clockOffsetMs: 0 });
+  const [obsUpdate, setObsUpdate] = useState(null);
   const [schema, setSchema] = useState(DEFAULT_WIRE_SCHEMA);
   const [lastReplayStats, setLastReplayStats] = useState(null);
   const [socketError, setSocketError] = useState(null);
@@ -162,6 +164,10 @@ export function SocketProvider({ children }) {
   const schemaRef = useRef(DEFAULT_WIRE_SCHEMA);
   const socketRef = useRef(null);
   const pendingBufferRef = useRef([]);
+  const pendingRenderEmitRef = useRef([]);
+  const e2eSamplesRef = useRef([]);
+  const clockOffsetSamplesRef = useRef([]);
+  const clockOffsetMsRef = useRef(0);
   const cursorsRef = useRef({});
   const hasConnectedOnceRef = useRef(false);
   const isPausedRef = useRef(false);
@@ -263,6 +269,8 @@ export function SocketProvider({ children }) {
     socket.on('connect', () => {
       setIsConnected(true);
       setSocketError(null);
+      clockOffsetSamplesRef.current = [];
+      socket.emit('telemetry:ping', Date.now());
       const isReconnect = hasConnectedOnceRef.current || Object.keys(cursorsRef.current).length > 0;
       hasConnectedOnceRef.current = true;
       sendActiveSubscription(isReconnect);
@@ -291,18 +299,36 @@ export function SocketProvider({ children }) {
       hotStore.setStats(snapshot);
     });
 
+    socket.on('obs:update', (payload) => {
+      if (payload?.metrics) {
+        hotStore.setStats(payload.metrics);
+      }
+      setObsUpdate(payload || null);
+    });
+
     socket.on('cf:update', (cf) => {
       setCounterfactual(cf);
     });
 
+    const recordFrameEmitTimestamp = (wirePkt) => {
+      const serverEmitTs = Number(wirePkt?.et || wirePkt?.t0);
+      if (!Number.isFinite(serverEmitTs) || serverEmitTs <= 0) return;
+      pendingRenderEmitRef.current.push(serverEmitTs);
+      if (pendingRenderEmitRef.current.length > 50) {
+        pendingRenderEmitRef.current.shift();
+      }
+    };
+
     socket.on('telemetry:zone', (wirePkt) => {
       if (isPausedRef.current) return;
+      recordFrameEmitTimestamp(wirePkt);
       const decoded = decodeZoneBatch(wirePkt, schemaRef.current);
       acceptDecodedEvents(decoded);
     });
 
     socket.on('telemetry:junction', (wirePkt) => {
       if (isPausedRef.current) return;
+      recordFrameEmitTimestamp(wirePkt);
       const decoded = decodeJunctionBatch(wirePkt, schemaRef.current);
       acceptDecodedEvents(decoded);
     });
@@ -334,21 +360,90 @@ export function SocketProvider({ children }) {
       }
     }, 3000);
 
-    socket.on('telemetry:pong', ({ clientTimestamp }) => {
-      const rtt = Date.now() - clientTimestamp;
-      setClientLatency(rtt);
+    // Send initial ping immediately on connect for fast NTP clock offset convergence
+    socket.on('telemetry:pong', (pong = {}) => {
+      const t3 = Date.now();
+      const t0 = Number(pong.clientTimestamp);
+      const t1 = Number(pong.serverRecvTimestamp ?? pong.serverTimestamp);
+      const t2 = Number(pong.serverSendTimestamp ?? t1);
+      if (!Number.isFinite(t0)) return;
+
+      const rtt = Number.isFinite(t1) && Number.isFinite(t2) ? Math.max(0, t3 - t0 - (t2 - t1)) : Math.max(0, t3 - t0);
+      setClientLatency(Math.round(rtt));
+
+      if (Number.isFinite(t1) && Number.isFinite(t2)) {
+        const offsetSample = (t1 - t0 + (t2 - t3)) / 2;
+        clockOffsetSamplesRef.current.push(offsetSample);
+        if (clockOffsetSamplesRef.current.length > 7) {
+          clockOffsetSamplesRef.current.shift();
+        }
+        const sortedOffsets = [...clockOffsetSamplesRef.current].sort((a, b) => a - b);
+        clockOffsetMsRef.current = sortedOffsets[Math.floor(sortedOffsets.length / 2)];
+      }
     });
 
+    const pct = (sorted, q) => {
+      if (sorted.length === 0) return 0;
+      const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor(q * (sorted.length - 1))));
+      return Number(sorted[idx].toFixed(2));
+    };
+
+    const latencyReportInterval = setInterval(() => {
+      const samples = e2eSamplesRef.current.splice(0, e2eSamplesRef.current.length);
+      if (!socket.connected || samples.length === 0) return;
+      const sorted = [...samples].sort((a, b) => a - b);
+      const summary = {
+        room: viewSubsRef.current.engineering ? 'engineering' : 'city',
+        p50: pct(sorted, 0.5),
+        p95: pct(sorted, 0.95),
+        p99: pct(sorted, 0.99),
+        count: sorted.length,
+        samplesMs: sorted.slice(0, 50),
+        clockOffsetMs: Number(clockOffsetMsRef.current.toFixed(2)),
+      };
+      setClientE2eStats({
+        p50: summary.p50,
+        p95: summary.p95,
+        p99: summary.p99,
+        count: summary.count,
+        clockOffsetMs: summary.clockOffsetMs,
+      });
+      socket.emit('client:latency', summary);
+    }, 5000);
+
+    let rafId = null;
     // 100ms throttled render flush to external hot store
     const flushInterval = setInterval(() => {
       if (pendingBufferRef.current.length === 0) return;
       const batchToProcess = pendingBufferRef.current.splice(0, pendingBufferRef.current.length);
+      const emitTimestamps = pendingRenderEmitRef.current.splice(0, pendingRenderEmitRef.current.length);
       hotStore.applyBatch(batchToProcess);
+
+      if (emitTimestamps.length > 0 && typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+        rafId = window.requestAnimationFrame(() => {
+          const renderedAt = Date.now();
+          const offset = clockOffsetMsRef.current;
+          for (const srvEmitTs of emitTimestamps) {
+            const clientEmitTs = srvEmitTs - offset;
+            const e2eMs = Math.max(0, renderedAt - clientEmitTs);
+            if (e2eMs < 30000) {
+              e2eSamplesRef.current.push(e2eMs);
+              if (e2eSamplesRef.current.length > 200) {
+                e2eSamplesRef.current.shift();
+              }
+            }
+          }
+        });
+      }
     }, 100);
 
     return () => {
       clearInterval(pingInterval);
+      clearInterval(latencyReportInterval);
       clearInterval(flushInterval);
+      if (rafId !== null && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(rafId);
+      }
       socket.disconnect();
     };
   }, [token, sendActiveSubscription]);
@@ -450,6 +545,8 @@ export function SocketProvider({ children }) {
         soundEnabled,
         setSoundEnabled,
         clientLatency,
+        clientE2eStats,
+        obsUpdate,
         schema,
         lastReplayStats,
         socketError,

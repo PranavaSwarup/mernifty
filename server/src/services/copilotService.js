@@ -8,6 +8,7 @@ import { socketService } from './socketService.js';
 import { haversineKm, ROAD_TORTUOSITY_FACTOR } from '../sim/network.js';
 import { createRng, deriveSeed } from '../sim/rng.js';
 import { loadStudyPolicy, recommendControllerForRegime } from '../sim/studyPolicy.js';
+import { withAsyncSpan } from '../telemetry/instruments.js';
 
 const BTP_TOW_DEPOTS = [
   { id: 'BTP-TMC-CENTRE', name: 'Infantry Rd TMC Depot', latitude: 12.9794, longitude: 77.6006 },
@@ -272,6 +273,26 @@ export function rolloutPredictedEffect(liveWorld, deviceId, applyActionFn, horiz
  * accompanied by mean delay delta and 90% [p5, p95] empirical interval.
  */
 export async function rolloutMonteCarloEffect(
+  liveWorld,
+  deviceId,
+  applyActionFn,
+  { horizonSec = 300, rolloutsK = 12, chunkSize = 2 } = {}
+) {
+  return withAsyncSpan(
+    'copilot.whatif',
+    {
+      attributes: {
+        junctionId: String(deviceId || 'network'),
+        'copilot.horizon_sec': horizonSec,
+        'copilot.rollouts_k': rolloutsK,
+        'operator.action': true,
+      },
+    },
+    async () => _executeMonteCarloRollout(liveWorld, deviceId, applyActionFn, { horizonSec, rolloutsK, chunkSize })
+  );
+}
+
+async function _executeMonteCarloRollout(
   liveWorld,
   deviceId,
   applyActionFn,

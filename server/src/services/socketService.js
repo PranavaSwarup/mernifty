@@ -13,6 +13,15 @@ import {
   measureWireSavings,
   utf8ByteLength,
 } from '../../../client/src/shared/wire.js';
+import {
+  INGESTED_AT_SYM,
+  recordClientE2e,
+  recordIngestToEmit,
+  recordSocketFrameBytes,
+  setGaugeProviders,
+  withSyncSpan,
+} from '../telemetry/instruments.js';
+import { getRecentTraces } from '../telemetry/otel.js';
 
 const ALL_ZONES = [
   'south-bangalore',
@@ -74,10 +83,24 @@ class SocketService {
     }, this.broadcastIntervalMs);
     if (this.flushTimer.unref) this.flushTimer.unref();
 
-    this.metricTimer = setInterval(() => {
-      if (this.io) {
-        const snapshot = metricsService.getSnapshot();
-        this._emitToRoomsUnique(['city', 'engineering'], 'metrics:snapshot', snapshot);
+    this._emittingMetrics = false;
+    this.metricTimer = setInterval(async () => {
+      if (!this.io || this._emittingMetrics) return;
+      this._emittingMetrics = true;
+      try {
+        const engIds = new Set(this._getRoomSocketIds('engineering'));
+        if (engIds.size > 0) {
+          const fullSnapshot = await metricsService.getSnapshotAsync();
+          this._emitToRoomRaw('engineering', 'metrics:snapshot', fullSnapshot);
+          this._emitToRoomRaw('engineering', 'obs:update', {
+            metrics: fullSnapshot,
+            recentTraces: getRecentTraces(15).traces,
+            timestamp: fullSnapshot.timestamp,
+          });
+        }
+        this._emitToRoomExcluding('city', engIds, 'metrics:snapshot', metricsService.getCitySnapshot());
+      } finally {
+        this._emittingMetrics = false;
       }
     }, 1000);
     if (this.metricTimer.unref) this.metricTimer.unref();
@@ -156,13 +179,18 @@ class SocketService {
   }
 
   _emitToRoomRaw(roomName, eventName, payload, frameCount = 0) {
+    return this._emitToRoomExcluding(roomName, null, eventName, payload, frameCount);
+  }
+
+  _emitToRoomExcluding(roomName, excludedSocketIds, eventName, payload, frameCount = 0) {
     if (!this.io) return 0;
-    const bytes = utf8ByteLength(JSON.stringify([eventName, payload]));
     const socketIds = this._getRoomSocketIds(roomName);
     if (socketIds.length === 0) return 0;
+    const bytes = utf8ByteLength(JSON.stringify([eventName, payload]));
 
     let delivered = 0;
     for (const sid of socketIds) {
+      if (excludedSocketIds && excludedSocketIds.has(sid)) continue;
       const sock = this._getSocketById(sid);
       if (!sock || sock.data?.resuming) continue;
       if (this._isSocketCongested(sock)) {
@@ -178,6 +206,7 @@ class SocketService {
 
     if (delivered > 0) {
       metricsService.recordSocketBytes(roomName, bytes * delivered, delivered * frameCount);
+      recordSocketFrameBytes(roomName, bytes);
     }
     return delivered;
   }
@@ -289,11 +318,12 @@ class SocketService {
   }
 
   _emitWireRoom(roomName, eventName, packet, sourceEvents, kind, zoneOrJunction) {
-    if (!this.io) return;
+    if (!this.io) return { deliveredSockets: 0, totalBytes: 0, framesDelivered: 0 };
     const socketIds = this._getRoomSocketIds(roomName);
-    if (socketIds.length === 0) return;
+    if (socketIds.length === 0) return { deliveredSockets: 0, totalBytes: 0, framesDelivered: 0 };
 
-    const frameBytes = utf8ByteLength(JSON.stringify([eventName, packet]));
+    const wirePacket = packet && typeof packet === 'object' ? { ...packet, et: Date.now() } : packet;
+    const frameBytes = utf8ByteLength(JSON.stringify([eventName, wirePacket]));
     let deliveredSockets = 0;
 
     for (const sid of socketIds) {
@@ -312,17 +342,18 @@ class SocketService {
         this._flushSocketCoalesced(sock);
       }
 
-      sock.emit(eventName, packet);
+      sock.emit(eventName, wirePacket);
       deliveredSockets += 1;
     }
 
     if (deliveredSockets > 0) {
-      metricsService.recordSocketBytes(
-        roomName,
-        frameBytes * deliveredSockets,
-        deliveredSockets * sourceEvents.length
-      );
+      const totalBytes = frameBytes * deliveredSockets;
+      const framesDelivered = deliveredSockets * sourceEvents.length;
+      metricsService.recordSocketBytes(roomName, totalBytes, framesDelivered);
+      recordSocketFrameBytes(roomName, frameBytes);
+      return { deliveredSockets, totalBytes, framesDelivered };
     }
+    return { deliveredSockets: 0, totalBytes: 0, framesDelivered: 0 };
   }
 
   init(httpServer, clientUrl) {
@@ -335,6 +366,7 @@ class SocketService {
       pingInterval: 10000,
       pingTimeout: 5000,
     });
+    setGaugeProviders({ getSocketsConnected: () => this.io?.engine?.clientsCount || 0 });
 
     // Authenticate Socket.IO handshake via JWT (anonymous defaults cleanly to viewer)
     this.io.use((socket, next) => {
@@ -545,10 +577,27 @@ class SocketService {
     });
 
     socket.on('telemetry:ping', (clientTimestamp) => {
+      const serverRecvTimestamp = Date.now();
       socket.emit('telemetry:pong', {
         clientTimestamp,
-        serverTimestamp: Date.now(),
+        serverTimestamp: serverRecvTimestamp,
+        serverRecvTimestamp,
+        serverSendTimestamp: Date.now(),
       });
+    });
+
+    socket.on('client:latency', (payload) => {
+      if (!payload || typeof payload !== 'object') return;
+      const room = typeof payload.room === 'string' && payload.room ? payload.room : 'city';
+      const samples = Array.isArray(payload.samplesMs) ? payload.samplesMs : [];
+      for (const ms of samples.slice(0, 50)) {
+        if (typeof ms === 'number' && Number.isFinite(ms) && ms >= 0 && ms < 60000) {
+          recordClientE2e(room, ms);
+        }
+      }
+      if (samples.length === 0 && typeof payload.p50 === 'number' && Number.isFinite(payload.p50) && payload.p50 >= 0) {
+        recordClientE2e(room, payload.p50);
+      }
     });
 
     socket.on('disconnect', () => {
@@ -659,8 +708,10 @@ class SocketService {
     }
 
     // Flush immediate snapshot when joining city or engineering so view populates without 1s delay
-    if (subs.city || subs.engineering) {
+    if (subs.engineering) {
       socket.emit('metrics:snapshot', metricsService.getSnapshot());
+    } else if (subs.city) {
+      socket.emit('metrics:snapshot', metricsService.getCitySnapshot());
     }
 
     return joined;
@@ -893,49 +944,76 @@ class SocketService {
   flushBroadcasts() {
     if (!this.io || this.broadcastQueue.length === 0) return;
 
-    const batch = this.broadcastQueue.splice(0, this.broadcastQueue.length);
+    withSyncSpan('socket.flush', {}, (span) => {
+      const batch = this.broadcastQueue.splice(0, this.broadcastQueue.length);
 
-    // Track JSON-full vs Wire-v1 byte efficiency metrics & log sample once
-    const wireStats = measureWireSavings(batch, this.wireSchema);
-    metricsService.setWireComparison(wireStats);
-    if (!this._loggedWireSample && wireStats.count >= 4) {
-      this._loggedWireSample = true;
-      console.log(
-        `[Wire v1] Avg bytes/event: fullJSON=${wireStats.fullBytesPerEvent}B vs compactZone=${wireStats.zoneWireBytesPerEvent}B (${wireStats.zoneSavingsPct}% smaller) | compactJunction=${wireStats.junctionWireBytesPerEvent}B (${wireStats.junctionSavingsPct}% smaller)`
-      );
-    }
-
-    // Group into per-zone Wire v1 compact tuples -> `zone:<zoneId>`
-    const zoneGroups = new Map();
-    for (const evt of batch) {
-      const zId = evt.zoneId || evt.category;
-      if (!zId) continue;
-      if (!zoneGroups.has(zId)) zoneGroups.set(zId, []);
-      zoneGroups.get(zId).push(evt);
-    }
-
-    for (const [zId, evts] of zoneGroups.entries()) {
-      const wirePkt = encodeZoneBatch(evts, this.wireSchema, zId);
-      this._emitWireRoom(`zone:${zId}`, 'telemetry:zone', wirePkt, evts, 'zone', zId);
-    }
-
-    // Emit full per-approach Wire v1 frames ONLY to subscribers of `junction:<id>`
-    for (const [juncId, evts] of this.deviceBroadcastQueues.entries()) {
-      if (evts.length > 0) {
-        const wireJuncPkt = encodeJunctionBatch(evts, this.wireSchema, juncId);
-        this._emitWireRoom(
-          `junction:${juncId}`,
-          'telemetry:junction',
-          wireJuncPkt,
-          evts,
-          'junction',
-          juncId
+      // Track JSON-full vs Wire-v1 byte efficiency metrics & log sample once
+      const wireStats = measureWireSavings(batch, this.wireSchema);
+      metricsService.setWireComparison(wireStats);
+      if (!this._loggedWireSample && wireStats.count >= 4) {
+        this._loggedWireSample = true;
+        console.log(
+          `[Wire v1] Avg bytes/event: fullJSON=${wireStats.fullBytesPerEvent}B vs compactZone=${wireStats.zoneWireBytesPerEvent}B (${wireStats.zoneSavingsPct}% smaller) | compactJunction=${wireStats.junctionWireBytesPerEvent}B (${wireStats.junctionSavingsPct}% smaller)`
         );
-        this.deviceBroadcastQueues.set(juncId, []);
       }
-    }
 
-    metricsService.recordBroadcast(batch.length);
+      // Group into per-zone Wire v1 compact tuples -> `zone:<zoneId>`
+      const zoneGroups = new Map();
+      for (const evt of batch) {
+        const zId = evt.zoneId || evt.category;
+        if (!zId) continue;
+        if (!zoneGroups.has(zId)) zoneGroups.set(zId, []);
+        zoneGroups.get(zId).push(evt);
+      }
+
+      let roomsCount = 0;
+      let totalFrames = 0;
+      let totalBytes = 0;
+
+      for (const [zId, evts] of zoneGroups.entries()) {
+        const wirePkt = encodeZoneBatch(evts, this.wireSchema, zId);
+        const res = this._emitWireRoom(`zone:${zId}`, 'telemetry:zone', wirePkt, evts, 'zone', zId);
+        if (res.deliveredSockets > 0) {
+          roomsCount += 1;
+          totalFrames += res.framesDelivered;
+          totalBytes += res.totalBytes;
+        }
+      }
+
+      // Emit full per-approach Wire v1 frames ONLY to subscribers of `junction:<id>`
+      for (const [juncId, evts] of this.deviceBroadcastQueues.entries()) {
+        if (evts.length > 0) {
+          const wireJuncPkt = encodeJunctionBatch(evts, this.wireSchema, juncId);
+          const res = this._emitWireRoom(
+            `junction:${juncId}`,
+            'telemetry:junction',
+            wireJuncPkt,
+            evts,
+            'junction',
+            juncId
+          );
+          if (res.deliveredSockets > 0) {
+            roomsCount += 1;
+            totalFrames += res.framesDelivered;
+            totalBytes += res.totalBytes;
+          }
+          this.deviceBroadcastQueues.set(juncId, []);
+        }
+      }
+
+      const emitEndNs = process.hrtime.bigint();
+      for (const evt of batch) {
+        const startedNs = evt[INGESTED_AT_SYM];
+        if (startedNs) {
+          recordIngestToEmit(Number(emitEndNs - startedNs) / 1e6);
+        }
+      }
+
+      span?.setAttribute('socket.room.count', roomsCount);
+      span?.setAttribute('socket.frames', totalFrames);
+      span?.setAttribute('socket.bytes', totalBytes);
+      metricsService.recordBroadcast(batch.length);
+    });
   }
 
   broadcastAlert(alert) {

@@ -182,3 +182,31 @@ When anomalous bottlenecks occur, the Copilot Engine evaluates root causes and s
 2. **Automated Emergency Green Wave Corridor:** Pre-emptively holds conflicting cross-streets at RED and establishes continuous green wave for ambulances.
 3. **BTP Rapid Incident Tow Dispatch:** Dispatches nearest recovery crane and pushes warnings to upstream electronic Variable Message Signs (VMS).
 4. **Upstream Arterial Diversion:** Siphons 35% of incoming volume onto peripheral bypass ring roads.
+
+---
+
+## 7. OpenTelemetry Pipeline Instrumentation & Latency Measurement
+
+MetroPulse uses OpenTelemetry (`@opentelemetry/sdk-node`, loaded first via `node --import ./src/telemetry/otel.js src/index.js`) with resource attributes `service.name=metropulse-ingest`, `service.version`, and `deployment.environment.name`. Traces and metrics are exported simultaneously to:
+1. **Always-on In-Process Exporters:** A bounded 500-span `RingBufferSpanExporter` (exposed at `GET /api/observability/traces?limit=50`) and an in-process `MetricReader` (exposed at `GET /api/observability/metrics` and `1 Hz` `obs:update` frames on the `engineering` Socket.IO room).
+2. **Optional OTLP/HTTP Collector (Jaeger):** Enabled automatically whenever `OTEL_EXPORTER_OTLP_ENDPOINT` is set (such as `http://jaeger:4318` in `docker-compose.yml`). Set `OTEL_SDK_DISABLED=true` to bypass SDK initialization cleanly.
+
+### Sampling Strategy & Span Links vs. Parent-Child
+- **Head Sampling (`OperatorAwareSampler`):** Uses `ParentBased(TraceIdRatioBased(OTEL_SAMPLE_RATIO || 0.05))` for high-volume telemetry endpoints so steady-state tracing adds low overhead, while always sampling operator actions and control-plane endpoints (`copilot.whatif`, `operator.action`, `/api/sim/controller`, `/api/sim/scenario`, `/api/copilot/*`, `/api/alerts/*/resolve`).
+- **Span Links Across Async Batching:** Within a single ingest request, `telemetry.ingest -> telemetry.validate -> buffer.enqueue` form a strict parent-child hierarchy. Because `buffer.flush` writes a micro-batch of up to `500` events accumulated from many independent requests (or simulator ticks), `buffer.flush` starts in `ROOT_CONTEXT` and attaches OTel **span links** (up to 64 unique sampled `SpanContext`s per flush) pointing back to all sampled `telemetry.ingest` / `buffer.enqueue` spans persisted in that batch.
+- **Physics Step Cost (`sim_step_ms`):** `sim.step` executes every simulation second and is intentionally recorded via the `sim_step_ms` histogram rather than creating per-step spans.
+
+### Explicit Histogram Bucket Boundaries & Percentile Interpolation
+Every OTel histogram uses an explicit `AggregationType.EXPLICIT_BUCKET_HISTOGRAM` SDK view so percentiles are derived directly from cumulative bucket counts:
+- Latency histograms (`ingest_to_persist_ms`, `ingest_to_emit_ms`, `flush_duration_ms`, `sim_step_ms`, `client_e2e_ms`): `[0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2500, 5000]` ms.
+- `flush_batch_size`: `[1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500]` events.
+- `socket_frame_bytes`: `[128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]` bytes.
+
+Reported `p50`, `p95`, and `p99` values use **linear interpolation inside the target bucket** (`lower + ((rank - prevCum) / bucketCount) * (upper - lower)`, bounded by `[max(0, min), max]` on edge buckets). Because raw observations within a bucket are not retained, interpolated percentiles are an estimate bounded by bucket width rather than exact sample quantiles.
+
+### Honest Client End-to-End Latency (`client_e2e_ms`) & NTP Clock-Offset Correction
+Measuring true `server emit -> client render` latency across separate machines cannot assume synchronized wall clocks:
+1. Clients send `telemetry:ping` (`t0`), and the server replies on `telemetry:pong` with `serverRecvTimestamp` (`t1`) and `serverSendTimestamp` (`t2`), received by the client at `t3`.
+2. The client estimates clock offset $\theta = \frac{(t_1 - t_0) + (t_2 - t_3)}{2}$ using a rolling median of the 7 most recent pongs to reject transient jitter.
+3. Each outbound Wire v1 frame carries server emit epoch `et`. After `hotStore.applyBatch(...)` commits to React's external store, a `requestAnimationFrame` callback captures post-paint timestamp `t_render` and computes `e2eMs = max(0, t_render - (et - offset))`.
+4. Every 5 seconds, `SocketContext` emits bounded samples and summary percentiles on `client:latency`, which the server records into the `client_e2e_ms{room}` OTel histogram.

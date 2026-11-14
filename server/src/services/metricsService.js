@@ -1,3 +1,10 @@
+import {
+  getCachedOtelMetricsSnapshot,
+  getEventLoopLagStats,
+  isOtelEnabled,
+  refreshOtelMetricsSnapshot,
+} from '../telemetry/otel.js';
+
 class MetricsService {
   constructor() {
     this.totalIngested = 0;
@@ -65,6 +72,10 @@ class MetricsService {
         const sum = this.latencies.reduce((a, b) => a + b, 0);
         this.avgLatencyMs = parseFloat((sum / this.latencies.length).toFixed(2));
         this.latencies = this.latencies.slice(-500);
+      }
+
+      if (isOtelEnabled()) {
+        refreshOtelMetricsSnapshot();
       }
     }, 1000);
     if (this.rateInterval.unref) this.rateInterval.unref();
@@ -143,8 +154,38 @@ class MetricsService {
     this.wireComparison = comparison;
   }
 
+  _buildOtelSnapshot() {
+    const cached = getCachedOtelMetricsSnapshot();
+    const h = cached.histograms || {};
+    const emptyHist = { count: 0, sum: 0, min: 0, max: 0, p50: 0, p95: 0, p99: 0, byAttribute: {} };
+    const loopLag = getEventLoopLagStats();
+    return {
+      enabled: isOtelEnabled(),
+      collectedAt: cached.collectedAt,
+      eventLoopLagMs: cached.gauges?.['event_loop.lag'] ?? loopLag.meanMs,
+      eventLoopLagP99Ms: loopLag.p99Ms,
+      counters: cached.counters || {},
+      gauges: cached.gauges || {},
+      histograms: {
+        ingestToPersistMs: h.ingest_to_persist_ms || emptyHist,
+        ingestToEmitMs: h.ingest_to_emit_ms || emptyHist,
+        flushDurationMs: h.flush_duration_ms || emptyHist,
+        flushBatchSize: h.flush_batch_size || emptyHist,
+        simStepMs: h.sim_step_ms || emptyHist,
+        socketFrameBytes: h.socket_frame_bytes || emptyHist,
+        clientE2eMs: h.client_e2e_ms || emptyHist,
+      },
+    };
+  }
+
+  async getSnapshotAsync() {
+    await refreshOtelMetricsSnapshot();
+    return this.getSnapshot();
+  }
+
   getSnapshot() {
     const integrity = this._integrityProvider ? this._integrityProvider() : null;
+    const otel = this._buildOtelSnapshot();
     return {
       totalIngested: this.totalIngested,
       totalBroadcasted: this.totalBroadcasted,
@@ -169,10 +210,34 @@ class MetricsService {
       socketCoalescedCount: this.socketCoalescedCount,
       socketDroppedCount: this.socketDroppedCount,
       wireComparison: this.wireComparison,
+      eventLoopLagMs: otel.eventLoopLagMs,
+      eventLoopLagP99Ms: otel.eventLoopLagP99Ms,
+      otel,
       uptimeSeconds: Math.floor((Date.now() - this.startTime) / 1000),
       integrity,
       timestamp: new Date().toISOString(),
     };
+  }
+
+  getCitySnapshot() {
+    const full = this.getSnapshot();
+    const { socketBytesByRoom, integrity, otel, ...rest } = full;
+    // Keep slim scalar percentiles on city snapshot without full per-bucket/per-room breakdowns
+    if (otel?.histograms) {
+      rest.latencyPercentiles = {
+        ingestToEmitP50Ms: otel.histograms.ingestToEmitMs?.p50 || 0,
+        ingestToEmitP95Ms: otel.histograms.ingestToEmitMs?.p95 || 0,
+        clientE2eP50Ms: otel.histograms.clientE2eMs?.p50 || 0,
+        clientE2eP95Ms: otel.histograms.clientE2eMs?.p95 || 0,
+      };
+    }
+    if (integrity && typeof integrity === 'object') {
+      const { byJunction, ...integritySummary } = integrity;
+      rest.integrity = integritySummary;
+    } else {
+      rest.integrity = integrity;
+    }
+    return rest;
   }
 
   reset() {

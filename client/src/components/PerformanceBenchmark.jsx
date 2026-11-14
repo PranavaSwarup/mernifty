@@ -16,6 +16,8 @@ export function PerformanceBenchmark() {
   const {
     stats,
     clientLatency,
+    clientE2eStats,
+    obsUpdate,
     isConnected,
     lastReplayStats,
     disconnectCountdownSec,
@@ -129,6 +131,8 @@ export function PerformanceBenchmark() {
   const bufferPercentage = Math.min(100, Math.round(((stats.bufferSize || 0) / 10000) * 100));
   const roomEntries = Object.entries(stats.socketBytesByRoom || {}).sort((a, b) => b[1] - a[1]);
   const wireComp = stats.wireComparison;
+  const otelHists = stats.otel?.histograms || {};
+  const recentTraces = obsUpdate?.recentTraces || [];
 
   return (
     <div className="space-y-4">
@@ -197,6 +201,41 @@ export function PerformanceBenchmark() {
             Queue dropped: {stats.totalDropped || 0} • Bounded per-socket coalesce
           </p>
         </div>
+      </div>
+
+      {/* OpenTelemetry Latency Percentiles & Event Loop Strip */}
+      <div className="rounded-xl border border-slate-800 bg-[#0B101D] p-4 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-bold text-sm text-slate-100">
+            OpenTelemetry Pipeline Percentiles (p50 / p95 / p99)
+          </h3>
+          <span className="text-[11px] font-mono text-slate-400">
+            Loop lag: {(stats.eventLoopLagMs || 0).toFixed(2)} ms (p99 {(stats.eventLoopLagP99Ms || 0).toFixed(2)} ms)
+            {' · '}Clock offset: {clientE2eStats?.clockOffsetMs || 0} ms
+          </span>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 font-mono text-xs">
+          {[
+            ['Ingest → Persist', otelHists.ingestToPersistMs],
+            ['Ingest → Emit', otelHists.ingestToEmitMs],
+            ['DB Flush', otelHists.flushDurationMs],
+            ['Sim Step', otelHists.simStepMs],
+            ['Client E2E Render', otelHists.clientE2eMs?.count ? otelHists.clientE2eMs : clientE2eStats],
+          ].map(([label, h]) => (
+            <div key={label} className="p-2.5 rounded bg-slate-950/70 border border-slate-800">
+              <span className="text-[10px] text-slate-500 block">{label}</span>
+              <span className="text-cyan-300 font-semibold">
+                {h?.p50 || 0} / {h?.p95 || 0} / {h?.p99 || 0} ms
+              </span>
+            </div>
+          ))}
+        </div>
+        {recentTraces.length > 0 && (
+          <div className="text-[11px] font-mono text-slate-400 pt-1">
+            Recent OTel traces buffered ({recentTraces.length}):{' '}
+            {recentTraces.slice(0, 4).map((t) => `${t.rootName}(${t.durationMs}ms)`).join(' · ')}
+          </div>
+        )}
       </div>
 
       {/* Wire v1 Egress & Resume Lab */}

@@ -7,9 +7,60 @@ import { metricsService } from '../services/metricsService.js';
 import { authenticateIngest, publicReadOrAuth } from '../middleware/auth.js';
 import { tokenBucketRateLimiter } from '../middleware/rateLimiter.js';
 import { validateTelemetryEvent, validateTelemetryBatch } from '../middleware/validator.js';
+import {
+  getTracer,
+  recordAccepted,
+  recordDuplicates,
+  recordRejected,
+  stampEventTelemetry,
+  withSyncSpan,
+} from '../telemetry/instruments.js';
+import { isOtelEnabled } from '../telemetry/otel.js';
 
 const router = express.Router();
 const MAX_REJECTION_DETAILS = 20;
+
+function startIngestTraceMiddleware(source) {
+  return (req, res, next) => {
+    req._ingestTimeNs = process.hrtime.bigint();
+    if (!isOtelEnabled()) return next();
+
+    const body = req.body;
+    const rawEvents = Array.isArray(body)
+      ? body
+      : Array.isArray(body?.events)
+        ? body.events
+        : null;
+    const batchSize = rawEvents ? rawEvents.length : 1;
+    const sampleEvt = rawEvents ? rawEvents[0] : body;
+    const junctionId = sampleEvt?.junctionId || sampleEvt?.deviceId || (rawEvents ? 'batch' : 'unknown');
+    const zoneId = sampleEvt?.zoneId || sampleEvt?.category || (rawEvents ? 'mixed' : 'unknown');
+
+    return getTracer().startActiveSpan(
+      'telemetry.ingest',
+      {
+        attributes: {
+          junctionId: String(junctionId),
+          zoneId: String(zoneId),
+          'batch.size': batchSize,
+          source,
+        },
+      },
+      (span) => {
+        let ended = false;
+        const finishSpan = () => {
+          if (ended) return;
+          ended = true;
+          span.setAttribute('http.status_code', res.statusCode);
+          span.end();
+        };
+        res.once('finish', finishSpan);
+        res.once('close', finishSpan);
+        return next();
+      }
+    );
+  };
+}
 
 function checkBufferBackpressure(req, res, next) {
   if (ingestionBuffer.isBackpressured(0.8)) {
@@ -18,7 +69,9 @@ function checkBufferBackpressure(req, res, next) {
       : Array.isArray(req.body?.events)
         ? req.body.events.length
         : 1;
-    metricsService.recordLoadShed(Math.max(1, incomingCount));
+    const rejectedCount = Math.max(1, incomingCount);
+    metricsService.recordLoadShed(rejectedCount);
+    recordRejected('backpressure', rejectedCount);
     const retryAfterSeconds = Math.max(
       1,
       Math.ceil(
@@ -55,15 +108,19 @@ router.post(
   authenticateIngest,
   checkBufferBackpressure,
   ingestRateLimiter,
+  startIngestTraceMiddleware('http-ingest'),
   validateTelemetryEvent,
   async (req, res) => {
     const startT = Date.now();
+    const ingestNs = req._ingestTimeNs || process.hrtime.bigint();
     const event = req.validatedEvent;
+    stampEventTelemetry(event, ingestNs);
 
     if (
       req.deviceKey?.allowedJunctionIds?.length > 0 &&
       !req.deviceKey.allowedJunctionIds.includes(event.junctionId)
     ) {
+      recordRejected('unauthorized_junction', 1);
       return res.status(403).json({
         success: false,
         error: `DeviceKey '${req.deviceKey.prefix}' is not permitted to ingest for junction '${event.junctionId}'`,
@@ -122,57 +179,70 @@ router.post(
   authenticateIngest,
   checkBufferBackpressure,
   batchRateLimiter,
+  startIngestTraceMiddleware('http-batch'),
   validateTelemetryBatch,
   async (req, res) => {
     const startT = Date.now();
+    const ingestNs = req._ingestTimeNs || process.hrtime.bigint();
     const validItems = req.validatedBatchItems || [];
     const rejected = [...(req.rejectedBatchItems || [])];
 
     let acceptedCount = 0;
     let duplicateCount = 0;
+    let queueFullCount = 0;
+    let unauthCount = 0;
     let lateCount = 0;
     let gapCount = 0;
     let anomaliesCount = 0;
 
-    for (const { index, event } of validItems) {
-      if (
-        req.deviceKey?.allowedJunctionIds?.length > 0 &&
-        !req.deviceKey.allowedJunctionIds.includes(event.junctionId)
-      ) {
-        rejected.push({
-          index,
-          eventId: event.eventId,
-          reason: `DeviceKey not permitted for junction '${event.junctionId}'`,
-        });
-        continue;
-      }
-
-      const bufferRes = ingestionBuffer.enqueue(event);
-      if (!bufferRes.accepted) {
-        if (bufferRes.classification === 'duplicate') {
-          duplicateCount++;
-        } else {
+    withSyncSpan('buffer.enqueue', { attributes: { 'batch.size': validItems.length } }, () => {
+      for (const { index, event } of validItems) {
+        stampEventTelemetry(event, ingestNs);
+        if (
+          req.deviceKey?.allowedJunctionIds?.length > 0 &&
+          !req.deviceKey.allowedJunctionIds.includes(event.junctionId)
+        ) {
+          unauthCount++;
           rejected.push({
             index,
             eventId: event.eventId,
-            reason: bufferRes.reason,
+            reason: `DeviceKey not permitted for junction '${event.junctionId}'`,
           });
+          continue;
         }
-        continue;
-      }
 
-      acceptedCount++;
-      if (bufferRes.late) {
-        lateCount++;
-      } else {
-        const alert = anomalyEngine.evaluate(event);
-        if (alert) anomaliesCount++;
-        socketService.broadcastTelemetry(event);
+        const bufferRes = ingestionBuffer.enqueue(event, { skipSpan: true, deferMetrics: true });
+        if (!bufferRes.accepted) {
+          if (bufferRes.classification === 'duplicate') {
+            duplicateCount++;
+          } else {
+            queueFullCount++;
+            rejected.push({
+              index,
+              eventId: event.eventId,
+              reason: bufferRes.reason,
+            });
+          }
+          continue;
+        }
+
+        acceptedCount++;
+        if (bufferRes.late) {
+          lateCount++;
+        } else {
+          const alert = anomalyEngine.evaluate(event);
+          if (alert) anomaliesCount++;
+          socketService.broadcastTelemetry(event);
+        }
+        if (bufferRes.classification === 'gap') {
+          gapCount++;
+        }
       }
-      if (bufferRes.classification === 'gap') {
-        gapCount++;
-      }
-    }
+      if (acceptedCount > 0) recordAccepted(acceptedCount);
+      if (duplicateCount > 0) recordDuplicates(duplicateCount);
+      if (queueFullCount > 0) recordRejected('queue_full', queueFullCount);
+      if (unauthCount > 0) recordRejected('unauthorized_junction', unauthCount);
+    });
 
     const latency = Date.now() - startT;
     if (acceptedCount > 0) {

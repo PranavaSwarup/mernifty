@@ -45,6 +45,7 @@ Deploying a real-time smart traffic telemetry command center introduces three fu
 | **Geospatial Mapping** | **Leaflet.js** + CartoDB Dark Matter | Real-time Bengaluru map plotting 12 monitored junctions with live signal state |
 | **Validation & Security**| **Custom Normalizer**, **Bcrypt.js**, **JWT** | Schema validation, backpressure rate limiting, and API key auth |
 | **Audio Synthesizer** | **Web Audio API** | Synthetic audio alarms for critical gridlocks and ambulance alerts |
+| **Observability** | **[OpenTelemetry](https://opentelemetry.io/) JS SDK** + Jaeger | Distributed spans across ingest/validate/enqueue/flush/broadcast, explicit-bucket histograms & optional OTLP export |
 
 ---
 
@@ -164,3 +165,11 @@ npm test --prefix server
 - `GET /api/telemetry/aggregate`: Fetch time-bucketed aggregation queries.
 - `GET /api/devices`: Retrieve all monitored traffic junctions and current signal states.
 - `POST /api/copilot/remediate`: Execute an autonomous AI traffic remediation runbook.
+- `GET /api/observability/traces`: Retrieve recent OpenTelemetry trace groups (including `buffer.flush` span links) from the in-process ring buffer.
+- `GET /api/observability/metrics`: Retrieve OpenTelemetry counters, event-loop lag, and bucket-interpolated histogram percentiles (`p50`/`p95`/`p99`).
+
+---
+
+## 🙌 Attribution
+
+- Telemetry tracing and metrics instrumentation powered by **[OpenTelemetry](https://opentelemetry.io/)** (`@opentelemetry/sdk-node`, `@opentelemetry/sdk-trace`, `@opentelemetry/sdk-metrics`, OTLP HTTP exporters, and Node.js auto-instrumentations), with optional trace visualization via **Jaeger** (`docker-compose.yml`).

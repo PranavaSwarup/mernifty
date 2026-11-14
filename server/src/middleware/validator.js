@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { z } from 'zod';
 import { INITIAL_DEVICES } from '../sim/junctions.data.js';
+import { recordRejected, withSyncSpan } from '../telemetry/instruments.js';
 
 export const JUNCTION_CATALOGUE = new Map(
   INITIAL_DEVICES.map((d) => [d.junctionId, d.zoneId])
@@ -234,69 +235,91 @@ export function normalizeTrafficEvent(raw) {
 }
 
 export function validateTelemetryEvent(req, res, next) {
-  try {
-    req.validatedEvent = normalizeTrafficEvent(req.body);
-    next();
-  } catch (err) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid traffic telemetry payload',
-      details: err.message,
-    });
-  }
+  let valid = false;
+  withSyncSpan('telemetry.validate', { attributes: { 'batch.size': 1 } }, (span) => {
+    try {
+      req.validatedEvent = normalizeTrafficEvent(req.body);
+      valid = true;
+    } catch (err) {
+      recordRejected('validation', 1);
+      span?.setAttribute('validation.error', err.message);
+      res.status(400).json({
+        success: false,
+        error: 'Invalid traffic telemetry payload',
+        details: err.message,
+      });
+    }
+  });
+  if (valid) next();
 }
 
 export function validateTelemetryBatch(req, res, next) {
-  const rawEvents = Array.isArray(req.body) ? req.body : req.body?.events;
-  if (!Array.isArray(rawEvents)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Expected JSON array of traffic telemetry events or { events: [...] }',
-    });
-  }
-  if (rawEvents.length === 0) {
-    return res.status(400).json({
-      success: false,
-      error: 'Batch must contain at least 1 event',
-    });
-  }
-  if (rawEvents.length > MAX_BATCH_SIZE) {
-    return res.status(400).json({
-      success: false,
-      error: `Batch exceeds maximum allowed size of ${MAX_BATCH_SIZE} events`,
-    });
-  }
-
-  const validItems = [];
-  const rejectedItems = [];
-
-  for (let i = 0; i < rawEvents.length; i++) {
-    const raw = rawEvents[i];
-    try {
-      const normalized = normalizeTrafficEvent(raw);
-      validItems.push({ index: i, event: normalized });
-    } catch (err) {
-      rejectedItems.push({
-        index: i,
-        eventId: raw && typeof raw === 'object' ? raw.eventId ?? null : null,
-        reason: err.message,
+  let valid = false;
+  withSyncSpan('telemetry.validate', {}, (span) => {
+    const rawEvents = Array.isArray(req.body) ? req.body : req.body?.events;
+    if (!Array.isArray(rawEvents)) {
+      recordRejected('validation', 1);
+      res.status(400).json({
+        success: false,
+        error: 'Expected JSON array of traffic telemetry events or { events: [...] }',
       });
+      return;
     }
-  }
+    if (rawEvents.length === 0) {
+      recordRejected('validation', 1);
+      res.status(400).json({
+        success: false,
+        error: 'Batch must contain at least 1 event',
+      });
+      return;
+    }
+    if (rawEvents.length > MAX_BATCH_SIZE) {
+      recordRejected('batch_too_large', rawEvents.length);
+      res.status(400).json({
+        success: false,
+        error: `Batch exceeds maximum allowed size of ${MAX_BATCH_SIZE} events`,
+      });
+      return;
+    }
 
-  if (validItems.length === 0) {
-    return res.status(400).json({
-      success: false,
-      error: 'All events in batch failed validation',
-      totalReceived: rawEvents.length,
-      acceptedCount: 0,
-      rejectedCount: rejectedItems.length,
-      rejected: rejectedItems.slice(0, MAX_REJECTION_REASONS),
-    });
-  }
+    span?.setAttribute('batch.size', rawEvents.length);
+    const validItems = [];
+    const rejectedItems = [];
 
-  req.validatedBatchItems = validItems;
-  req.rejectedBatchItems = rejectedItems;
-  req.validatedEvents = validItems.map((x) => x.event);
-  next();
+    for (let i = 0; i < rawEvents.length; i++) {
+      const raw = rawEvents[i];
+      try {
+        const normalized = normalizeTrafficEvent(raw);
+        validItems.push({ index: i, event: normalized });
+      } catch (err) {
+        rejectedItems.push({
+          index: i,
+          eventId: raw && typeof raw === 'object' ? raw.eventId ?? null : null,
+          reason: err.message,
+        });
+      }
+    }
+
+    if (rejectedItems.length > 0) {
+      recordRejected('validation', rejectedItems.length);
+    }
+
+    if (validItems.length === 0) {
+      res.status(400).json({
+        success: false,
+        error: 'All events in batch failed validation',
+        totalReceived: rawEvents.length,
+        acceptedCount: 0,
+        rejectedCount: rejectedItems.length,
+        rejected: rejectedItems.slice(0, MAX_REJECTION_REASONS),
+      });
+      return;
+    }
+
+    req.validatedBatchItems = validItems;
+    req.rejectedBatchItems = rejectedItems;
+    req.validatedEvents = validItems.map((x) => x.event);
+    valid = true;
+  });
+  if (valid) next();
 }

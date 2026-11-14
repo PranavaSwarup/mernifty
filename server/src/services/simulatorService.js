@@ -9,6 +9,7 @@ import { CounterfactualPair } from '../sim/twin.js';
 import { getTodPeriod } from '../sim/demand.js';
 import { loadStudyPolicy } from '../sim/studyPolicy.js';
 import { OperatorAction } from '../models/OperatorAction.js';
+import { recordSimStep } from '../telemetry/instruments.js';
 
 export { INITIAL_DEVICES };
 
@@ -132,7 +133,7 @@ class SimulatorService {
       if (!this.isRunning) return;
       if (this.pair.live.elapsedSec !== this._lastCfBroadcastElapsed) {
         this._lastCfBroadcastElapsed = this.pair.live.elapsedSec;
-        socketService.broadcastCounterfactual(this.getCounterfactual());
+        socketService.broadcastCounterfactual(this.getCityCounterfactual());
       }
     }, 1000);
     if (this._cfTimer.unref) this._cfTimer.unref();
@@ -199,9 +200,11 @@ class SimulatorService {
    * Advance counterfactual physics by 1 discrete sim-second and evaluate delayed tasks/rollouts.
    */
   stepPhysics() {
+    const startNs = process.hrtime.bigint();
     this.pair.step();
     this._recordQueueHistoryPoint();
     this._processScheduledTasks();
+    recordSimStep(Number(process.hrtime.bigint() - startNs) / 1e6);
   }
 
   _recordQueueHistoryPoint() {
@@ -703,6 +706,21 @@ class SimulatorService {
       todPeriod: todPeriod.id,
       weatherActive: this.pair.live.weather.active,
     };
+  }
+
+  /**
+   * Slim counterfactual summary emitted over the `city` Socket.IO room (1 Hz).
+   * Excludes per-junction maps (`byJunction`) and `emergency.trips` arrays; full
+   * breakdown remains available via `GET /api/sim/counterfactual`.
+   */
+  getCityCounterfactual() {
+    const full = this.getCounterfactual();
+    const { byJunction, emergency, ...rest } = full;
+    if (emergency && typeof emergency === 'object') {
+      const { trips, ...emergencySummary } = emergency;
+      rest.emergency = emergencySummary;
+    }
+    return rest;
   }
 }
 
