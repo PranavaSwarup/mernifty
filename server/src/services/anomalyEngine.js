@@ -3,11 +3,35 @@ import { Alert } from '../models/Alert.js';
 import { Device } from '../models/Device.js';
 import crypto from 'crypto';
 
+const PERSISTENCE_FRAMES = 3;
+
+function computeMedian(values) {
+  if (!values || values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+function computeRobustStats(values, minScale = 1) {
+  const med = computeMedian(values);
+  const absDevs = values.map((v) => Math.abs(v - med));
+  const mad = computeMedian(absDevs);
+  const sigma = Math.max(minScale, 1.4826 * mad);
+  return { median: med, sigma };
+}
+
+function shortJunctionTitle(juncName) {
+  if (!juncName) return 'Junction';
+  return String(juncName).split('(')[0].trim() || juncName;
+}
+
 class AnomalyEngine {
   constructor() {
-    // Sliding window of recent values: junctionId:metric -> array of numbers
+    // Sliding baseline window of normal recent values: junctionId:metric -> number[]
     this.history = new Map();
-    this.maxHistory = 30;
+    this.streaks = new Map(); // junctionId:metric -> consecutive anomalous frame count
+    this.activeDiscrete = new Set(); // junctionId:metric currently active (rising-edge dedup)
+    this.maxHistory = 40;
     this.alertCooldowns = new Map(); // key: junctionId:metric -> timestamp
     this.cooldownMs = 15000; // 15s cooldown per alert type to avoid alert fatigue
     this.socketBroadcastCallback = null;
@@ -17,135 +41,256 @@ class AnomalyEngine {
     this.socketBroadcastCallback = fn;
   }
 
+  reset() {
+    this.history.clear();
+    this.streaks.clear();
+    this.activeDiscrete.clear();
+    this.alertCooldowns.clear();
+  }
+
   evaluate(event) {
     const { junctionId, deviceId, junctionName, deviceName, zoneId, category, metrics, timestamp, data } = event;
     const juncId = junctionId || deviceId;
     const juncName = junctionName || deviceName || juncId;
+    const shortName = shortJunctionTitle(juncName);
     const zId = zoneId || category || 'south-bangalore';
 
     if (!metrics && !data) return null;
 
     const trafficMetrics = metrics || data || {};
+    const approaches = Array.isArray(data?.approaches) ? data.approaches : [];
     const anomalies = [];
 
-    // Helper to evaluate a numerical metric with Z-score + threshold
-    const checkMetric = (metricName, val, warningThreshold, criticalThreshold, unit = '', higherIsBad = true) => {
-      if (typeof val !== 'number') return;
+    const worstApproachRoad = (metricKey, findMin = false) => {
+      if (approaches.length === 0) return null;
+      let best = approaches[0];
+      for (let i = 1; i < approaches.length; i++) {
+        const cur = approaches[i];
+        const curVal = Number(cur?.[metricKey]);
+        const bestVal = Number(best?.[metricKey]);
+        if (!Number.isFinite(curVal)) continue;
+        if (!Number.isFinite(bestVal) || (findMin ? curVal < bestVal : curVal > bestVal)) {
+          best = cur;
+        }
+      }
+      return best?.road || null;
+    };
+
+    /**
+     * Evaluate one continuous traffic metric using:
+     * 1) One-sided robust baseline (median + 1.4826*MAD)
+     * 2) Minimum practical floor/ceiling AND relative effect size over baseline
+     * 3) Multi-frame persistence (>= 3 consecutive frames)
+     */
+    const checkMetric = ({
+      metricName,
+      val,
+      warningThreshold,
+      criticalThreshold,
+      practicalFloor,
+      minRelChange,
+      minScale,
+      unit,
+      higherIsBad = true,
+      nounLabel,
+      approachRoad = null,
+    }) => {
+      if (typeof val !== 'number' || !Number.isFinite(val)) return;
 
       const histKey = `${juncId}:${metricName}`;
       if (!this.history.has(histKey)) {
         this.history.set(histKey, []);
       }
       const values = this.history.get(histKey);
-      values.push(val);
-      if (values.length > this.maxHistory) values.shift();
 
-      let isStatisticalAnomaly = false;
+      let baseline = val;
+      let sigma = minScale;
       let zScore = 0;
-      if (values.length >= 8) {
-        const mean = values.reduce((a, b) => a + b, 0) / values.length;
-        const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values.length;
-        const stdDev = Math.sqrt(variance);
-        if (stdDev > 0.001) {
-          zScore = (val - mean) / stdDev;
-          if (Math.abs(zScore) >= 3.0) {
-            isStatisticalAnomaly = true;
-          }
-        }
+      const hasBaseline = values.length >= 8;
+
+      if (hasBaseline) {
+        const stats = computeRobustStats(values, minScale);
+        baseline = stats.median;
+        sigma = stats.sigma;
+        zScore = (val - baseline) / sigma;
       }
+
+      // Practical effect gate + one-sided directional check
+      const passesDirection = !hasBaseline || (higherIsBad ? val > baseline : val < baseline);
+      const passesPracticalFloor = higherIsBad ? val >= practicalFloor : val <= practicalFloor;
+      const relBaseline = Math.max(minScale, baseline);
+      const passesRelEffect = !hasBaseline
+        ? true
+        : higherIsBad
+          ? val >= relBaseline * (1 + minRelChange)
+          : val <= baseline * (1 - minRelChange);
+
+      const isStatAnom = hasBaseline && (higherIsBad ? zScore >= 3.0 : zScore <= -3.0);
 
       let severity = null;
       let threshold = null;
 
-      if (higherIsBad) {
-        if (criticalThreshold !== undefined && val >= criticalThreshold) {
-          severity = 'critical';
-          threshold = criticalThreshold;
-        } else if (warningThreshold !== undefined && val >= warningThreshold) {
-          severity = 'warning';
-          threshold = warningThreshold;
-        }
-      } else {
-        if (criticalThreshold !== undefined && val <= criticalThreshold) {
-          severity = 'critical';
-          threshold = criticalThreshold;
-        } else if (warningThreshold !== undefined && val <= warningThreshold) {
-          severity = 'warning';
-          threshold = warningThreshold;
+      if (passesDirection && passesPracticalFloor && passesRelEffect) {
+        if (higherIsBad) {
+          if (criticalThreshold !== undefined && val >= criticalThreshold) {
+            severity = 'critical';
+            threshold = criticalThreshold;
+          } else if (warningThreshold !== undefined && val >= warningThreshold) {
+            severity = 'warning';
+            threshold = warningThreshold;
+          } else if (isStatAnom) {
+            severity = 'warning';
+            threshold = Number(
+              Math.max(practicalFloor, relBaseline * (1 + minRelChange), baseline + 3 * sigma).toFixed(1)
+            );
+          }
+        } else {
+          if (criticalThreshold !== undefined && val <= criticalThreshold) {
+            severity = 'critical';
+            threshold = criticalThreshold;
+          } else if (warningThreshold !== undefined && val <= warningThreshold) {
+            severity = 'warning';
+            threshold = warningThreshold;
+          } else if (isStatAnom) {
+            severity = 'warning';
+            threshold = Number(
+              Math.max(1, Math.min(practicalFloor, baseline * (1 - minRelChange), baseline - 3 * sigma)).toFixed(1)
+            );
+          }
         }
       }
 
-      if (!severity && isStatisticalAnomaly) {
-        severity = 'warning';
-        threshold = 0;
+      if (!severity) {
+        // Normal observation: reset streak and update rolling baseline
+        this.streaks.set(histKey, 0);
+        values.push(val);
+        if (values.length > this.maxHistory) values.shift();
+        return;
       }
 
-      if (severity) {
-        anomalies.push({
-          metric: metricName,
-          triggerValue: val,
-          thresholdValue: threshold,
-          severity,
-          zScore: parseFloat(zScore.toFixed(2)),
-          unit,
-        });
+      const nextStreak = (this.streaks.get(histKey) || 0) + 1;
+      this.streaks.set(histKey, nextStreak);
+      if (nextStreak < PERSISTENCE_FRAMES) {
+        return;
       }
+
+      // Never emit Threshold: 0
+      const safeThreshold =
+        Number.isFinite(threshold) && threshold > 0 ? threshold : practicalFloor;
+      const sigmaText =
+        hasBaseline && Math.abs(zScore) >= 0.1
+          ? `${zScore >= 0 ? '+' : ''}${zScore.toFixed(1)}σ`
+          : severity.toUpperCase();
+      const whereText = approachRoad ? `${approachRoad} at ${shortName}` : shortName;
+      const roundedVal = Number.isInteger(val) ? val : Number(val.toFixed(1));
+      const roundedBase = Number.isInteger(baseline) ? baseline : Number(baseline.toFixed(1));
+      const cmpWord = higherIsBad ? 'limit' : 'min';
+
+      anomalies.push({
+        metric: metricName,
+        triggerValue: val,
+        thresholdValue: safeThreshold,
+        severity,
+        zScore: hasBaseline ? parseFloat(zScore.toFixed(2)) : null,
+        unit,
+        customTitle: `${nounLabel} on ${whereText} (${sigmaText})`,
+        customMsg: `${approachRoad ? `${approachRoad}: ` : ''}${metricName} at ${roundedVal} ${unit} (baseline ${roundedBase} ${unit}, ${cmpWord} ${safeThreshold} ${unit}, ${sigmaText}, ${nextStreak} frames).`,
+      });
     };
 
-    // 1. Stalled Vehicle Incident Detection (event-driven, severity from event; no fabricated statistical z-score)
+    // 1. Stalled Vehicle Incident Detection (immediate discrete rising-edge event; no fabricated zScore)
+    const stallKey = `${juncId}:stalledVehicle`;
     if (trafficMetrics.stalledVehicleDetected || data?.stalledVehicleDetected) {
-      anomalies.push({
-        metric: 'stalledVehicle',
-        triggerValue: 1,
-        thresholdValue: 0,
-        severity: data?.stalledSeverity || trafficMetrics.severity || 'critical',
-        zScore: null,
-        unit: 'event',
-        customTitle: `Stalled Vehicle Obstacle at ${juncName}`,
-        customMsg: `Vision camera detected an immobilized / stalled vehicle blocking arterial lanes. Emergency towing dispatch recommended.`,
-      });
+      if (!this.activeDiscrete.has(stallKey)) {
+        this.activeDiscrete.add(stallKey);
+        anomalies.push({
+          metric: 'stalledVehicle',
+          triggerValue: 1,
+          thresholdValue: 1,
+          severity: data?.stalledSeverity || trafficMetrics.severity || 'critical',
+          zScore: null,
+          unit: 'event',
+          customTitle: `Stalled Vehicle Obstacle at ${juncName}`,
+          customMsg: `Vision camera detected an immobilized / stalled vehicle blocking arterial lanes. Emergency towing dispatch recommended.`,
+        });
+      }
+    } else {
+      this.activeDiscrete.delete(stallKey);
     }
 
-    // 2. Emergency Vehicle (Ambulance / Fire) Corridor Preemption (event-driven, no fabricated statistical z-score)
+    // 2. Emergency Vehicle (Ambulance / Fire) Corridor Preemption (discrete rising-edge event)
+    const ambKey = `${juncId}:ambulancePreemption`;
     if (trafficMetrics.ambulanceDetected || data?.ambulanceDetected) {
-      anomalies.push({
-        metric: 'ambulancePreemption',
-        triggerValue: 1,
-        thresholdValue: 0,
-        severity: data?.emergencySeverity || trafficMetrics.severity || 'critical',
-        zScore: null,
-        unit: 'event',
-        customTitle: `Emergency Vehicle Approaching ${juncName}`,
-        customMsg: `Ambulance transponder & camera beacon active. Automated Green Corridor Preemption recommended.`,
-      });
+      if (!this.activeDiscrete.has(ambKey)) {
+        this.activeDiscrete.add(ambKey);
+        anomalies.push({
+          metric: 'ambulancePreemption',
+          triggerValue: 1,
+          thresholdValue: 1,
+          severity: data?.emergencySeverity || trafficMetrics.severity || 'critical',
+          zScore: null,
+          unit: 'event',
+          customTitle: `Emergency Vehicle Approaching ${juncName}`,
+          customMsg: `Ambulance transponder & camera beacon active. Automated Green Corridor Preemption recommended.`,
+        });
+      }
+    } else {
+      this.activeDiscrete.delete(ambKey);
     }
 
-    // 3. Gridlock & Saturated Queue Detection
+    // 3. One-Sided Congestion Detectors with Practical Floor + Persistence
     if (typeof trafficMetrics.maxQueueLengthM === 'number') {
-      checkMetric('maxQueueLengthM', trafficMetrics.maxQueueLengthM, 120, 165, 'm', true);
+      checkMetric({
+        metricName: 'maxQueueLengthM',
+        val: trafficMetrics.maxQueueLengthM,
+        warningThreshold: 120,
+        criticalThreshold: 165,
+        practicalFloor: 60,
+        minRelChange: 0.5,
+        minScale: 4.0,
+        unit: 'm',
+        higherIsBad: true,
+        nounLabel: 'Queue surge',
+        approachRoad: worstApproachRoad('queueLengthM', false),
+      });
     }
     if (typeof trafficMetrics.avgSpeedKmph === 'number') {
-      checkMetric('avgSpeedKmph', trafficMetrics.avgSpeedKmph, 11, 6, 'km/h', false);
+      checkMetric({
+        metricName: 'avgSpeedKmph',
+        val: trafficMetrics.avgSpeedKmph,
+        warningThreshold: 11,
+        criticalThreshold: 6,
+        practicalFloor: 15,
+        minRelChange: 0.3,
+        minScale: 1.5,
+        unit: 'km/h',
+        higherIsBad: false,
+        nounLabel: 'Speed collapse',
+        approachRoad: worstApproachRoad('avgSpeedKmph', true),
+      });
     }
     if (typeof trafficMetrics.totalFlowVehiclesPerMin === 'number') {
-      checkMetric('totalFlowVehiclesPerMin', trafficMetrics.totalFlowVehiclesPerMin, 135, 175, 'veh/min', true);
-    }
-
-    // Support legacy server/fleet/turbine metrics if passed in tests
-    if (typeof trafficMetrics.cpuPercent === 'number') {
-      checkMetric('cpuPercent', trafficMetrics.cpuPercent, 82, 94, '%', true);
-    }
-    if (typeof trafficMetrics.vibrationMmS === 'number') {
-      checkMetric('vibrationMmS', trafficMetrics.vibrationMmS, 5.0, 7.5, 'mm/s', true);
+      checkMetric({
+        metricName: 'totalFlowVehiclesPerMin',
+        val: trafficMetrics.totalFlowVehiclesPerMin,
+        warningThreshold: 135,
+        criticalThreshold: 175,
+        practicalFloor: 110,
+        minRelChange: 0.45,
+        minScale: 8.0,
+        unit: 'veh/min',
+        higherIsBad: true,
+        nounLabel: 'Demand surge',
+        approachRoad: worstApproachRoad('vehiclesPerMin', false),
+      });
     }
 
     if (anomalies.length === 0) return null;
 
-    // Pick highest severity anomaly
+    // Pick highest severity anomaly (discrete / critical priority over warning)
     const highestAnomaly = anomalies.reduce((prev, curr) => {
-      if (curr.severity === 'critical') return curr;
-      if (prev.severity === 'critical') return prev;
-      return curr;
+      if (curr.severity === 'critical' && prev.severity !== 'critical') return curr;
+      return prev;
     }, anomalies[0]);
 
     // Check cooldown
@@ -158,13 +303,6 @@ class AnomalyEngine {
 
     this.alertCooldowns.set(cooldownKey, now);
 
-    const title = highestAnomaly.customTitle || `${highestAnomaly.metric} ${highestAnomaly.severity.toUpperCase()} at ${juncName}`;
-    const message =
-      highestAnomaly.customMsg ||
-      `${highestAnomaly.metric} reached ${highestAnomaly.triggerValue} ${highestAnomaly.unit} (Threshold: ${highestAnomaly.thresholdValue} ${highestAnomaly.unit}${
-        highestAnomaly.zScore ? `, Z-Score: ${highestAnomaly.zScore}` : ''
-      })`;
-
     const alertDoc = {
       alertId: `ALT-${crypto.randomBytes(6).toString('hex').toUpperCase()}`,
       junctionId: juncId,
@@ -173,8 +311,8 @@ class AnomalyEngine {
       zoneId: zId,
       category: zId,
       severity: highestAnomaly.severity,
-      title,
-      message,
+      title: highestAnomaly.customTitle,
+      message: highestAnomaly.customMsg,
       metric: highestAnomaly.metric,
       triggerValue: highestAnomaly.triggerValue,
       thresholdValue: highestAnomaly.thresholdValue,

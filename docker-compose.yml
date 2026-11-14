@@ -3,18 +3,18 @@ version: '3.8'
 services:
   mongodb:
     image: mongo:7.0
-    container_name: hyperpulse-mongo
+    container_name: metropulse-mongo
     restart: always
     ports:
       - "27017:27017"
     environment:
-      MONGO_INITDB_DATABASE: hyperpulse
+      MONGO_INITDB_DATABASE: metropulse
     volumes:
       - mongo-data:/data/db
 
   jaeger:
     image: jaegertracing/all-in-one:latest
-    container_name: hyperpulse-jaeger
+    container_name: metropulse-jaeger
     restart: unless-stopped
     ports:
       - "16686:16686"
@@ -22,15 +22,15 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
 
-  hyperpulse:
+  metropulse:
     build: .
-    container_name: hyperpulse-app
+    container_name: metropulse-app
     restart: always
     ports:
       - "5000:5000"
     environment:
       PORT: 5000
-      MONGODB_URI: mongodb://mongodb:27017/hyperpulse
+      MONGODB_URI: mongodb://mongodb:27017/metropulse
       NODE_ENV: production
       SIMULATOR_ENABLED: "true"
       BATCH_INTERVAL_MS: 500

@@ -26,7 +26,7 @@ test.before(async () => {
 
   await User.create({
     name: 'Bench Admin',
-    email: 'bench-admin@hyperpulse.test',
+    email: 'bench-admin@metropulse.test',
     password: crypto.randomBytes(12).toString('hex'),
     role: 'admin',
     zones: ['south-bangalore', 'east-bangalore', 'north-bangalore', 'central-bangalore'],
@@ -35,7 +35,7 @@ test.before(async () => {
   const viewerPw = crypto.randomBytes(12).toString('hex');
   await User.create({
     name: 'Bench Viewer',
-    email: 'bench-viewer@hyperpulse.test',
+    email: 'bench-viewer@metropulse.test',
     password: viewerPw,
     role: 'viewer',
     zones: [],
@@ -51,12 +51,12 @@ test.before(async () => {
   const regRes = await fetch(`${baseUrl}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'bench-viewer@hyperpulse.test', password: viewerPw }),
+    body: JSON.stringify({ email: 'bench-viewer@metropulse.test', password: viewerPw }),
   });
   const regJson = await regRes.json();
   viewerToken = regJson.token;
 
-  const adminUser = await User.findOne({ email: 'bench-admin@hyperpulse.test' });
+  const adminUser = await User.findOne({ email: 'bench-admin@metropulse.test' });
   const adminPw = 'BenchAdminPass!123';
   adminUser.password = adminPw;
   await adminUser.save();
@@ -64,7 +64,7 @@ test.before(async () => {
   const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'bench-admin@hyperpulse.test', password: adminPw }),
+    body: JSON.stringify({ email: 'bench-admin@metropulse.test', password: adminPw }),
   });
   const loginJson = await loginRes.json();
   adminToken = loginJson.token;

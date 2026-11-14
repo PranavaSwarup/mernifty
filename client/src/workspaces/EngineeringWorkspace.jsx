@@ -111,16 +111,16 @@ function ArchitectureSvg({ isDark }) {
       {/* Node 4: React Console */}
       <rect x="738" y="24" width="166" height="106" rx="6" fill={boxFill} stroke={border} strokeWidth="1.25" />
       <text x="750" y="45" fontSize="11.5" fontWeight="600" fill={ink}>Operator Console</text>
-      <text x="750" y="63" fontSize="10" fill={muted}>Leaflet map + SVG schematic</text>
+      <text x="750" y="63" fontSize="10" fill={muted}>Leaflet / ArcGIS map + SVG</text>
       <text x="750" y="79" fontSize="10" fill={muted}>External hot store (10 Hz)</text>
       <text x="750" y="95" fontSize="10" fill={muted}>History/Live cursor seam</text>
       <text x="750" y="113" fontSize="9.5" fontFamily="JetBrains Mono, monospace" fill={accentText}>useSyncExternalStore</text>
 
-      {/* Bottom Row: Atlas + Copilot + OTel */}
+      {/* Bottom Row: MongoDB + Copilot + OTel */}
       <rect x="255" y="156" width="195" height="62" rx="6" fill={insetFill} stroke={border} strokeWidth="1" />
-      <text x="267" y="176" fontSize="11" fontWeight="600" fill={ink}>MongoDB Atlas Time-Series</text>
+      <text x="267" y="176" fontSize="11" fontWeight="600" fill={ink}>MongoDB Regular Collection</text>
       <text x="267" y="193" fontSize="9.5" fill={muted}>Telemetry, alerts &amp; action records</text>
-      <text x="267" y="208" fontSize="9" fontFamily="JetBrains Mono, monospace" fill={flow}>insertMany unordered batches</text>
+      <text x="267" y="208" fontSize="9" fontFamily="JetBrains Mono, monospace" fill={flow}>insertMany + unique eventId + TTL</text>
       <line x1="352" y1="130" x2="352" y2="152" stroke={border} strokeWidth="1.25" markerEnd="url(#hp-link-arrow)" />
 
       <rect x="16" y="156" width="195" height="62" rx="6" fill={insetFill} stroke={border} strokeWidth="1" />
@@ -257,19 +257,24 @@ export function EngineeringWorkspace({ devices = [] }) {
     lastReplayStats,
     disconnectCountdownSec,
     simulateDisconnect,
+    setSimMeta,
   } = useSocket();
   const stats = useSocketStats();
   const { user } = useAuth();
   const { isDark } = useTheme();
 
   // Observability state
-  const [tracesData, setTracesData] = useState({ traces: [], totalSpansBuffered: 0, capacity: 500 });
+  const [tracesData, setTracesData] = useState({ traces: [], totalSpansBuffered: 0, availableSpanNames: [], capacity: 500 });
+  const [traceSpanFilter, setTraceSpanFilter] = useState('');
+  const [tracePriority, setTracePriority] = useState('informative');
   const [selectedTraceId, setSelectedTraceId] = useState(null);
   const [obsMetrics, setObsMetrics] = useState(null);
   const [integrity, setIntegrity] = useState(null);
   const [benchmarks, setBenchmarks] = useState([]);
   const [simState, setSimState] = useState(null);
   const [simStatus, setSimStatus] = useState(null);
+  const [scenarios, setScenarios] = useState([]);
+  const [scenarioBusy, setScenarioBusy] = useState(false);
 
   // Interactive UI controls state
   const [showLostOnly, setShowLostOnly] = useState(false);
@@ -281,8 +286,12 @@ export function EngineeringWorkspace({ devices = [] }) {
 
   const loadStaticBenchmarks = useCallback(async () => {
     try {
-      const ben = await api.getBenchmarks().catch(() => null);
+      const [ben, scRes] = await Promise.all([
+        api.getBenchmarks().catch(() => null),
+        api.getScenarios().catch(() => null),
+      ]);
       if (Array.isArray(ben?.runs)) setBenchmarks(ben.runs);
+      if (Array.isArray(scRes?.scenarios)) setScenarios(scRes.scenarios);
     } catch {
       // Safe no-op on transient error
     }
@@ -291,7 +300,7 @@ export function EngineeringWorkspace({ devices = [] }) {
   const loadEngineeringData = useCallback(async () => {
     try {
       const [tr, met, integ, sSt, sSta] = await Promise.all([
-        api.getTraces(30).catch(() => null),
+        api.getTraces(30, { span: traceSpanFilter, priority: tracePriority }).catch(() => null),
         api.getObservabilityMetrics().catch(() => null),
         api.getIntegrity().catch(() => null),
         api.getSimState().catch(() => null),
@@ -299,7 +308,11 @@ export function EngineeringWorkspace({ devices = [] }) {
       ]);
       if (tr?.traces) {
         setTracesData(tr);
-        setSelectedTraceId((prev) => prev || tr.traces[0]?.traceId || null);
+        setSelectedTraceId((prev) =>
+          prev && tr.traces.some((x) => x.traceId === prev)
+            ? prev
+            : tr.traces[0]?.traceId || null
+        );
       }
       if (met) setObsMetrics(met);
       if (integ?.integrity) setIntegrity(integ.integrity);
@@ -308,7 +321,7 @@ export function EngineeringWorkspace({ devices = [] }) {
     } catch {
       // Safe no-op on transient error
     }
-  }, []);
+  }, [traceSpanFilter, tracePriority]);
 
   useEffect(() => {
     loadStaticBenchmarks();
@@ -441,6 +454,46 @@ export function EngineeringWorkspace({ devices = [] }) {
     }
   };
 
+  const handleApplyScenario = async (preset) => {
+    setChaosError('');
+    setChaosNotice('');
+    setScenarioBusy(true);
+    try {
+      const res = await api.applyScenario(preset.id);
+      if (res?.meta) setSimMeta(res.meta);
+      if (res?.state) setSimState(res.state);
+      setChaosNotice(
+        `Scenario "${preset.title}" active at ${res?.meta?.simClockIst || preset.istClock} across both CRN twins.`
+      );
+      await loadEngineeringData();
+    } catch (err) {
+      setChaosError(
+        err?.status === 401 || err?.status === 403
+          ? `${err.message} Switch Demo persona to Operator or Supervisor in the header.`
+          : err?.message || 'Failed to switch scenario'
+      );
+    } finally {
+      setScenarioBusy(false);
+    }
+  };
+
+  const handleSpeedChange = async (nextSpeed) => {
+    setChaosError('');
+    setChaosNotice('');
+    try {
+      const res = await api.setSimSpeed(nextSpeed);
+      setSimMeta((prev) => ({ ...(prev || {}), simSpeed: res.simSpeed || nextSpeed }));
+      setChaosNotice(`Simulation clock speed set to ${res.simSpeed || nextSpeed}x.`);
+      await loadEngineeringData();
+    } catch (err) {
+      setChaosError(
+        err?.status === 401 || err?.status === 403
+          ? `${err.message} Supervisor persona required to change SIM_SPEED.`
+          : err?.message || 'Failed to update simulation speed'
+      );
+    }
+  };
+
   const wireComp = stats?.wireComparison;
 
   const benchProgressText = benchProgress
@@ -450,8 +503,8 @@ export function EngineeringWorkspace({ devices = [] }) {
     : null;
 
   return (
-    <div className="max-w-[1680px] mx-auto px-3 sm:px-4 py-4 space-y-5 overflow-x-hidden">
-      {/* Header + Anchor Bar */}
+    <div className="max-w-[1680px] mx-auto px-3 sm:px-4 py-4 space-y-5">
+      {/* Page Title */}
       <div className="console-panel p-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-base font-semibold text-ink-primary">
@@ -461,39 +514,50 @@ export function EngineeringWorkspace({ devices = [] }) {
             Live OpenTelemetry spans &amp; histograms, Wire v1 inspection, sequence integrity, 30-cell control study, load accounting, and chaos injection.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            loadEngineeringData();
+            loadStaticBenchmarks();
+          }}
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-hairline bg-inset hover:border-hairlineStrong text-xs text-ink-primary shrink-0"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>Refresh Data</span>
+        </button>
+      </div>
+
+      {/* Sticky Section Anchor Navigation */}
+      <nav
+        aria-label="Engineering sections"
+        className="sticky top-[52px] z-30 console-panel px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-sm"
+      >
         <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
           {[
             ['#eng-otel', 'OTel Traces'],
             ['#eng-wire', 'Wire & Resume'],
             ['#eng-study', '30-Cell Study'],
             ['#eng-bench', 'Load Accounting'],
-            ['#eng-chaos', 'Chaos Lab'],
+            ['#eng-chaos', 'Scenarios & Chaos'],
             ['#eng-arch', 'Architecture'],
           ].map(([href, text]) => (
             <a
               key={href}
               href={href}
-              className="px-2 py-1 rounded border border-hairline bg-inset hover:border-hairlineStrong text-ink-secondary hover:text-ink-primary"
+              className="px-2.5 py-1 rounded border border-hairline bg-inset hover:border-hairlineStrong text-ink-secondary hover:text-ink-primary font-medium transition-colors"
             >
               {text}
             </a>
           ))}
-          <button
-            type="button"
-            onClick={() => {
-              loadEngineeringData();
-              loadStaticBenchmarks();
-            }}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded border border-hairline bg-inset hover:border-hairlineStrong text-ink-primary"
-          >
-            <RefreshCw className="w-3 h-3" />
-            <span>Refresh</span>
-          </button>
         </div>
-      </div>
+        <span className="hidden sm:inline text-[11px] font-mono tabular-nums text-ink-muted">
+          {simState?.simClockIst ? `Sim ${simState.simClockIst}` : ''}
+          {simStatus?.simSpeed > 1 ? ` · ${simStatus.simSpeed}x` : ''}
+        </span>
+      </nav>
 
       {/* SECTION 1: OpenTelemetry Trace Waterfall & Histogram Percentiles */}
-      <section id="eng-otel" className="scroll-mt-16 console-panel p-4 space-y-4">
+      <section id="eng-otel" className="scroll-mt-[104px] console-panel p-4 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-hairline">
           <div>
             <h2 className="text-xs font-semibold text-ink-primary">
@@ -565,15 +629,52 @@ export function EngineeringWorkspace({ devices = [] }) {
         </div>
 
         {/* Live Trace Selector + Waterfall */}
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-1.5 text-ink-secondary">
+              <span>Span filter:</span>
+              <select
+                aria-label="Filter traces by span name"
+                value={traceSpanFilter}
+                onChange={(e) => setTraceSpanFilter(e.target.value)}
+                className="px-2 py-1 rounded border border-hairline bg-inset text-ink-primary font-mono text-[11px]"
+              >
+                <option value="">All spans (priority-sorted)</option>
+                {(tracesData.availableSpanNames || []).map((spName) => (
+                  <option key={spName} value={spName}>
+                    {spName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="inline-flex items-center gap-1.5 text-ink-secondary">
+              <span>Order:</span>
+              <select
+                aria-label="Trace priority order"
+                value={tracePriority}
+                onChange={(e) => setTracePriority(e.target.value)}
+                className="px-2 py-1 rounded border border-hairline bg-inset text-ink-primary text-[11px]"
+              >
+                <option value="informative">Informative first (copilot / flush links)</option>
+                <option value="chronological">Strict chronological (raw)</option>
+              </select>
+            </label>
+          </div>
+          <span className="font-mono tabular-nums text-ink-muted">
+            Showing {fmtInt(tracesData.traces.length)} of {fmtInt(tracesData.totalTracesBuffered || tracesData.traces.length)} buffered traces
+          </span>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
           <div className="lg:col-span-4 min-w-0 console-inset p-2 max-h-[260px] overflow-y-auto space-y-1">
             {tracesData.traces.length === 0 ? (
               <div className="py-6 text-center text-xs text-ink-muted">
-                No traces exported in buffer yet. Trigger an action, diagnosis, or wait for sampled ingest.
+                No matching traces exported in buffer yet. Trigger an action, scenario, or clear filter.
               </div>
             ) : (
               tracesData.traces.map((tr) => {
                 const active = selectedTrace?.traceId === tr.traceId;
+                const linkTotal = tr.linkCount ?? (tr.spans || []).reduce((acc, s) => acc + (s.links?.length || 0), 0);
                 return (
                   <button
                     key={tr.traceId}
@@ -593,9 +694,9 @@ export function EngineeringWorkspace({ devices = [] }) {
                     </div>
                     <div className="mt-0.5 flex items-center justify-between text-[10px] font-mono text-ink-muted">
                       <span>{tr.traceId.slice(0, 12)} · {tr.spanCount} spans</span>
-                      {tr.hasLinks && (
+                      {(tr.hasLinks || linkTotal > 0) && (
                         <span className="inline-flex items-center gap-0.5 text-signal-emergency">
-                          <Link2 className="w-2.5 h-2.5" /> Linked
+                          <Link2 className="w-2.5 h-2.5" /> {linkTotal || 1} link{linkTotal === 1 ? '' : 's'}
                         </span>
                       )}
                     </div>
@@ -628,8 +729,8 @@ export function EngineeringWorkspace({ devices = [] }) {
                   </div>
                   <div className="col-span-2 text-right">Duration</div>
                 </div>
-                <div className="space-y-1.5">
-                  {selectedTrace.spans.map((sp) => {
+                <div className="space-y-1.5 max-h-[340px] overflow-y-auto pr-1">
+                  {selectedTrace.spans.slice(0, 32).map((sp) => {
                     const totalDur = Math.max(0.1, selectedTrace.durationMs || 0.1);
                     const relStart = Math.max(0, sp.startTimeMs - selectedTrace.startTimeMs);
                     const leftPct = Math.min(95, (relStart / totalDur) * 100);
@@ -664,6 +765,11 @@ export function EngineeringWorkspace({ devices = [] }) {
                       </div>
                     );
                   })}
+                  {selectedTrace.spans.length > 32 && (
+                    <div className="pt-1 text-[10px] font-mono text-ink-muted">
+                      Showing first 32 of {fmtInt(selectedTrace.spans.length)} child spans in this trace.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1033,11 +1139,78 @@ export function EngineeringWorkspace({ devices = [] }) {
         )}
       </section>
 
-      {/* SECTION 5: Chaos Lab & Simulator Controls */}
-      <section id="eng-chaos" className="scroll-mt-16 console-panel p-4 space-y-3">
+      {/* SECTION 5: Scenario Presets, Chaos Lab & Simulator Controls */}
+      <section id="eng-chaos" className="scroll-mt-[104px] console-panel p-4 space-y-4">
+        {/* Realistic Bengaluru Scenario Presets + Admin Speed Controls */}
+        <div className="pb-3 border-b border-hairline space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-xs font-semibold text-ink-primary">
+                Scenario Presets &amp; Twin Clock Controls
+              </h2>
+              <p className="text-[11px] text-ink-muted">
+                Reset BOTH CRN twins to an authentic Bengaluru demand peak or compound incident, and optionally accelerate demo clock speed (Supervisor).
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px]" role="group" aria-label="Simulation speed">
+              <span className="text-ink-muted mr-0.5">Sim speed:</span>
+              {[1, 2, 5].map((spd) => {
+                const activeSpd = Number(simStatus?.simSpeed || 1) === spd;
+                return (
+                  <button
+                    key={spd}
+                    type="button"
+                    disabled={!canAdmin}
+                    title={!canAdmin ? 'Supervisor persona required to adjust sim clock speed' : `Run physics clock at ${spd}x`}
+                    onClick={() => handleSpeedChange(spd)}
+                    className={`px-2 py-1 rounded border font-mono tabular-nums transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                      activeSpd
+                        ? 'bg-accent text-accent-contrast border-accent font-semibold'
+                        : 'bg-inset border-hairline hover:border-hairlineStrong text-ink-primary'
+                    }`}
+                  >
+                    {spd}x
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 text-xs">
+            {(scenarios.length > 0
+              ? scenarios
+              : [
+                  { id: 'pm-peak', title: 'PM Peak (18:30 IST)' },
+                  { id: 'am-peak', title: 'AM Peak (09:00 IST)' },
+                  { id: 'pm-stalled-silkboard', title: 'PM Peak + Silk Board Stall' },
+                  { id: 'monsoon-pm-peak', title: 'Monsoon + PM Peak' },
+                  { id: 'ambulance-corridor', title: 'Ambulance Corridor' },
+                ]
+            ).map((preset) => {
+              const isActive = simState?.scenario === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  disabled={!canOperateAny || scenarioBusy}
+                  title={!canOperateAny ? 'Operator or Supervisor persona required' : preset.description || preset.title}
+                  onClick={() => handleApplyScenario(preset)}
+                  className={`px-3 py-1.5 rounded border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isActive
+                      ? 'bg-accent text-accent-contrast border-accent font-medium'
+                      : 'bg-inset border-hairline hover:border-hairlineStrong text-ink-primary'
+                  }`}
+                >
+                  {preset.title}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="text-xs font-semibold text-ink-primary">Chaos Injection &amp; Twin Controls</h2>
+            <h3 className="text-xs font-semibold text-ink-primary">Chaos Injection &amp; Simulator Run State</h3>
             <p className="text-[11px] text-ink-muted">
               Faults inject into BOTH Live &amp; Baseline twins (CRN parity); signal preemption acts strictly on Live twin.
               {!canOperateChaosTarget &&
@@ -1121,7 +1294,7 @@ export function EngineeringWorkspace({ devices = [] }) {
       </section>
 
       {/* SECTION 6: System Architecture Diagram */}
-      <section id="eng-arch" className="scroll-mt-16 console-panel p-4 space-y-2">
+      <section id="eng-arch" className="scroll-mt-[104px] console-panel p-4 space-y-2">
         <h2 className="text-xs font-semibold text-ink-primary">
           Implemented System Architecture
         </h2>

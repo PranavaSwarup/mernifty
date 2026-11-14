@@ -52,12 +52,15 @@ export class TrafficWorld {
     network = DEFAULT_NETWORK,
     startTime = '2026-11-14T13:30:00.000Z', // 19:00 IST (evening peak) default
     dtSec = 1,
+    demandScale = 1.0,
     prewarmLinks = true,
     _skipControllers = false,
   } = {}) {
     this.seed = seed;
     this.network = network;
     this.dtSec = dtSec;
+    const rawScale = Number(demandScale);
+    this.demandScale = Number.isFinite(rawScale) ? Math.max(0.1, Math.min(5, rawScale)) : 1.0;
     this.startTimeMs =
       startTime instanceof Date
         ? startTime.getTime()
@@ -140,7 +143,7 @@ export class TrafficWorld {
     this.incomingLinks = Array.from({ length: totalApproaches }, () => []);
     this.linkLookup = new Map(); // "fromId->toId" -> link entry
 
-    const initialDemandMult = demandFactor(this.simTimeMs);
+    const initialDemandMult = demandFactor(this.simTimeMs) * this.demandScale;
 
     for (const rawLink of network.links) {
       const fromJ = this.junctionIndexById.get(rawLink.fromJunction);
@@ -726,7 +729,7 @@ export class TrafficWorld {
    */
   step() {
     const dt = this.dtSec;
-    const stepDemandMult = demandFactor(this.simTimeMs);
+    const stepDemandMult = demandFactor(this.simTimeMs) * this.demandScale;
 
     // 1. Expire completed incidents / demand surges (without resetting queues)
     this._expireIncidentsAndSurges();
@@ -945,7 +948,8 @@ export class TrafficWorld {
     return {
       simTime: new Date(this.simTimeMs).toISOString(),
       elapsedSec: this.elapsedSec,
-      demandFactor: Number(demandFactor(this.simTimeMs).toFixed(3)),
+      demandScale: this.demandScale,
+      demandFactor: Number((demandFactor(this.simTimeMs) * this.demandScale).toFixed(3)),
       junctions,
       network: {
         totalDelayVehSec: Number(totalDelayVehSec.toFixed(2)),

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: hyperpulse-telemetry
+    name: metropulse-telemetry
     env: node
     plan: standard
     buildCommand: npm run install:all && npm run build

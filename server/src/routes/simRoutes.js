@@ -38,6 +38,62 @@ router.get('/counterfactual', publicReadOrAuth, (req, res) => {
   }
 });
 
+// List available realistic Bengaluru traffic scenario presets
+router.get('/scenarios', publicReadOrAuth, (req, res) => {
+  res.json({
+    success: true,
+    scenarios: simulatorService.getScenarios(),
+    active: simulatorService.activeScenario,
+    ...simulatorService.getScenarioMeta(),
+  });
+});
+
+// Switch scenario preset cleanly across both CRN twins (operator+ required)
+router.post(
+  '/scenario',
+  authenticate,
+  requireRole(['admin', 'operator']),
+  (req, res) => {
+    try {
+      const { scenarioId } = req.body || {};
+      if (!scenarioId) {
+        return res.status(400).json({ success: false, error: 'scenarioId is required' });
+      }
+      const actor = req.user.name || req.user.email || 'Operator';
+      const result = simulatorService.applyScenario(scenarioId, { actor });
+      res.json({
+        success: true,
+        ...result,
+      });
+    } catch (err) {
+      const code = err.message?.includes('Unknown scenario') ? 400 : 500;
+      res.status(code).json({ success: false, error: err.message });
+    }
+  }
+);
+
+// Adjust simulation clock multiplier (admin only: 1x, 2x, 5x)
+router.post(
+  '/speed',
+  authenticate,
+  requireRole(['admin']),
+  (req, res) => {
+    const parsed = Number(req.body?.speed);
+    if (![1, 2, 5].includes(parsed)) {
+      return res.status(400).json({
+        success: false,
+        error: 'speed must be one of 1, 2, or 5',
+      });
+    }
+    const simSpeed = simulatorService.setSimSpeed(parsed);
+    res.json({
+      success: true,
+      simSpeed,
+      ...simulatorService.getScenarioMeta(),
+    });
+  }
+);
+
 // Switch active controller on one junction or 'all' (admin for city-wide, zone-scoped operator for single junction)
 router.post(
   '/controller',

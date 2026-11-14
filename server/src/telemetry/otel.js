@@ -160,16 +160,16 @@ export class RingBufferSpanExporter {
     return this.spans.slice();
   }
 
-  getGroupedTraces(limit = 50) {
+  getGroupedTraces(limit = 50, { spanFilter = '', priority = 'informative' } = {}) {
     const safeLimit = Math.max(1, Math.min(200, Number(limit) || 50));
     const groups = new Map();
 
-    // Walk newest-first so most recent traces come first
+    // Group all buffered spans first so low-volume informative traces (copilot/operator/links)
+    // aren't starved out by rapid 1-span buffer.enqueue ticks.
     for (let i = this.spans.length - 1; i >= 0; i--) {
       const span = this.spans[i];
       let g = groups.get(span.traceId);
       if (!g) {
-        if (groups.size >= safeLimit) continue;
         g = {
           traceId: span.traceId,
           rootName: span.name,
@@ -178,26 +178,83 @@ export class RingBufferSpanExporter {
           durationMs: span.durationMs,
           spanCount: 0,
           hasLinks: false,
+          linkCount: 0,
           spans: [],
         };
         groups.set(span.traceId, g);
       }
       g.spans.push(span);
       g.spanCount += 1;
-      if (span.links.length > 0) g.hasLinks = true;
+      const lLen = Array.isArray(span.links) ? span.links.length : 0;
+      if (lLen > 0) {
+        g.hasLinks = true;
+        g.linkCount += lLen;
+      }
       if (!span.parentSpanId) g.rootName = span.name;
       if (span.startTimeMs < g.startTimeMs) g.startTimeMs = span.startTimeMs;
       if (span.endTimeMs > g.endTimeMs) g.endTimeMs = span.endTimeMs;
       g.durationMs = Number(Math.max(0, g.endTimeMs - g.startTimeMs).toFixed(3));
     }
 
-    const traces = Array.from(groups.values());
-    for (const t of traces) {
+    const filterLower = String(spanFilter || '').trim().toLowerCase();
+    const classifyTier = (g) => {
+      const names = g.spans.map((s) => s.name);
+      const isOperatorOrCopilot = names.some(
+        (n) =>
+          ALWAYS_SAMPLED_SPANS.has(n) ||
+          n.startsWith('copilot.') ||
+          n.startsWith('sim.') ||
+          n.startsWith('operator.') ||
+          n.startsWith('alert.')
+      );
+      if (isOperatorOrCopilot) return 3;
+      const hasNonEnqueue = names.some((n) => n !== 'buffer.enqueue');
+      if (
+        g.hasLinks ||
+        names.includes('buffer.flush') ||
+        names.includes('telemetry.ingest') ||
+        (g.spanCount >= 2 && hasNonEnqueue)
+      ) {
+        return 2;
+      }
+      if (names.every((n) => n === 'buffer.enqueue')) return 0;
+      return 1;
+    };
+
+    let traces = Array.from(groups.values()).map((t) => {
       t.spans.sort((a, b) => a.startTimeMs - b.startTimeMs);
+      t.spanNames = Array.from(new Set(t.spans.map((s) => s.name)));
+      t.priorityTier = classifyTier(t);
+      return t;
+    });
+
+    const availableSpanNames = Array.from(
+      new Set(this.spans.map((s) => s.name))
+    ).sort();
+
+    if (filterLower) {
+      traces = traces.filter(
+        (t) =>
+          String(t.rootName || '').toLowerCase().includes(filterLower) ||
+          t.spans.some((s) => String(s.name || '').toLowerCase().includes(filterLower))
+      );
     }
+
+    if (priority === 'chronological') {
+      traces.sort((a, b) => b.endTimeMs - a.endTimeMs);
+    } else {
+      // Informative traces (operator/copilot >= linked buffer.flush/ingest >= multi-ms > 1-span enqueue)
+      traces.sort((a, b) => {
+        if (b.priorityTier !== a.priorityTier) return b.priorityTier - a.priorityTier;
+        return b.endTimeMs - a.endTimeMs;
+      });
+    }
+
     return {
-      traces,
+      traces: traces.slice(0, safeLimit),
+      totalTracesBuffered: groups.size,
       totalSpansBuffered: this.spans.length,
+      availableSpanNames,
       capacity: this.capacity,
     };
   }
@@ -537,11 +594,11 @@ export function getOtelState() {
   return state;
 }
 
-export function getRecentTraces(limit = 50) {
+export function getRecentTraces(limit = 50, opts = {}) {
   if (!state.spanExporter) {
-    return { traces: [], totalSpansBuffered: 0, capacity: 500 };
+    return { traces: [], totalTracesBuffered: 0, totalSpansBuffered: 0, availableSpanNames: [], capacity: 500 };
   }
-  return state.spanExporter.getGroupedTraces(limit);
+  return state.spanExporter.getGroupedTraces(limit, opts);
 }
 
 export function getEventLoopLagStats() {

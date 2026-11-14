@@ -26,7 +26,7 @@ Deploying a real-time smart traffic telemetry command center introduces three fu
 - **Dedicated Resource Allocation**: Air pollution was deliberately omitted to dedicate 100% of GPU compute, network bandwidth, and database I/O to high-impact traffic bottlenecks, adaptive green split optimization, and emergency ambulance corridors.
 - **High-Throughput Write-Behind Ingestion**: Accumulates junction frames in an in-memory ring queue and flushes micro-batches via `bulkWrite()` / `insertMany()` with `ordered: false` without event-loop blocking. <!-- TODO(T09): insert measured Atlas throughput from benchmarks/results/latest.md -->
 - **Selective Zonal Socket.IO Partitioning**: Emits frames into partitioned rooms (`zone:south-bangalore`, `zone:east-bangalore`, `junction:ID`) using compact Wire v1 tuples to cut client network payload. <!-- TODO(T09): insert measured egress reduction from benchmarks/results/latest.md -->
-- **Real-Time Anomaly Engine & AI Copilot**: Flags gridlocks ($Z \ge 3.0$), stalled vehicles, and approaching ambulances with **1-click automated runbook remediation** (Adaptive Green Wave, Tow Dispatch, Emergency Corridor Preemption).
+- **Real-Time Anomaly Engine & AI Copilot**: Flags sustained one-sided queue surges and low-speed gridlocks (robust MAD/EWMA + practical effect + persistence), stalled vehicles, and approaching ambulances with **1-click automated runbook remediation** (Adaptive Green Wave, Tow Dispatch, Emergency Corridor Preemption).
 
 ---
 
@@ -36,11 +36,11 @@ Deploying a real-time smart traffic telemetry command center introduces three fu
 | :--- | :--- | :--- |
 | **Backend Runtime** | **Node.js** (v20+ / v24) + **Express.js** | High-throughput REST API, traffic normalizer, and request routing |
 | **Real-Time Layer** | **Socket.IO** (v4.8+) | Low-latency bi-directional WebSocket communication with zonal room partitioning |
-| **Database** | **MongoDB** + **Mongoose** (with auto in-memory fallback) | Time-series document storage, compound indexing, bulk write operations |
+| **Database** | **MongoDB** + **Mongoose** (with auto in-memory fallback) | Regular `Telemetry` collection with unique `eventId`, compound `(junctionId, timestamp/sequence)`, and TTL indexes; unordered bulk writes |
 | **Frontend UI** | **React.js 18** + **Vite 6** | Mission control dashboard with real-time approach queue visualizations |
-| **Styling & Icons** | **Tailwind CSS** + **Lucide Icons** | Cyber-dark command center design system with glassmorphism |
+| **Styling & Icons** | **Tailwind CSS** + **Lucide Icons** | Dark-first control room design system with light mode & WCAG AA contrast |
 | **Data Visualization** | **Recharts** + **HTML5 Canvas** | Animated time-series waveforms for queue lengths, corridor velocities, and vehicle mix |
-| **Geospatial Mapping** | **Leaflet.js** + CartoDB Dark Matter | Real-time Bengaluru map plotting 12 monitored junctions with live signal state |
+| **Geospatial Mapping** | **Leaflet.js** + Esri World Gray Canvas | Real-time Bengaluru map plotting 12 monitored junctions & speed-coded corridor links |
 | **Validation & Security**| **Custom Normalizer**, **Bcrypt.js**, **JWT** | Schema validation, backpressure rate limiting, and API key auth |
 | **Audio Synthesizer** | **Web Audio API** | Synthetic audio alarms for critical gridlocks and ambulance alerts |
 | **Observability** | **[OpenTelemetry](https://opentelemetry.io/) JS SDK** + Jaeger | Distributed spans across ingest/validate/enqueue/flush/broadcast, explicit-bucket histograms & optional OTLP export |

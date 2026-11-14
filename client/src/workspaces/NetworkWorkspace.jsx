@@ -12,12 +12,14 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import {
   ZONE_LIST,
   zoneLabel,
   controllerLabel,
   classifyJunctionStatus,
+  classifyLinkSpeed,
   useTheme,
   fmtNum,
   fmtInt,
@@ -27,11 +29,19 @@ import {
 import { StatusGlyph, StatusPill } from '../components/StatusPill';
 import { JunctionDetailView } from '../components/JunctionDetailView';
 
-const BENGALURU_CENTER = [12.942, 77.630];
+const BENGALURU_CENTER = [12.976, 77.622];
 const DEFAULT_ZOOM = 12;
 const BENGALURU_BOUNDS = [
-  [12.845, 77.565],
-  [13.020, 77.705],
+  [12.905, 77.528],
+  [13.048, 77.716],
+];
+
+const QUICK_SCENARIOS = [
+  { id: 'pm-peak', label: 'PM Peak (18:30 IST)' },
+  { id: 'am-peak', label: 'AM Peak (09:00 IST)' },
+  { id: 'pm-stalled-silkboard', label: 'PM Peak + Silk Board Stall' },
+  { id: 'monsoon-pm-peak', label: 'Monsoon PM Peak' },
+  { id: 'ambulance-corridor', label: 'Ambulance Green Corridor' },
 ];
 
 const METRIC_KEY_LABELS = {
@@ -53,23 +63,45 @@ function humanizeAlertText(text) {
   return out;
 }
 
-function buildMarkerSvg(statusInfo, isSelected, isDark) {
+function buildMarkerSvg(statusInfo, isSelected, isDark, { maxQueueM = 0, activeDir = null, inIntergreen = false } = {}) {
   const discFill = isDark ? '#0e1116' : '#ffffff';
+  const qNorm = Math.max(0, Math.min(1, Number(maxQueueM || 0) / 140));
+  const ringR = 9.5 + qNorm * 5.0;
   const stroke = isSelected ? (isDark ? '#ffffff' : '#1d4ed8') : statusInfo.ringHex;
-  const strokeW = isSelected ? 2.5 : 1.75;
-  let innerGlyph = `<circle cx="14" cy="14" r="4" fill="${statusInfo.hex}" />`;
+  const strokeW = isSelected ? Math.max(2.6, 1.8 + qNorm * 2.0) : 1.6 + qNorm * 2.1;
+
+  let innerGlyph = `<circle cx="19" cy="19" r="3.8" fill="${statusInfo.hex}" />`;
   if (statusInfo.shape === 'triangle') {
-    innerGlyph = `<polygon points="14,9 19,18 9,18" fill="${statusInfo.hex}" />`;
+    innerGlyph = `<polygon points="19,14 24,23 14,23" fill="${statusInfo.hex}" />`;
   } else if (statusInfo.shape === 'octagon') {
-    innerGlyph = `<polygon points="11.5,9 16.5,9 19,11.5 19,16.5 16.5,19 11.5,19 9,16.5 9,11.5" fill="${statusInfo.hex}" />`;
+    innerGlyph = `<polygon points="16.5,14 21.5,14 24,16.5 24,21.5 21.5,24 16.5,24 14,21.5 14,16.5" fill="${statusInfo.hex}" />`;
   } else if (statusInfo.shape === 'cross') {
-    innerGlyph = `<path d="M12.5 9h3v3.5H19v3h-3.5V19h-3v-3.5H9v-3h3.5z" fill="${statusInfo.hex}" />`;
+    innerGlyph = `<path d="M17.5 14h3v3.5H24v3h-3.5V24h-3v-3.5H14v-3h3.5z" fill="${statusInfo.hex}" />`;
   }
 
+  let phasePip = '';
+  const rimOffsets = {
+    N: [19, 19 - ringR],
+    E: [19 + ringR, 19],
+    S: [19, 19 + ringR],
+    W: [19 - ringR, 19],
+  };
+  if (activeDir && rimOffsets[activeDir]) {
+    const [px, py] = rimOffsets[activeDir];
+    const phaseColor = inIntergreen ? '#f59e0b' : isDark ? '#22c55e' : '#16a34a';
+    phasePip = `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="2.7" fill="${phaseColor}" stroke="${discFill}" stroke-width="1.2" />`;
+  }
+
+  const selectionHalo = isSelected
+    ? `<circle cx="19" cy="19" r="${(ringR + 2.8).toFixed(1)}" fill="none" stroke="${isDark ? '#38bdf8' : '#1d4ed8'}" stroke-width="1.3" stroke-dasharray="3 2" />`
+    : '';
+
   return `
-    <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="14" cy="14" r="11" fill="${discFill}" fill-opacity="0.92" stroke="${stroke}" stroke-width="${strokeW}" />
+    <svg width="36" height="36" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg">
+      ${selectionHalo}
+      <circle cx="19" cy="19" r="${ringR.toFixed(1)}" fill="${discFill}" fill-opacity="0.92" stroke="${stroke}" stroke-width="${strokeW.toFixed(2)}" />
       ${innerGlyph}
+      ${phasePip}
     </svg>
   `;
 }
@@ -150,10 +182,15 @@ export function NetworkWorkspace({
   onOpenJunction,
   onCloseJunction,
 }) {
-  const { latestByDevice, counterfactual, alerts, setAlerts, stats } = useSocket();
+  const { latestByDevice, counterfactual, alerts, setAlerts, stats, simMeta, setSimMeta } = useSocket();
+  const { user } = useAuth();
   const { isDark } = useTheme();
+  const isOperatorPlus = user?.role === 'admin' || user?.role === 'operator';
+  const isAdmin = user?.role === 'admin';
 
   const [simState, setSimState] = useState(null);
+  const [scenariosList, setScenariosList] = useState(QUICK_SCENARIOS);
+  const [quickBusy, setQuickBusy] = useState(false);
   const [cfSnapshot, setCfSnapshot] = useState(null);
   const [cfHistory, setCfHistory] = useState([]);
   const [alertFilter, setAlertFilter] = useState('all');
@@ -199,6 +236,74 @@ export function NetworkWorkspace({
     const t = setInterval(fetchSimOverview, 3000);
     return () => clearInterval(t);
   }, [fetchSimOverview]);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .getScenarios()
+      .then((res) => {
+        if (!alive) return;
+        if (Array.isArray(res?.scenarios) && res.scenarios.length > 0) {
+          setScenariosList(res.scenarios);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const handleQuickScenario = useCallback(
+    async (scenarioId) => {
+      if (!scenarioId || quickBusy || !isOperatorPlus) return;
+      setQuickBusy(true);
+      try {
+        const res = await api.applyScenario(scenarioId);
+        if (res?.success) {
+          const m = res.meta || res;
+          setSimMeta((prev) => ({
+            ...prev,
+            scenario: m.scenario ?? prev?.scenario,
+            scenarioLabel: m.scenarioLabel ?? prev?.scenarioLabel,
+            simClockIst: m.simClockIst ?? prev?.simClockIst,
+            simStartNote: m.simStartNote ?? null,
+            simSpeed: m.simSpeed ?? prev?.simSpeed,
+          }));
+          if (res.state?.junctions) {
+            setSimState(res.state);
+          } else {
+            fetchSimOverview();
+          }
+        }
+      } catch {
+        // Role/network errors handled cleanly via toast-less no-op
+      } finally {
+        setQuickBusy(false);
+      }
+    },
+    [quickBusy, isOperatorPlus, setSimMeta, fetchSimOverview]
+  );
+
+  const handleQuickSpeed = useCallback(
+    async (speedVal) => {
+      if (quickBusy || !isAdmin) return;
+      setQuickBusy(true);
+      try {
+        const res = await api.setSimSpeed(speedVal);
+        if (res?.success) {
+          setSimMeta((prev) => ({
+            ...prev,
+            simSpeed: res.simSpeed ?? speedVal,
+          }));
+        }
+      } catch {
+        // Admin-only control
+      } finally {
+        setQuickBusy(false);
+      }
+    },
+    [quickBusy, isAdmin, setSimMeta]
+  );
 
   const activeCf = counterfactual?.live && counterfactual?.baseline ? counterfactual : cfSnapshot;
 
@@ -263,15 +368,32 @@ export function NetworkWorkspace({
       zoomControl: true,
       preferCanvas: false,
     });
-    map.fitBounds(BENGALURU_BOUNDS, { padding: [18, 18], maxZoom: 13 });
+    const initW = mapContainerRef.current.clientWidth || 0;
+    map.fitBounds(BENGALURU_BOUNDS, {
+      paddingTopLeft: [24, 24],
+      paddingBottomRight: [24, initW < 640 ? 96 : 64],
+      maxZoom: 13,
+      animate: false,
+    });
 
     linkLayerRef.current = L.layerGroup().addTo(map);
     emergencyLayerRef.current = L.layerGroup().addTo(map);
     markerLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
-    const resizeObs = new ResizeObserver(() => {
+    let lastW = initW;
+    const resizeObs = new ResizeObserver((entries) => {
+      const w = entries?.[0]?.contentRect?.width ?? (mapContainerRef.current?.clientWidth || 0);
       map.invalidateSize({ animate: false });
+      if (Math.abs(w - lastW) > 60 && w > 0) {
+        lastW = w;
+        map.fitBounds(BENGALURU_BOUNDS, {
+          paddingTopLeft: [24, 24],
+          paddingBottomRight: [24, w < 640 ? 96 : 64],
+          maxZoom: 13,
+          animate: false,
+        });
+      }
     });
     resizeObs.observe(mapContainerRef.current);
 
@@ -349,19 +471,27 @@ export function NetworkWorkspace({
         jTo?.zoneId === selectedZone;
       if (!showBoth) continue;
 
-      const sTo = classifyJunctionStatus(jTo || jFrom, isDark);
-      const isGridlockLink = sTo.key === 'gridlock';
-      const isHeavyLink = sTo.key === 'heavy';
+      const jToSpd = Number(jTo?.metrics?.avgSpeedKmph ?? jTo?.avgSpeedKmph);
+      const jFromSpd = Number(jFrom?.metrics?.avgSpeedKmph ?? jFrom?.avgSpeedKmph);
+      const fallbackSpeed = Number.isFinite(jToSpd) ? jToSpd : jFromSpd;
+      const linkSpeed = Number.isFinite(Number(lnk.speedKmph)) ? Number(lnk.speedKmph) : fallbackSpeed;
+      const speedStyle = classifyLinkSpeed(linkSpeed, isDark);
+      const spdLabel = Number.isFinite(linkSpeed) ? `${fmtNum(linkSpeed, 1)} km/h` : speedStyle.label;
+      const vcLabel = Number.isFinite(Number(lnk.vOverC)) ? ` · v/c ${fmtNum(lnk.vOverC, 2)}` : '';
+
       L.polyline([fromPos, toPos], {
-        color: sTo.hex,
-        weight: isGridlockLink ? 4 : isHeavyLink ? 3.2 : 2.2,
-        dashArray: isGridlockLink ? '8 4' : undefined,
-        opacity: isGridlockLink ? 0.8 : 0.6,
+        color: speedStyle.hex,
+        weight: speedStyle.weight,
+        dashArray: speedStyle.dashArray,
+        opacity: speedStyle.opacity,
       })
-        .bindTooltip(`${lnk.corridor}: ${jFrom?.name || lnk.fromJunction} <-> ${jTo?.name || lnk.toJunction}`, {
-          className: 'mp-tooltip',
-          sticky: true,
-        })
+        .bindTooltip(
+          `${lnk.corridor}: ${jFrom?.name || lnk.fromJunction} <-> ${jTo?.name || lnk.toJunction} · ${spdLabel}${vcLabel}`,
+          {
+            className: 'mp-tooltip',
+            sticky: true,
+          }
+        )
         .addTo(linkLayerRef.current);
     }
 
@@ -402,26 +532,34 @@ export function NetworkWorkspace({
 
       const info = classifyJunctionStatus(j, isDark);
       const isSelected = selectedJunctionId === j.junctionId;
-      const icon = L.divIcon({
-        className: '',
-        html: buildMarkerSvg(info, isSelected, isDark),
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
-      });
-
       const qM = j.metrics?.maxQueueLengthM ?? j.maxQueueLengthM;
       const spd = j.metrics?.avgSpeedKmph ?? j.avgSpeedKmph;
       const ctrl = j.describe?.activeController || j.data?.control?.activeController || j.controller;
+      const activeDir = j.data?.control?.activeDir || j.control?.activeDir || j.activeDir || null;
+      const inIntergreen = Boolean(j.data?.control?.inIntergreen ?? j.control?.inIntergreen ?? j.inIntergreen);
+
+      const icon = L.divIcon({
+        className: '',
+        html: buildMarkerSvg(info, isSelected, isDark, {
+          maxQueueM: qM,
+          activeDir,
+          inIntergreen,
+        }),
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+      });
+
+      const phaseStr = activeDir ? ` · Phase ${activeDir}${inIntergreen ? ' (amber)' : ''}` : '';
 
       const marker = L.marker(pos, { icon });
       marker.bindTooltip(
         `<div class="space-y-0.5">
           <div style="font-weight:600">${j.name || j.junctionId}</div>
           <div style="font-family:JetBrains Mono,monospace;font-size:10px">
-            ${info.label} · Q ${fmtInt(qM)}m · ${fmtNum(spd, 1)} km/h · ${controllerLabel(ctrl)}
+            ${info.label} · Q ${fmtInt(qM)}m · ${fmtNum(spd, 1)} km/h · ${controllerLabel(ctrl)}${phaseStr}
           </div>
         </div>`,
-        { className: 'mp-tooltip', direction: 'top', offset: [0, -10] }
+        { className: 'mp-tooltip', direction: 'top', offset: [0, -14] }
       );
       marker.on('click', () => {
         onOpenJunction(j.junctionId);
@@ -577,6 +715,46 @@ export function NetworkWorkspace({
                 <span>{emergencyCount} En-route</span>
               </span>
             )}
+            <label
+              className="inline-flex items-center gap-1"
+              title={isOperatorPlus ? 'Switch realistic Bengaluru traffic scenario across both CRN twins' : 'Operator+ demo persona required to switch scenario'}
+            >
+              <select
+                aria-label="Traffic scenario preset"
+                value={simMeta?.scenario || simState?.scenario || 'pm-peak'}
+                disabled={!isOperatorPlus || quickBusy}
+                onChange={(e) => handleQuickScenario(e.target.value)}
+                className="px-1.5 py-0.5 rounded border border-hairline bg-inset text-ink-primary font-mono text-[11px] disabled:opacity-60"
+              >
+                {scenariosList.map((sc) => (
+                  <option key={sc.id} value={sc.id}>
+                    {sc.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {isAdmin && (
+              <div className="inline-flex items-center rounded border border-hairline bg-inset overflow-hidden" role="group" aria-label="Simulation clock speed">
+                {[1, 2, 5].map((spd) => {
+                  const activeSpd = Number(simMeta?.simSpeed || 1) === spd;
+                  return (
+                    <button
+                      key={`map-spd-${spd}`}
+                      type="button"
+                      disabled={quickBusy}
+                      onClick={() => handleQuickSpeed(spd)}
+                      className={`px-1.5 py-0.5 text-[10px] font-mono transition-colors ${
+                        activeSpd
+                          ? 'bg-accent text-accent-contrast font-semibold'
+                          : 'text-ink-secondary hover:text-ink-primary'
+                      }`}
+                    >
+                      {spd}x
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             {simState?.simTime && (
               <span className="text-ink-muted">{fmtClockTime(simState.simTime)}</span>
             )}
@@ -587,25 +765,61 @@ export function NetworkWorkspace({
         <div className="relative h-[430px] lg:h-auto lg:flex-1 bg-ground">
           <div ref={mapContainerRef} className="w-full h-full min-h-[420px] lg:min-h-0" />
 
-          {/* Accessible Map Legend (Shape + Color + Text) */}
-          <div className="absolute bottom-3 left-3 z-[400] console-panel px-2.5 py-2 flex flex-wrap items-center gap-3 text-[11px]">
-            {[
-              { shape: 'circle', label: 'Flow', hex: isDark ? '#10b981' : '#047857' },
-              { shape: 'triangle', label: 'Heavy', hex: isDark ? '#f59e0b' : '#92400e' },
-              { shape: 'octagon', label: 'Gridlock', hex: isDark ? '#f97316' : '#9a3412' },
-              { shape: 'cross', label: 'Emergency', hex: isDark ? '#38bdf8' : '#0369a1' },
-            ].map((item) => (
-              <span key={item.label} className="inline-flex items-center gap-1.5 text-ink-primary">
-                <StatusGlyph shape={item.shape} color={item.hex} size={10} />
-                <span>{item.label}</span>
+          {/* Accessible Map Legend (Junction Glyphs/Rings/Phase + Link Speed Bands) */}
+          <div className="absolute bottom-3 left-3 z-[400] console-panel px-2.5 py-1.5 space-y-1 text-[10px] max-w-[calc(100%-24px)]">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              {[
+                { shape: 'circle', label: 'Flow', hex: isDark ? '#10b981' : '#047857' },
+                { shape: 'triangle', label: 'Heavy', hex: isDark ? '#f59e0b' : '#92400e' },
+                { shape: 'octagon', label: 'Gridlock', hex: isDark ? '#f97316' : '#9a3412' },
+                { shape: 'cross', label: 'Emergency', hex: isDark ? '#38bdf8' : '#0369a1' },
+              ].map((item) => (
+                <span key={item.label} className="inline-flex items-center gap-1 text-ink-primary">
+                  <StatusGlyph shape={item.shape} color={item.hex} size={9} />
+                  <span>{item.label}</span>
+                </span>
+              ))}
+              <span className="text-ink-muted">· Ring size = Q ·</span>
+              <span className="inline-flex items-center gap-1 text-ink-secondary">
+                <span className="inline-block w-2 h-2 rounded-full bg-[#22c55e]" aria-hidden="true" />
+                <span>Green phase dir</span>
               </span>
-            ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-ink-secondary font-mono">
+              <span className="font-sans text-ink-muted">Link speed:</span>
+              {[
+                { label: '>=30', hex: isDark ? '#10b981' : '#047857', dashed: false },
+                { label: '20-29', hex: isDark ? '#eab308' : '#b45309', dashed: false },
+                { label: '12-19', hex: isDark ? '#f97316' : '#c2410c', dashed: false },
+                { label: '<12 km/h', hex: isDark ? '#ef4444' : '#b91c1c', dashed: true },
+              ].map((band) => (
+                <span key={band.label} className="inline-flex items-center gap-1">
+                  <span
+                    className="inline-block w-3.5 h-0.5"
+                    style={{
+                      backgroundColor: band.dashed ? 'transparent' : band.hex,
+                      borderTop: band.dashed ? `2px dashed ${band.hex}` : undefined,
+                    }}
+                    aria-hidden="true"
+                  />
+                  <span>{band.label}</span>
+                </span>
+              ))}
+            </div>
           </div>
 
           {/* Recenter Control */}
           <button
             type="button"
-            onClick={() => mapRef.current?.fitBounds(BENGALURU_BOUNDS, { padding: [18, 18], maxZoom: 13 })}
+            onClick={() => {
+              const w = mapContainerRef.current?.clientWidth || 640;
+              mapRef.current?.fitBounds(BENGALURU_BOUNDS, {
+                paddingTopLeft: [24, 24],
+                paddingBottomRight: [24, w < 640 ? 96 : 64],
+                maxZoom: 13,
+                animate: false,
+              });
+            }}
             title="Reset map bounds to Bengaluru corridors"
             aria-label="Reset map view"
             className="absolute top-3 right-3 z-[400] min-w-[36px] min-h-[36px] flex items-center justify-center console-panel p-2 text-ink-secondary hover:text-ink-primary transition-colors"

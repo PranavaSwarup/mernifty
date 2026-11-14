@@ -27,6 +27,7 @@ export function Navbar({ activeWorkspace, onChangeWorkspace }) {
     soundEnabled,
     setSoundEnabled,
     socketError,
+    simMeta,
   } = useSocket();
   const { user, switchPersona, isLoading: authLoading, authError } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -77,7 +78,7 @@ export function Navbar({ activeWorkspace, onChangeWorkspace }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-hairline bg-surface">
-      <div className="min-h-[52px] max-w-[1920px] mx-auto px-2 sm:px-4 py-1 sm:py-0 flex flex-wrap sm:flex-nowrap items-center justify-between gap-1.5 sm:gap-3">
+      <div className="min-h-[52px] max-w-[1920px] mx-auto px-2 sm:px-3 py-1 sm:py-0 flex flex-wrap sm:flex-nowrap items-center justify-between gap-1 sm:gap-2">
         {/* Left: Brand & Required Model Honesty Badge */}
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 shrink-0">
           <svg
@@ -100,16 +101,43 @@ export function Navbar({ activeWorkspace, onChangeWorkspace }) {
             className="hidden min-[380px]:inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded border border-hairline bg-inset text-[10px] sm:text-[11px] font-mono text-ink-secondary whitespace-nowrap"
             title="All corridor physics, queues, delays, and responder trajectories run inside a discrete-time traffic model paired against a fixed-time baseline."
           >
-            <span className="hidden md:inline">Simulated (physics model)</span>
+            <span className="hidden 2xl:inline">Simulated (physics model)</span>
+            <span className="hidden md:inline 2xl:hidden">Simulated</span>
             <span className="md:hidden">Sim</span>
           </span>
+          {simMeta?.simClockIst && (
+            <span
+              data-testid="sim-clock-readout"
+              className="hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded border border-hairline bg-inset text-[11px] font-mono tabular-nums text-ink-secondary whitespace-nowrap"
+              title={`Sim clock ${simMeta.simClockIst} · scenario: ${simMeta.scenarioLabel || simMeta.scenario || 'PM peak'}${
+                simMeta.simStartNote ? ` (${simMeta.simStartNote})` : ''
+              }${Number(simMeta.simSpeed) > 1 ? ` · ${simMeta.simSpeed}x clock` : ''}`}
+            >
+              <span className="text-ink-muted">Sim clock </span>
+              <span className="text-ink-primary font-semibold">{simMeta.simClockIst}</span>
+              <span className="text-ink-muted"> · scenario: </span>
+              <span className="text-ink-primary font-medium truncate max-w-[96px] min-[1380px]:max-w-[135px] 2xl:max-w-[180px]">
+                {simMeta.scenarioLabel || simMeta.scenario || 'PM peak'}
+              </span>
+              {simMeta.simStartNote && (
+                <span className="hidden 2xl:inline text-ink-muted">
+                  ({simMeta.simStartNote})
+                </span>
+              )}
+              {Number(simMeta.simSpeed) > 1 && (
+                <span className="px-1 rounded bg-accent/15 text-accent font-semibold">
+                  {simMeta.simSpeed}x
+                </span>
+              )}
+            </span>
+          )}
         </div>
 
         {/* Center: 4 Primary Workspaces */}
         <nav
           aria-label="Workspaces"
           role="tablist"
-          className="hidden sm:flex items-stretch h-full gap-1 sm:gap-2 overflow-x-auto no-scrollbar"
+          className="hidden sm:flex items-stretch h-full gap-0.5 lg:gap-1 shrink-0"
         >
           {WORKSPACES.map((ws) => {
             const active = activeWorkspace === ws.id;
@@ -123,7 +151,7 @@ export function Navbar({ activeWorkspace, onChangeWorkspace }) {
                 data-workspace={ws.id}
                 onKeyDown={handleTabKeyDown}
                 onClick={() => onChangeWorkspace(ws.id)}
-                className={`px-2.5 sm:px-3.5 h-full flex items-center text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`px-2 xl:px-3 h-full flex items-center text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${
                   active
                     ? 'border-accent text-ink-primary'
                     : 'border-transparent text-ink-secondary hover:text-ink-primary'
@@ -149,15 +177,18 @@ export function Navbar({ activeWorkspace, onChangeWorkspace }) {
           )}
 
           {/* Demo Personas Switcher */}
-          <label className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded border border-hairline bg-inset text-xs">
+          <label
+            className="hidden lg:flex items-center gap-1 px-1.5 py-1 rounded border border-hairline bg-inset text-xs"
+            title="Switch signed-in demo persona (requires DEMO_PERSONAS=true)"
+          >
             <UserCheck className="w-3.5 h-3.5 text-ink-muted shrink-0" aria-hidden="true" />
-            <span className="text-[11px] text-ink-muted">Demo personas</span>
+            <span className="hidden 2xl:inline text-[11px] text-ink-muted">Demo personas</span>
             <select
               aria-label="Demo personas"
               value={currentPersona}
               disabled={authLoading}
               onChange={handlePersonaChange}
-              className="bg-transparent text-xs font-medium text-ink-primary cursor-pointer rounded"
+              className="max-w-[104px] min-[1380px]:max-w-[135px] 2xl:max-w-none bg-transparent text-xs font-medium text-ink-primary cursor-pointer rounded truncate"
             >
               {PERSONA_OPTIONS.map((p) => (
                 <option key={p.id} value={p.id} className="bg-surface text-ink-primary">
@@ -236,6 +267,25 @@ export function Navbar({ activeWorkspace, onChangeWorkspace }) {
           </button>
         </div>
       </div>
+
+      {/* Compact Sim Clock + Scenario strip (<1280px) */}
+      {simMeta?.simClockIst && (
+        <div
+          data-testid="sim-clock-readout-compact"
+          className="xl:hidden flex items-center justify-between border-t border-hairline bg-inset px-3 py-1 text-[10px] font-mono tabular-nums text-ink-secondary"
+        >
+          <span className="truncate">
+            Sim clock <strong className="text-ink-primary">{simMeta.simClockIst}</strong> · scenario:{' '}
+            <strong className="text-ink-primary">{simMeta.scenarioLabel || simMeta.scenario || 'PM peak'}</strong>
+            {simMeta.simStartNote ? ` (${simMeta.simStartNote})` : ''}
+          </span>
+          {Number(simMeta.simSpeed) > 1 && (
+            <span className="ml-2 shrink-0 px-1 rounded bg-accent/15 text-accent font-semibold">
+              {simMeta.simSpeed}x
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Mobile workspace tabs bar (<640px) */}
       <nav

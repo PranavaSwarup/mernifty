@@ -20,7 +20,7 @@ MetroPulse BLR is a centralized traffic telemetry ingestion, paired physics-twin
 
 ## Positioning
 
-Unlike decorative smart-city dashboards or unverified simulation loops, every control decision in MetroPulse is paired against an identical Fixed-TOD twin (`CounterfactualPair` with CRN arrivals), every AI Copilot recommendation reports discrete look-ahead rollout wins (`improvedRollouts/K`) with a 90% interval rather than opaque percentages, all traffic is honestly labeled as physics-model simulation, and empirical studies document both regimes where adaptive control helps and where it loses (such as severe stationary `0.35` PM Peak saturation).
+Unlike decorative smart-city dashboards or unverified simulation loops, every control decision in MetroPulse BLR is paired against an identical Fixed-TOD twin (`CounterfactualPair` with CRN arrivals), every AI Copilot recommendation reports discrete look-ahead rollout wins (`improvedRollouts/K`) with a 90% interval rather than opaque percentages, all traffic is honestly labeled as physics-model simulation, and empirical studies document both regimes where adaptive control helps and where it loses (such as severe stationary `0.35` PM Peak saturation).
 
 ## Operating Context
 
@@ -37,7 +37,7 @@ Unlike decorative smart-city dashboards or unverified simulation loops, every co
   - Copilot confidence: discrete rollout ratio plus 90% interval (e.g., `11/12 look-ahead rollouts improved delay`, 90% `[low, high]`).
   - Controlled-study visibility: display the full regime table including conditions where adaptive control performs worse than Fixed-TOD, and expose `AutoSupervisoryController` switch reasons.
   - Benchmark accounting transparency: `HTTP-accepted/s != persisted-to-Atlas/s != delivered-to-sockets/s`.
-- **Technical Performance & Architecture:** React + Vite code-split across 4 primary workspaces (`Network`, `Junction`, `Desks`, `Engineering`), external `useSyncExternalStore` hot store + throttled rendering, Leaflet CartoDB map tiles with attribution, Recharts time-series + SVG schematics, strict WCAG AA contrast & keyboard navigation, `prefers-reduced-motion` compliance.
+- **Technical Performance & Architecture:** React + Vite code-split across 4 primary workspaces (`Network`, `Junction`, `Desks`, `Engineering`), external `useSyncExternalStore` hot store + throttled rendering, Leaflet ArcGIS (Esri) Gray Canvas map tiles with attribution, Recharts time-series + SVG schematics, strict WCAG AA contrast & keyboard navigation, `prefers-reduced-motion` compliance.
 - **Explicit Out-of-Scope Deletions:** Remove ungrounded/synthetic legacy views (`NetworkTopologyView` fake "global edge mesh") and collapse legacy 9-tab fragmentation into the 4 focused workspaces.
 
 ## Evidence on Hand

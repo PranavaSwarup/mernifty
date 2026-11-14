@@ -17,7 +17,11 @@ import {
 } from '../src/sim/network.js';
 import { TrafficWorld, EMERGENCY_WEAVING_SPEED_KMPH } from '../src/sim/engine.js';
 import { CounterfactualPair } from '../src/sim/twin.js';
-import { simulatorService } from '../src/services/simulatorService.js';
+import {
+  simulatorService,
+  resolveInitialSimStart,
+  SCENARIO_PRESETS,
+} from '../src/services/simulatorService.js';
 import { copilotService } from '../src/services/copilotService.js';
 
 // Evening peak timestamp in Bengaluru: 19:00 IST (13:30 UTC)
@@ -851,4 +855,39 @@ test('17. Copilot executeRemediation(): live-only mutation, 300s realisedEffect 
   for (let i = 30; i < towEta + 2; i++) simulatorService.stepPhysics();
   assert.strictEqual(simulatorService.pair.live.snapshot('JNC-BLR-002').stalledVehicleDetected, false);
   assert.strictEqual(simulatorService.pair.baseline.snapshot('JNC-BLR-002').stalledVehicleDetected, true);
+});
+
+test('18. Scenario presets & SIM_START resolution: PM/Monsoon/Stall CRN alignment and measured corridor speed', () => {
+  const customStart = resolveInitialSimStart('18:30');
+  assert.strictEqual(customStart.presetId, 'custom');
+  assert.strictEqual(customStart.note, 'SIM_START=18:30 IST');
+
+  const liveNowStart = resolveInitialSimStart('now');
+  assert.strictEqual(liveNowStart.presetId, 'live-now');
+
+  const autoStart = resolveInitialSimStart('auto');
+  assert.ok(['am-peak', 'pm-peak'].includes(autoStart.presetId));
+  assert.ok(SCENARIO_PRESETS.some((s) => s.id === 'monsoon-pm-peak'));
+
+  const pmRes = simulatorService.applyScenario('pm-peak', { actor: 'test-suite' });
+  assert.strictEqual(pmRes.meta.scenario, 'pm-peak');
+  assert.strictEqual(pmRes.meta.simClockIst, '18:31 IST');
+  for (let i = 0; i < 10; i++) simulatorService.stepPhysics();
+  const state = simulatorService.getState();
+  assert.strictEqual(state.scenario, 'pm-peak');
+  assert.ok(Array.isArray(state.corridors) && state.corridors.length > 0);
+  assert.ok(typeof state.corridors[0].speedKmph === 'number');
+  assert.ok(typeof state.corridors[0].vOverC === 'number');
+
+  const monsoonRes = simulatorService.applyScenario('monsoon-pm-peak', { actor: 'test-suite' });
+  assert.strictEqual(monsoonRes.meta.scenario, 'monsoon-pm-peak');
+  simulatorService.stepPhysics();
+  assert.strictEqual(simulatorService.pair.live.weather.active, true);
+  assert.strictEqual(simulatorService.pair.baseline.weather.active, true);
+
+  const stallRes = simulatorService.applyScenario('pm-stalled-silkboard', { actor: 'test-suite' });
+  assert.strictEqual(stallRes.meta.scenario, 'pm-stalled-silkboard');
+  simulatorService.stepPhysics();
+  assert.strictEqual(simulatorService.pair.live.snapshot('JNC-BLR-001').stalledVehicleDetected, true);
+  assert.strictEqual(simulatorService.pair.baseline.snapshot('JNC-BLR-001').stalledVehicleDetected, true);
 });

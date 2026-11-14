@@ -10,6 +10,7 @@ import { SamplingDecision } from '@opentelemetry/sdk-trace';
 import {
   OperatorAwareSampler,
   getOtelState,
+  getRecentTraces,
   interpolateHistogramPercentile,
   setOtelSampleRatio,
   shutdownOtel,
@@ -225,4 +226,64 @@ test('4. City payloads omit heavy per-junction maps and ping/pong + client:laten
   assert.ok(mJson.percentiles.clientE2eMs.p50 > 0);
 
   sock.disconnect();
+});
+
+test('5. Trace prioritization ranks informative traces & span links ahead of rapid buffer.enqueue ticks', async () => {
+  const exporter = getOtelState().spanExporter;
+  assert.ok(exporter, 'Expected spanExporter to be initialized');
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const mkSpan = ({ traceId, spanId, name, links = [], offsetMs = 0 }) => ({
+    spanContext: () => ({ traceId, spanId, traceFlags: 1 }),
+    parentSpanContext: null,
+    name,
+    kind: 0,
+    startTime: [nowSec, offsetMs * 1e6],
+    endTime: [nowSec, (offsetMs + 4) * 1e6],
+    status: { code: 0 },
+    attributes: {},
+    links,
+  });
+
+  const enqueueSpans = [];
+  for (let i = 0; i < 6; i++) {
+    enqueueSpans.push(
+      mkSpan({
+        traceId: `1111111111111111111111111111110${i}`,
+        spanId: `aaaa00000000000${i}`,
+        name: 'buffer.enqueue',
+        offsetMs: 100 + i,
+      })
+    );
+  }
+  const linkedFlush = mkSpan({
+    traceId: '22222222222222222222222222222222',
+    spanId: 'bbbb000000000001',
+    name: 'buffer.flush',
+    links: [{ context: { traceId: '11111111111111111111111111111100', spanId: 'aaaa000000000000' } }],
+    offsetMs: 10,
+  });
+  const copilotTrace = mkSpan({
+    traceId: '33333333333333333333333333333333',
+    spanId: 'cccc000000000001',
+    name: 'copilot.diagnose',
+    offsetMs: 5,
+  });
+
+  await new Promise((resolve) =>
+    exporter.export([copilotTrace, linkedFlush, ...enqueueSpans], resolve)
+  );
+
+  const prio = getRecentTraces(5, { priority: 'informative' });
+  assert.ok(prio.traces.length >= 2);
+  assert.strictEqual(prio.traces[0].rootName, 'copilot.diagnose');
+  const flushEntry = prio.traces.find((t) => t.rootName === 'buffer.flush');
+  assert.ok(flushEntry && flushEntry.hasLinks && flushEntry.linkCount >= 1);
+  assert.ok(Array.isArray(prio.availableSpanNames) && prio.availableSpanNames.includes('buffer.flush'));
+
+  const res = await fetch(`${baseUrl}/api/observability/traces?span=copilot.diagnose&limit=5`);
+  const json = await res.json();
+  assert.equal(res.status, 200);
+  assert.ok(json.traces.length >= 1);
+  assert.ok(json.traces.every((t) => t.rootName.includes('copilot.diagnose')));
 });

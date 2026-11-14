@@ -162,11 +162,16 @@ class SocketService {
     if (typeof info === 'number') {
       return info > this.backpressureBytesThreshold;
     }
+    // Engine.IO WebSocket sets transport.writable=false synchronously during a single
+    // send() flush until ws.send completes on nextTick; only count true queueing/bytes.
     return (
-      info.unwritable ||
       info.bytes > this.backpressureBytesThreshold ||
       info.writeBufCount > this.writeBufferThreshold
     );
+  }
+
+  _withEmitTimestamp(packet) {
+    return packet && typeof packet === 'object' ? { ...packet, et: Date.now() } : packet;
   }
 
   _emitWithByteAccounting(socket, roomName, eventName, payload, frameCount = 1, serializedBytes = null) {
@@ -277,10 +282,10 @@ class SocketService {
       const latestList = events.length > 0 ? [events[events.length - 1]] : [];
       if (latestList.length > 0) {
         if (kind === 'zone') {
-          const pkt = encodeZoneBatch(latestList, this.wireSchema, zoneOrJunction);
+          const pkt = this._withEmitTimestamp(encodeZoneBatch(latestList, this.wireSchema, zoneOrJunction));
           socket.volatile.emit('telemetry:zone', pkt);
         } else {
-          const pkt = encodeJunctionBatch(latestList, this.wireSchema, zoneOrJunction);
+          const pkt = this._withEmitTimestamp(encodeJunctionBatch(latestList, this.wireSchema, zoneOrJunction));
           socket.volatile.emit('telemetry:junction', pkt);
         }
       }
@@ -302,7 +307,7 @@ class SocketService {
       }
       cf.zone.clear();
       for (const [zId, evts] of byZone.entries()) {
-        const pkt = encodeZoneBatch(evts, this.wireSchema, zId);
+        const pkt = this._withEmitTimestamp(encodeZoneBatch(evts, this.wireSchema, zId));
         this._emitWithByteAccounting(socket, `zone:${zId}`, 'telemetry:zone', pkt, evts.length);
       }
     }
@@ -311,7 +316,7 @@ class SocketService {
       const items = Array.from(cf.junction.values());
       cf.junction.clear();
       for (const { evt, key } of items) {
-        const pkt = encodeJunctionBatch([evt], this.wireSchema, key);
+        const pkt = this._withEmitTimestamp(encodeJunctionBatch([evt], this.wireSchema, key));
         this._emitWithByteAccounting(socket, `junction:${key}`, 'telemetry:junction', pkt, 1);
       }
     }
@@ -322,7 +327,7 @@ class SocketService {
     const socketIds = this._getRoomSocketIds(roomName);
     if (socketIds.length === 0) return { deliveredSockets: 0, totalBytes: 0, framesDelivered: 0 };
 
-    const wirePacket = packet && typeof packet === 'object' ? { ...packet, et: Date.now() } : packet;
+    const wirePacket = this._withEmitTimestamp(packet);
     const frameBytes = utf8ByteLength(JSON.stringify([eventName, wirePacket]));
     let deliveredSockets = 0;
 
@@ -1038,6 +1043,11 @@ class SocketService {
   broadcastCounterfactual(comparison) {
     if (!this.io) return;
     this._emitToRoomRaw('city', 'cf:update', comparison, 1);
+  }
+
+  broadcastScenarioUpdate(meta) {
+    if (!this.io || !meta) return;
+    this._emitToRoomRaw('city', 'sim:scenario', meta, 0);
   }
 
   broadcastEngineeringEvent(eventName, payload) {

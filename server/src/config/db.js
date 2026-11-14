@@ -25,7 +25,7 @@ export async function connectDB() {
     const { MongoMemoryServer } = await import('mongodb-memory-server');
     mongodInstance = await MongoMemoryServer.create({
       instance: {
-        dbName: 'hyperpulse',
+        dbName: 'metropulse',
       },
     });
     const uri = mongodInstance.getUri();

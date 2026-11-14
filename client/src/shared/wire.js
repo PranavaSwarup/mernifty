@@ -22,6 +22,8 @@ export const DEFAULT_CONTROLLERS = [
 
 export const DEFAULT_SIGNALS = ['red', 'amber', 'green'];
 
+export const ACTIVE_DIR_CODES = ['', 'N', 'E', 'S', 'W'];
+
 export const DEFAULT_JUNCTIONS_META = [
   {
     junctionId: 'JNC-BLR-001',
@@ -235,11 +237,33 @@ function getEventTsMs(evt) {
   return Number.isFinite(ms) ? ms : Date.now();
 }
 
+function resolveActiveDirCode(evt, schema, jId) {
+  const explicit = evt?.data?.control?.activeDir;
+  if (explicit) {
+    const idx = ACTIVE_DIR_CODES.indexOf(explicit);
+    if (idx > 0) return idx;
+  }
+  const apps = evt?.data?.approaches;
+  if (Array.isArray(apps) && apps.length > 0) {
+    const active = apps.find((a) => a.signal === 'green') || apps.find((a) => a.signal === 'amber');
+    if (active?.dir) {
+      const idx = ACTIVE_DIR_CODES.indexOf(active.dir);
+      if (idx > 0) return idx;
+    }
+  }
+  const pIdx = evt?.data?.control?.phaseIndex ?? evt?.data?.control?.currentPhaseIdx;
+  if (Number.isInteger(pIdx) && schema?.approachRoadsByJunction?.[jId]?.[pIdx]?.dir) {
+    const idx = ACTIVE_DIR_CODES.indexOf(schema.approachRoadsByJunction[jId][pIdx].dir);
+    if (idx > 0) return idx;
+  }
+  return 0;
+}
+
 /**
  * Encode a batch of junction events in one zone into Wire v1 compact tuples:
  * Header `{ v: 1, t0, zone, rows }`
  * Each tuple: `[jIdx, seq, tMsDelta, statusIdx, flow, maxQ, speed10, score, controllerIdx]`
- * (with optional 10th element `flags` bitmask when stalled/ambulance bits are non-zero).
+ * (with optional 10th element `flags` bitmask for stalled/ambulance/intergreen/activeDir).
  */
 export function encodeZoneBatch(events, schema = DEFAULT_WIRE_SCHEMA, zoneId = null) {
   if (!Array.isArray(events) || events.length === 0) {
@@ -273,7 +297,13 @@ export function encodeZoneBatch(events, schema = DEFAULT_WIRE_SCHEMA, zoneId = n
 
     const stalled = Boolean(evt.data?.stalledVehicleDetected ?? m.stalledVehicleDetected);
     const ambulance = Boolean(evt.data?.ambulanceDetected ?? m.ambulanceDetected);
-    const flags = (stalled ? 1 : 0) | (ambulance ? 2 : 0);
+    const inIntergreen = Boolean(evt.data?.control?.inIntergreen);
+    const dirCode = resolveActiveDirCode(evt, schema, jId);
+    const flags =
+      (stalled ? 1 : 0) |
+      (ambulance ? 2 : 0) |
+      (inIntergreen ? 4 : 0) |
+      ((dirCode & 7) << 3);
 
     const tuple = [jIdx, seq, tMsDelta, statusIdx, flow, maxQ, speed10, score, controllerIdx];
     if (flags !== 0) tuple.push(flags);
@@ -300,6 +330,8 @@ export function decodeZoneBatch(packet, schema = DEFAULT_WIRE_SCHEMA) {
     const avgSpeedKmph = Number((speed10 / 10).toFixed(1));
     const stalled = Boolean(flags & 1);
     const ambulance = Boolean(flags & 2);
+    const inIntergreen = Boolean(flags & 4);
+    const activeDir = ACTIVE_DIR_CODES[(flags >> 3) & 7] || null;
     const tsIso = new Date(t0 + (Number(tMsDelta) || 0)).toISOString();
 
     return {
@@ -330,7 +362,7 @@ export function decodeZoneBatch(packet, schema = DEFAULT_WIRE_SCHEMA) {
         congestionScore: score,
         stalledVehicleDetected: stalled,
         ambulanceDetected: ambulance,
-        control: { activeController: controller, controller },
+        control: { activeController: controller, controller, activeDir, inIntergreen },
       },
       _wire: { v: WIRE_VERSION, kind: 'zone', tuple: row },
     };
@@ -375,15 +407,22 @@ export function encodeJunctionBatch(events, schema = DEFAULT_WIRE_SCHEMA, juncti
 
     const stalled = Boolean(evt.data?.stalledVehicleDetected ?? m.stalledVehicleDetected);
     const ambulance = Boolean(evt.data?.ambulanceDetected ?? m.ambulanceDetected);
-    const flags = (stalled ? 1 : 0) | (ambulance ? 2 : 0);
+    const inIntergreen = Boolean(evt.data?.control?.inIntergreen);
+    const dirCode = resolveActiveDirCode(evt, schema, jId);
+    const flags =
+      (stalled ? 1 : 0) |
+      (ambulance ? 2 : 0) |
+      (inIntergreen ? 4 : 0) |
+      ((dirCode & 7) << 3);
 
     const approaches = (evt.data?.approaches || []).map((a) => [
       Math.round(a.vehiclesPerMin ?? 0),
       Math.round(a.queueLengthM ?? 0),
       Math.round((a.avgSpeedKmph ?? 0) * 10),
       sigMap.has(a.signal) ? sigMap.get(a.signal) : 0,
-      Math.round(a.greenRemainingSec ?? 0),
+      Math.round(a.greenRemainingSec ?? a.greenTimeSec ?? 0),
       Math.round((a.queueVeh ?? 0) * 10),
+      Math.round((a.vOverC ?? 0) * 100),
     ]);
 
     const mix = evt.data?.vehicleMix || {};
@@ -400,8 +439,8 @@ export function encodeJunctionBatch(events, schema = DEFAULT_WIRE_SCHEMA, juncti
       Math.round(kpi.delayVehSec ?? 0),
       Math.round(kpi.throughputVehPerHour ?? 0),
       Math.round((kpi.degreeOfSaturation ?? 0) * 100),
-      Number.isFinite(ctrl.currentPhaseIdx) ? ctrl.currentPhaseIdx : 0,
-      Math.round(ctrl.phaseRemainingSec ?? ctrl.elapsedInPhaseSec ?? 0),
+      Number.isFinite(ctrl.currentPhaseIdx ?? ctrl.phaseIndex) ? (ctrl.currentPhaseIdx ?? ctrl.phaseIndex) : 0,
+      Math.round(ctrl.phaseRemainingSec ?? ctrl.greenRemainingSec ?? ctrl.elapsedInPhaseSec ?? 0),
       Math.round(ctrl.cycleSec ?? 0),
     ];
 
@@ -455,6 +494,8 @@ export function decodeJunctionBatch(packet, schema = DEFAULT_WIRE_SCHEMA) {
     const avgSpeedKmph = Number((speed10 / 10).toFixed(1));
     const stalled = Boolean(flags & 1);
     const ambulance = Boolean(flags & 2);
+    const inIntergreen = Boolean(flags & 4);
+    const flagDir = ACTIVE_DIR_CODES[(flags >> 3) & 7] || null;
     const tsIso = new Date(t0 + (Number(tMsDelta) || 0)).toISOString();
     const roadDefs = schema.approachRoadsByJunction?.[jId] || [];
 
@@ -466,8 +507,13 @@ export function decodeJunctionBatch(packet, schema = DEFAULT_WIRE_SCHEMA) {
       avgSpeedKmph: Number(((arr[2] ?? 0) / 10).toFixed(1)),
       signal: schema.signals?.[arr[3]] || 'red',
       greenRemainingSec: arr[4] ?? 0,
+      greenTimeSec: arr[4] ?? 0,
       queueVeh: Number(((arr[5] ?? 0) / 10).toFixed(1)),
+      vOverC: arr[6] != null ? Number(((arr[6] ?? 0) / 100).toFixed(2)) : null,
     }));
+
+    const activeApp = approaches.find((a) => a.signal === 'green') || approaches.find((a) => a.signal === 'amber');
+    const activeDir = activeApp?.dir || flagDir;
 
     const vehicleMix = {
       twoWheeler: Number((mix4[0] / 100).toFixed(2)),
@@ -485,8 +531,12 @@ export function decodeJunctionBatch(packet, schema = DEFAULT_WIRE_SCHEMA) {
       activeController: controller,
       controller,
       currentPhaseIdx: extra[3] ?? 0,
+      phaseIndex: extra[3] ?? 0,
       phaseRemainingSec: extra[4] ?? 0,
+      greenRemainingSec: extra[4] ?? 0,
       cycleSec: extra[5] ?? 0,
+      activeDir,
+      inIntergreen,
     };
 
     return {

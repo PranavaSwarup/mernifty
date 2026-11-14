@@ -106,6 +106,9 @@ class TelemetryHotStore {
       if (!jId) continue;
       // Preserve nested approaches when a zone summary update arrives for the same junction
       const existing = nextLatest[jId];
+      const mergedControl = existing?.data?.control
+        ? { ...existing.data.control, ...(item.data?.control || {}) }
+        : item.data?.control;
       const mergedItem =
         existing?.data?.approaches?.length && !item.data?.approaches?.length
           ? {
@@ -114,9 +117,13 @@ class TelemetryHotStore {
                 ...item.data,
                 approaches: existing.data.approaches,
                 vehicleMix: item.data?.vehicleMix || existing.data.vehicleMix,
+                kpi: item.data?.kpi || existing.data.kpi,
+                control: mergedControl,
               },
             }
-          : item;
+          : mergedControl
+            ? { ...item, data: { ...item.data, control: mergedControl } }
+            : item;
       nextLatest[jId] = mergedItem;
       changedIds.add(jId);
     }
@@ -158,6 +165,7 @@ export function SocketProvider({ children }) {
   const [obsUpdate, setObsUpdate] = useState(null);
   const [benchProgress, setBenchProgress] = useState(null);
   const [schema, setSchema] = useState(DEFAULT_WIRE_SCHEMA);
+  const [simMeta, setSimMeta] = useState(null);
   const [lastReplayStats, setLastReplayStats] = useState(null);
   const [socketError, setSocketError] = useState(null);
   const [disconnectCountdownSec, setDisconnectCountdownSec] = useState(0);
@@ -249,7 +257,41 @@ export function SocketProvider({ children }) {
     });
     socketRef.current = socket;
 
-    const acceptDecodedEvents = (events) => {
+    let flushTimerId = null;
+    let rafId = null;
+    const FLUSH_COALESCE_MS = 10;
+
+    const flushPendingBatch = () => {
+      flushTimerId = null;
+      if (pendingBufferRef.current.length === 0) return;
+      const batchToProcess = pendingBufferRef.current.splice(0, pendingBufferRef.current.length);
+      const emitTimestamps = pendingRenderEmitRef.current.splice(0, pendingRenderEmitRef.current.length);
+      hotStore.applyBatch(batchToProcess);
+
+      if (emitTimestamps.length > 0 && typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+        rafId = window.requestAnimationFrame(() => {
+          const renderedAt = Date.now();
+          const offset = clockOffsetMsRef.current;
+          for (const srvEmitTs of emitTimestamps) {
+            const clientEmitTs = srvEmitTs - offset;
+            const e2eMs = Math.max(0, renderedAt - clientEmitTs);
+            if (e2eMs < 30000) {
+              e2eSamplesRef.current.push(e2eMs);
+              if (e2eSamplesRef.current.length > 200) {
+                e2eSamplesRef.current.shift();
+              }
+            }
+          }
+        });
+      }
+    };
+
+    const scheduleFlush = () => {
+      if (flushTimerId !== null || pendingBufferRef.current.length === 0) return;
+      flushTimerId = setTimeout(flushPendingBatch, FLUSH_COALESCE_MS);
+    };
+
+    const acceptDecodedEvents = (events, wireEmitTs = null) => {
       if (isPausedRef.current || !Array.isArray(events) || events.length === 0) return;
       const fresh = [];
       for (const evt of events) {
@@ -263,7 +305,17 @@ export function SocketProvider({ children }) {
         fresh.push(evt);
       }
       if (fresh.length > 0) {
+        if (wireEmitTs !== null && wireEmitTs !== undefined) {
+          const tsNum = Number(wireEmitTs);
+          if (Number.isFinite(tsNum) && tsNum > 0) {
+            pendingRenderEmitRef.current.push(tsNum);
+            if (pendingRenderEmitRef.current.length > 50) {
+              pendingRenderEmitRef.current.shift();
+            }
+          }
+        }
         pendingBufferRef.current.push(...fresh);
+        scheduleFlush();
       }
     };
 
@@ -275,6 +327,27 @@ export function SocketProvider({ children }) {
       const isReconnect = hasConnectedOnceRef.current || Object.keys(cursorsRef.current).length > 0;
       hasConnectedOnceRef.current = true;
       sendActiveSubscription(isReconnect);
+      fetch('/api/sim/state', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((st) => {
+          if (st?.simClockIst || st?.scenario || st?.simSpeed) {
+            setSimMeta((prev) => ({
+              ...(prev || {}),
+              simClockIst: st.simClockIst || prev?.simClockIst || null,
+              simTime: st.simTime || prev?.simTime || null,
+              todPeriod: st.todPeriod || prev?.todPeriod || null,
+              simSpeed: st.simSpeed || prev?.simSpeed || 1,
+              scenario: st.scenario ?? prev?.scenario ?? null,
+              scenarioLabel: st.scenarioLabel ?? prev?.scenarioLabel ?? null,
+              simStartNote: st.simStartNote ?? prev?.simStartNote ?? null,
+              running: st.running ?? prev?.running ?? true,
+              demandScale: st.demandScale ?? prev?.demandScale ?? 1,
+            }));
+          }
+        })
+        .catch(() => {});
     });
 
     socket.on('connect_error', (err) => {
@@ -313,29 +386,35 @@ export function SocketProvider({ children }) {
 
     socket.on('cf:update', (cf) => {
       setCounterfactual(cf);
+      if (cf) {
+        setSimMeta((prev) => ({
+          ...(prev || {}),
+          simClockIst: cf.simClockIst || prev?.simClockIst || null,
+          simTime: cf.simTime || prev?.simTime || null,
+          todPeriod: cf.todPeriod || prev?.todPeriod || null,
+          simSpeed: cf.simSpeed || prev?.simSpeed || 1,
+          scenario: cf.scenario !== undefined ? cf.scenario : prev?.scenario ?? null,
+          scenarioLabel: cf.scenarioLabel !== undefined ? cf.scenarioLabel : prev?.scenarioLabel ?? null,
+          simStartNote: cf.simStartNote !== undefined ? cf.simStartNote : prev?.simStartNote ?? null,
+        }));
+      }
     });
 
-    const recordFrameEmitTimestamp = (wirePkt) => {
-      const serverEmitTs = Number(wirePkt?.et || wirePkt?.t0);
-      if (!Number.isFinite(serverEmitTs) || serverEmitTs <= 0) return;
-      pendingRenderEmitRef.current.push(serverEmitTs);
-      if (pendingRenderEmitRef.current.length > 50) {
-        pendingRenderEmitRef.current.shift();
-      }
-    };
+    socket.on('sim:scenario', (meta) => {
+      if (!meta) return;
+      setSimMeta((prev) => ({ ...(prev || {}), ...meta }));
+    });
 
     socket.on('telemetry:zone', (wirePkt) => {
       if (isPausedRef.current) return;
-      recordFrameEmitTimestamp(wirePkt);
       const decoded = decodeZoneBatch(wirePkt, schemaRef.current);
-      acceptDecodedEvents(decoded);
+      acceptDecodedEvents(decoded, wirePkt?.et);
     });
 
     socket.on('telemetry:junction', (wirePkt) => {
       if (isPausedRef.current) return;
-      recordFrameEmitTimestamp(wirePkt);
       const decoded = decodeJunctionBatch(wirePkt, schemaRef.current);
-      acceptDecodedEvents(decoded);
+      acceptDecodedEvents(decoded, wirePkt?.et);
     });
 
     socket.on('replay', (replayPkt) => {
@@ -416,36 +495,12 @@ export function SocketProvider({ children }) {
       socket.emit('client:latency', summary);
     }, 5000);
 
-    let rafId = null;
-    // 100ms throttled render flush to external hot store
-    const flushInterval = setInterval(() => {
-      if (pendingBufferRef.current.length === 0) return;
-      const batchToProcess = pendingBufferRef.current.splice(0, pendingBufferRef.current.length);
-      const emitTimestamps = pendingRenderEmitRef.current.splice(0, pendingRenderEmitRef.current.length);
-      hotStore.applyBatch(batchToProcess);
-
-      if (emitTimestamps.length > 0 && typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-        rafId = window.requestAnimationFrame(() => {
-          const renderedAt = Date.now();
-          const offset = clockOffsetMsRef.current;
-          for (const srvEmitTs of emitTimestamps) {
-            const clientEmitTs = srvEmitTs - offset;
-            const e2eMs = Math.max(0, renderedAt - clientEmitTs);
-            if (e2eMs < 30000) {
-              e2eSamplesRef.current.push(e2eMs);
-              if (e2eSamplesRef.current.length > 200) {
-                e2eSamplesRef.current.shift();
-              }
-            }
-          }
-        });
-      }
-    }, 100);
-
     return () => {
       clearInterval(pingInterval);
       clearInterval(latencyReportInterval);
-      clearInterval(flushInterval);
+      if (flushTimerId !== null) {
+        clearTimeout(flushTimerId);
+      }
       if (rafId !== null && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
         window.cancelAnimationFrame(rafId);
       }
@@ -554,6 +609,8 @@ export function SocketProvider({ children }) {
         obsUpdate,
         benchProgress,
         schema,
+        simMeta,
+        setSimMeta,
         lastReplayStats,
         socketError,
         setSocketError,

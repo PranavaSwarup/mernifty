@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const THEME_STORAGE_KEY = 'metropulse-theme';
-const LEGACY_THEME_STORAGE_KEY = 'hyperpulse-theme';
 
 export const ZONE_LIST = [
   'south-bangalore',
@@ -52,9 +51,7 @@ const ThemeContext = createContext({
 function readInitialTheme() {
   if (typeof window === 'undefined') return 'dark';
   try {
-    const saved =
-      window.localStorage.getItem(THEME_STORAGE_KEY) ??
-      window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
+    const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
     if (saved === 'light' || saved === 'dark') return saved;
   } catch {
     // Ignore storage read failure
@@ -170,6 +167,48 @@ export function classifyJunctionStatus(junction, isDark = true) {
 
 export function zoneLabel(zoneId) {
   return ZONE_LABELS[zoneId] || zoneId || '—';
+}
+
+export function classifyLinkSpeed(speedKmph, isDark = true) {
+  const spd = Number(speedKmph);
+  if (!Number.isFinite(spd) || spd >= 30) {
+    return {
+      band: 'free',
+      label: '>=30 km/h',
+      hex: isDark ? '#10b981' : '#047857',
+      weight: 2.5,
+      dashArray: undefined,
+      opacity: 0.72,
+    };
+  }
+  if (spd >= 20) {
+    return {
+      band: 'moderate',
+      label: '20-29 km/h',
+      hex: isDark ? '#eab308' : '#b45309',
+      weight: 3.1,
+      dashArray: undefined,
+      opacity: 0.8,
+    };
+  }
+  if (spd >= 12) {
+    return {
+      band: 'slow',
+      label: '12-19 km/h',
+      hex: isDark ? '#f97316' : '#c2410c',
+      weight: 3.9,
+      dashArray: undefined,
+      opacity: 0.88,
+    };
+  }
+  return {
+    band: 'gridlock',
+    label: '<12 km/h',
+    hex: isDark ? '#ef4444' : '#b91c1c',
+    weight: 4.8,
+    dashArray: '8 4',
+    opacity: 0.94,
+  };
 }
 
 export function controllerLabel(ctrlId) {

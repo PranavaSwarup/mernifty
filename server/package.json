@@ -1,5 +1,5 @@
 {
-  "name": "hyperpulse-server",
+  "name": "metropulse-server",
   "version": "1.0.0",
   "type": "module",
   "description": "High-Throughput Streams & Telemetry Monitoring Platform Backend",

@@ -47,7 +47,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    service: 'HyperPulse Telemetry Server',
+    service: 'MetroPulse BLR Telemetry Server',
     environment: config.nodeEnv,
   });
 });
@@ -71,7 +71,7 @@ app.get('*', (req, res) => {
   }
   res.sendFile(path.join(clientDistPath, 'index.html'), (err) => {
     if (err) {
-      res.status(200).send('HyperPulse Telemetry API Server running. Open Vite frontend on port 5173.');
+      res.status(200).send('MetroPulse BLR Telemetry API Server running. Open Vite frontend on port 5173.');
     }
   });
 });
@@ -104,7 +104,7 @@ async function startServer() {
     // 4. Start HTTP Server
     server.listen(config.port, () => {
       console.log(`====================================================`);
-      console.log(`🚀 HyperPulse Telemetry Engine running on port ${config.port}`);
+      console.log(`🚀 MetroPulse BLR Telemetry Engine running on port ${config.port}`);
       console.log(`📡 WebSocket server live with Room selective distribution`);
       console.log(`📊 Health check: http://localhost:${config.port}/api/health`);
       console.log(`====================================================`);

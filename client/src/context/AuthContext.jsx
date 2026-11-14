@@ -6,7 +6,7 @@ const AuthContext = createContext(null);
 const ANONYMOUS_VIEWER = {
   id: 'anonymous-viewer',
   name: 'Anonymous Viewer',
-  email: 'viewer@hyperpulse.io',
+  email: 'viewer@metropulse.io',
   role: 'viewer',
   zones: [],
   anonymous: true,

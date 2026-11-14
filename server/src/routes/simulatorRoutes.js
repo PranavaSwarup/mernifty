@@ -52,6 +52,23 @@ router.post('/rate', authenticate, requireRole(['admin', 'operator']), (req, res
   });
 });
 
+// Adjust simulation speed multiplier (admin only: 1x, 2x, 5x)
+router.post('/speed', authenticate, requireRole(['admin']), (req, res) => {
+  const parsed = Number(req.body?.speed);
+  if (![1, 2, 5].includes(parsed)) {
+    return res.status(400).json({
+      success: false,
+      error: 'speed must be one of 1, 2, or 5',
+    });
+  }
+  const simSpeed = simulatorService.setSimSpeed(parsed);
+  res.json({
+    success: true,
+    simSpeed,
+    status: simulatorService.getStatus(),
+  });
+});
+
 // Inject chaos / physical incident (requires operator+ & junction zone scope; city-wide monsoon requires admin)
 router.post(
   '/chaos',

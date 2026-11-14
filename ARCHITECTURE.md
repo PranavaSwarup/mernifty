@@ -30,12 +30,12 @@ graph TD
 
     subgraph Real-Time Processing & Anomaly Pipeline
         BUFFER["Write-Behind Batch Buffer<br/>Flushes 200 events / 500ms via bulkWrite()"]
-        ANOMALY["Traffic Anomaly & Gridlock Engine<br/>Z-Score Surge Detector (|Z| >= 3.0)<br/>Stalled Vehicle & Ambulance Preemption"]
+        ANOMALY["Traffic Anomaly & Gridlock Engine<br/>One-Sided Robust Z + Practical Effect + Persistence<br/>Stalled Vehicle & Ambulance Preemption"]
         SOCKET_SRV["Socket.IO Zonal Broadcast Engine<br/>80ms Micro-Batching window"]
     end
 
     subgraph Database Layer
-        MONGO[("MongoDB Database<br/>Compound Time-Series Indexes")]
+        MONGO[("MongoDB Regular Collection<br/>Unique eventId + Compound & TTL Indexes")]
         COLL_TEL["Telemetry Collection<br/>junctionId + zoneId + timestamp"]
         COLL_DEV["Junction Matrix<br/>status, healthScore, lastData, approaches"]
         COLL_ALT["Incident Alerts Store<br/>gridlock, stalledVehicle, ambulance"]

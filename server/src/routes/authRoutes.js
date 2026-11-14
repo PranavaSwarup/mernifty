@@ -7,12 +7,12 @@ import { publicReadOrAuth } from '../middleware/auth.js';
 const router = express.Router();
 
 const DEMO_PERSONA_EMAILS = {
-  admin: 'admin@hyperpulse.io',
-  'south-operator': 'south.operator@hyperpulse.io',
-  south: 'south.operator@hyperpulse.io',
-  'east-operator': 'east.operator@hyperpulse.io',
-  east: 'east.operator@hyperpulse.io',
-  viewer: 'viewer@hyperpulse.io',
+  admin: 'admin@metropulse.io',
+  'south-operator': 'south.operator@metropulse.io',
+  south: 'south.operator@metropulse.io',
+  'east-operator': 'east.operator@metropulse.io',
+  east: 'east.operator@metropulse.io',
+  viewer: 'viewer@metropulse.io',
 };
 
 function signUserToken(user, extra = {}) {

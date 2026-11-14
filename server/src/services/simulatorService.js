@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { context, ROOT_CONTEXT } from '@opentelemetry/api';
 import { ingestionBuffer } from './ingestionBuffer.js';
 import { anomalyEngine } from './anomalyEngine.js';
 import { socketService } from './socketService.js';
@@ -6,12 +7,163 @@ import { metricsService } from './metricsService.js';
 import { INITIAL_DEVICES } from '../sim/junctions.data.js';
 import { DEFAULT_NETWORK } from '../sim/network.js';
 import { CounterfactualPair } from '../sim/twin.js';
-import { getTodPeriod } from '../sim/demand.js';
+import { getIstHour, getTodPeriod } from '../sim/demand.js';
 import { loadStudyPolicy } from '../sim/studyPolicy.js';
 import { OperatorAction } from '../models/OperatorAction.js';
-import { recordSimStep } from '../telemetry/instruments.js';
+import { withSyncSpan, recordSimStep } from '../telemetry/instruments.js';
 
 export { INITIAL_DEVICES };
+
+const IST_OFFSET_MS = 5.5 * 3600 * 1000;
+
+export function formatIstClock(simDate) {
+  const utcMs =
+    simDate instanceof Date
+      ? simDate.getTime()
+      : typeof simDate === 'number'
+        ? simDate
+        : Date.parse(simDate);
+  const safeMs = Number.isFinite(utcMs) ? utcMs : Date.now();
+  const ist = new Date(safeMs + IST_OFFSET_MS);
+  const hh = String(ist.getUTCHours()).padStart(2, '0');
+  const mm = String(ist.getUTCMinutes()).padStart(2, '0');
+  return `${hh}:${mm} IST`;
+}
+
+export function parseIstClockToDate(hhmm, baseNowMs = Date.now()) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || '').trim());
+  const hh = m ? Math.max(0, Math.min(23, parseInt(m[1], 10))) : 18;
+  const mm = m ? Math.max(0, Math.min(59, parseInt(m[2], 10))) : 30;
+  const istNow = new Date(baseNowMs + IST_OFFSET_MS);
+  const utcMs =
+    Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), hh, mm, 0, 0) -
+    IST_OFFSET_MS;
+  return new Date(utcMs);
+}
+
+export const SCENARIO_PRESETS = [
+  {
+    id: 'pm-peak',
+    label: 'PM peak',
+    title: 'PM Peak (18:30 IST)',
+    istClock: '18:30',
+    demandScale: 1.28,
+    chaos: null,
+    description: 'Evening IT corridor rush across Silk Board, ORR & Marathahalli (18:30 IST).',
+  },
+  {
+    id: 'am-peak',
+    label: 'AM peak',
+    title: 'AM Peak (09:00 IST)',
+    istClock: '09:00',
+    demandScale: 1.18,
+    chaos: null,
+    description: 'Morning inbound arterial rush toward Koramangala, Bellandur & Hebbal (09:00 IST).',
+  },
+  {
+    id: 'pm-stalled-silkboard',
+    label: 'PM + Silk Board stall',
+    title: 'PM Peak + Silk Board Stall',
+    istClock: '18:30',
+    demandScale: 1.28,
+    chaos: {
+      type: 'stalled',
+      junctionId: 'JNC-BLR-001',
+      approachIdx: 0,
+      multiplier: 3.0,
+      durationSec: 180,
+    },
+    description: '18:30 IST evening rush with a stalled vehicle blocking Hosur Rd (from south) at Silk Board.',
+  },
+  {
+    id: 'monsoon-pm-peak',
+    label: 'Monsoon PM peak',
+    title: 'Monsoon + PM Peak',
+    istClock: '18:30',
+    demandScale: 1.28,
+    chaos: {
+      type: 'monsoon',
+      junctionId: 'JNC-BLR-001',
+      capacityFactor: 0.7,
+      speedFactor: 0.75,
+      durationSec: 240,
+    },
+    description: 'City-wide monsoon rainfall (-30% saturation flow, -25% free-flow speed) during PM rush.',
+  },
+  {
+    id: 'ambulance-corridor',
+    label: 'Ambulance corridor',
+    title: 'Ambulance Corridor',
+    istClock: '18:30',
+    demandScale: 1.25,
+    chaos: {
+      type: 'ambulance',
+      junctionId: 'JNC-BLR-001',
+      durationSec: 120,
+      preempt: true,
+    },
+    description: 'Emergency responder green-corridor dispatch from Hosur Rd through Silk Board & ORR.',
+  },
+];
+
+export function resolveInitialSimStart(rawSpec = process.env.SIM_START || 'auto') {
+  const spec = String(rawSpec || 'auto').trim().toLowerCase();
+  if (spec === 'now') {
+    return {
+      startTime: new Date(),
+      presetId: 'live-now',
+      label: 'Live IST',
+      note: 'wall-clock IST',
+      demandScale: 1.0,
+    };
+  }
+  if (/^\d{1,2}:\d{2}$/.test(spec)) {
+    return {
+      startTime: parseIstClockToDate(spec),
+      presetId: 'custom',
+      label: `Custom ${spec}`,
+      note: `SIM_START=${spec} IST`,
+      demandScale: 1.0,
+    };
+  }
+
+  // SIM_START=auto: stay on wall clock during AM/PM peak windows; otherwise boot into the most recent peak
+  const nowH = getIstHour(Date.now());
+  if (nowH >= 8 && nowH < 11.5) {
+    return {
+      startTime: new Date(),
+      presetId: 'am-peak',
+      label: 'AM peak',
+      note: null,
+      demandScale: 1.18,
+    };
+  }
+  if (nowH >= 17 && nowH < 21) {
+    return {
+      startTime: new Date(),
+      presetId: 'pm-peak',
+      label: 'PM peak',
+      note: null,
+      demandScale: 1.28,
+    };
+  }
+  if (nowH >= 11.5 && nowH < 17) {
+    return {
+      startTime: parseIstClockToDate('09:00'),
+      presetId: 'am-peak',
+      label: 'AM peak',
+      note: 'off-peak wall-clock fallback',
+      demandScale: 1.18,
+    };
+  }
+  return {
+    startTime: parseIstClockToDate('18:30'),
+    presetId: 'pm-peak',
+    label: 'PM peak',
+    note: 'off-peak wall-clock fallback',
+    demandScale: 1.28,
+  };
+}
 
 const VALID_CONTROLLERS = new Set([
   'auto',
@@ -53,44 +205,25 @@ class SimulatorService {
     this.scheduledTasks = []; // { targetElapsedSec, fn }
     this.recentActions = []; // Mirror recent OperatorAction records for fast/test access
 
-    this._initPair();
-  }
-
-  _initPair(startTime = new Date()) {
-    const seed = process.env.SIM_SEED ? Number(process.env.SIM_SEED) || process.env.SIM_SEED : 20261114;
-    this.pair = new CounterfactualPair({
-      seed,
-      network: this.network,
-      startTime,
-      dtSec: 1,
-      liveControllerFactory: 'auto',
-      prewarmLinks: true,
+    const initialStart = resolveInitialSimStart(process.env.SIM_START || 'auto');
+    this.activeScenario = initialStart.presetId;
+    this.activeScenarioLabel = initialStart.label;
+    this.simStartNote = initialStart.note;
+    const isTestEnv = process.env.NODE_ENV === 'test' || process.argv.some((a) => a.includes('--test'));
+    this._initPair(initialStart.startTime, {
+      demandScale: initialStart.demandScale,
+      warmupSteps: isTestEnv ? 0 : 90,
     });
-    this.queueHistory.clear();
-    for (const j of this.junctions) {
-      this.queueHistory.set(j.junctionId, []);
-    }
-    this._recordQueueHistoryPoint();
   }
 
-  /**
-   * Reset simulation twins (used in tests or restarts).
-   */
-  reset({ startTime = new Date(), liveControllerFactory = 'auto' } = {}) {
-    const wasRunning = this.isRunning;
-    if (wasRunning) this.stop();
-    this.sequenceMap.clear();
-    this.emergencyModeJunctions.clear();
-    this.scheduledTasks = [];
-    this.recentActions = [];
-    this._lastCfBroadcastElapsed = -1;
-
+  _initPair(startTime = new Date(), { demandScale = 1.0, warmupSteps = 0, liveControllerFactory = 'auto' } = {}) {
     const seed = process.env.SIM_SEED ? Number(process.env.SIM_SEED) || process.env.SIM_SEED : 20261114;
     this.pair = new CounterfactualPair({
       seed,
       network: this.network,
       startTime,
       dtSec: 1,
+      demandScale,
       liveControllerFactory,
       prewarmLinks: true,
     });
@@ -99,7 +232,149 @@ class SimulatorService {
       this.queueHistory.set(j.junctionId, []);
     }
     this._recordQueueHistoryPoint();
+    if (warmupSteps > 0) {
+      for (let i = 0; i < warmupSteps; i++) {
+        this.pair.step();
+        if (i % 5 === 4 || i === warmupSteps - 1) {
+          this._recordQueueHistoryPoint();
+        }
+      }
+    }
+  }
+
+  /**
+   * Reset simulation twins (used in tests or restarts).
+   */
+  reset({
+    startTime = new Date(),
+    liveControllerFactory = 'auto',
+    demandScale = 1.0,
+    warmupSteps = 0,
+    scenario = null,
+    scenarioLabel = null,
+    simStartNote = null,
+  } = {}) {
+    const wasRunning = this.isRunning;
+    if (wasRunning) this.stop();
+    this.sequenceMap.clear();
+    this.emergencyModeJunctions.clear();
+    this.scheduledTasks = [];
+    this.recentActions = [];
+    this._lastCfBroadcastElapsed = -1;
+    anomalyEngine.reset();
+
+    if (scenario !== null) this.activeScenario = scenario;
+    if (scenarioLabel !== null) this.activeScenarioLabel = scenarioLabel;
+    if (simStartNote !== undefined) this.simStartNote = simStartNote;
+
+    this._initPair(startTime, { demandScale, warmupSteps, liveControllerFactory });
     if (wasRunning) this.start(this.targetRate);
+  }
+
+  getScenarios() {
+    return SCENARIO_PRESETS;
+  }
+
+  getScenarioMeta() {
+    const simTimeMs = this.pair?.live?.simTimeMs || Date.now();
+    const todPeriod = getTodPeriod(simTimeMs);
+    return {
+      scenario: this.activeScenario,
+      scenarioLabel: this.activeScenarioLabel,
+      simStartNote: this.simStartNote,
+      simClockIst: formatIstClock(simTimeMs),
+      simTime: new Date(simTimeMs).toISOString(),
+      simSpeed: this.simSpeed,
+      todPeriod: todPeriod.id,
+      demandScale: this.pair?.live?.demandScale ?? 1.0,
+    };
+  }
+
+  applyScenario(scenarioId, { actor = 'operator' } = {}) {
+    const preset = SCENARIO_PRESETS.find((p) => p.id === scenarioId);
+    if (!preset) {
+      throw new Error(`Unknown scenario preset: ${scenarioId}`);
+    }
+    return withSyncSpan(
+      'sim.scenario',
+      {
+        attributes: {
+          'operator.action': true,
+          'sim.scenario': preset.id,
+          'sim.actor': String(actor || 'operator'),
+        },
+      },
+      (span) => {
+        const wasRunning = this.isRunning;
+        const startDate = parseIstClockToDate(preset.istClock);
+        this.reset({
+          startTime: startDate,
+          liveControllerFactory: 'auto',
+          demandScale: preset.demandScale,
+          warmupSteps: 90,
+          scenario: preset.id,
+          scenarioLabel: preset.label,
+          simStartNote: null,
+        });
+        // `reset` starts immediately if wasRunning was true; pause during post-warmup chaos setup if running
+        if (this.isRunning) this.stop();
+
+        if (preset.chaos?.type === 'stalled') {
+          this.injectChaos(
+            preset.chaos.junctionId,
+            'stalledVehicle',
+            preset.chaos.multiplier,
+            preset.chaos.durationSec,
+            { stalled: true, approachIdx: preset.chaos.approachIdx }
+          );
+        } else if (preset.chaos?.type === 'monsoon') {
+          this.injectChaos(
+            preset.chaos.junctionId,
+            'monsoon',
+            1,
+            preset.chaos.durationSec,
+            {
+              monsoon: true,
+              capacityFactor: preset.chaos.capacityFactor,
+              speedFactor: preset.chaos.speedFactor,
+            }
+          );
+        } else if (preset.chaos?.type === 'ambulance') {
+          const path = this.findCorridorPathThrough(preset.chaos.junctionId);
+          this.enableEmergencyModeForPath(path);
+          this.injectChaos(
+            preset.chaos.junctionId,
+            'ambulancePreemption',
+            1,
+            preset.chaos.durationSec,
+            { ambulance: true, preempt: Boolean(preset.chaos.preempt), path }
+          );
+        }
+
+        // Advance 25 more steps so incident/monsoon/emergency impact builds realistic gradients immediately
+        for (let i = 0; i < 25; i++) {
+          this.pair.step();
+          if (i % 5 === 4) this._recordQueueHistoryPoint();
+        }
+        this._recordQueueHistoryPoint();
+
+        // Run background broadcasts under ROOT_CONTEXT so simulator ticks never inherit sim.scenario's traceId
+        context.with(ROOT_CONTEXT, () => {
+          this.emitNetworkTelemetry();
+          socketService.broadcastCounterfactual(this.getCityCounterfactual());
+          socketService.broadcastScenarioUpdate(this.getScenarioMeta());
+          if (wasRunning) {
+            this.start(this.targetRate);
+          }
+        });
+        span?.setAttribute('sim.clock_ist', formatIstClock(this.pair.live.simTimeMs));
+        return {
+          preset,
+          meta: this.getScenarioMeta(),
+          state: this.getState(),
+        };
+      }
+    );
   }
 
   /**
@@ -126,17 +401,19 @@ class SimulatorService {
     this._nextPhysicsAt = now;
     this._nextEmitAt = now;
 
-    this._schedulePhysicsTick();
-    this._scheduleEmitTick();
+    context.with(ROOT_CONTEXT, () => {
+      this._schedulePhysicsTick();
+      this._scheduleEmitTick();
 
-    this._cfTimer = setInterval(() => {
-      if (!this.isRunning) return;
-      if (this.pair.live.elapsedSec !== this._lastCfBroadcastElapsed) {
-        this._lastCfBroadcastElapsed = this.pair.live.elapsedSec;
-        socketService.broadcastCounterfactual(this.getCityCounterfactual());
-      }
-    }, 1000);
-    if (this._cfTimer.unref) this._cfTimer.unref();
+      this._cfTimer = setInterval(() => {
+        if (!this.isRunning) return;
+        if (this.pair.live.elapsedSec !== this._lastCfBroadcastElapsed) {
+          this._lastCfBroadcastElapsed = this.pair.live.elapsedSec;
+          socketService.broadcastCounterfactual(this.getCityCounterfactual());
+        }
+      }, 1000);
+      if (this._cfTimer.unref) this._cfTimer.unref();
+    });
 
     console.log(
       `[TrafficSimulator] Physics-driven simulator active. Speed=${this.simSpeed}x (dt=1s), Emit=${this.emitHz.toFixed(2)} Hz (${this.targetRate} events/sec across ${this.junctions.length} BLR junctions).`
@@ -171,8 +448,14 @@ class SimulatorService {
   setSimSpeed(speed) {
     this.simSpeed = clamp(Number(speed) || 1, 0.25, 20);
     if (this.isRunning) {
+      if (this._physicsTimer) {
+        clearTimeout(this._physicsTimer);
+        this._physicsTimer = null;
+      }
       this._nextPhysicsAt = performance.now();
+      this._schedulePhysicsTick();
     }
+    socketService.broadcastScenarioUpdate(this.getScenarioMeta());
     return this.simSpeed;
   }
 
@@ -190,8 +473,10 @@ class SimulatorService {
 
     this._physicsTimer = setTimeout(() => {
       if (!this.isRunning) return;
-      this.stepPhysics();
-      this._schedulePhysicsTick();
+      context.with(ROOT_CONTEXT, () => {
+        this.stepPhysics();
+        this._schedulePhysicsTick();
+      });
     }, delayMs);
     if (this._physicsTimer.unref) this._physicsTimer.unref();
   }
@@ -261,10 +546,12 @@ class SimulatorService {
 
     this._emitTimer = setTimeout(() => {
       if (!this.isRunning) return;
-      for (let b = 0; b < batchesPerCycle; b++) {
-        this.emitNetworkTelemetry();
-      }
-      this._scheduleEmitTick();
+      context.with(ROOT_CONTEXT, () => {
+        for (let b = 0; b < batchesPerCycle; b++) {
+          this.emitNetworkTelemetry();
+        }
+        this._scheduleEmitTick();
+      });
     }, delayMs);
     if (this._emitTimer.unref) this._emitTimer.unref();
   }
@@ -628,12 +915,18 @@ class SimulatorService {
   }
 
   getStatus() {
+    const simTimeMs = this.pair.live.simTimeMs;
     return {
       isRunning: this.isRunning,
       targetRate: this.targetRate,
       emitHz: Number(this.emitHz.toFixed(2)),
       simSpeed: this.simSpeed,
-      simTime: new Date(this.pair.live.simTimeMs).toISOString(),
+      simTime: new Date(simTimeMs).toISOString(),
+      simClockIst: formatIstClock(simTimeMs),
+      scenario: this.activeScenario,
+      scenarioLabel: this.activeScenarioLabel,
+      simStartNote: this.simStartNote,
+      demandScale: this.pair.live.demandScale,
       elapsedSec: this.pair.live.elapsedSec,
       junctionsCount: this.junctions.length,
       activeEmergencies: this.pair.live.emergencies.filter((e) => e.status === 'en-route').length,
@@ -671,6 +964,11 @@ class SimulatorService {
     return {
       isRunning: this.isRunning,
       simTime: snap.simTime,
+      simClockIst: formatIstClock(world.simTimeMs),
+      scenario: this.activeScenario,
+      scenarioLabel: this.activeScenarioLabel,
+      simStartNote: this.simStartNote,
+      demandScale: world.demandScale,
       elapsedSec: world.elapsedSec,
       simSpeed: this.simSpeed,
       emitHz: Number(this.emitHz.toFixed(2)),
@@ -694,15 +992,43 @@ class SimulatorService {
           waitingAtRedSec: e.waitingAtRedSec,
         })),
       junctions,
-      corridors: (this.network.links || []).map((l) => ({
-        id: l.id,
-        corridor: l.corridor,
-        fromJunction: l.fromJunction,
-        toJunction: l.toJunction,
-        fromApproachIdx: l.fromApproachIdx,
-        toApproachIdx: l.toApproachIdx,
-        lengthKm: Number((l.lengthKm || 0).toFixed(2)),
-      })),
+      corridors: (this.network.links || []).map((l) => {
+        const fromJ = snap.junctions[l.fromJunction];
+        const toJ = snap.junctions[l.toJunction];
+        const toApp = toJ?.approaches?.[l.toApproachIdx];
+        const fromApp = fromJ?.approaches?.[l.fromApproachIdx];
+        const approachBaseKmph =
+          toApp && fromApp
+            ? toApp.avgSpeedKmph * 0.75 + fromApp.avgSpeedKmph * 0.25
+            : toApp?.avgSpeedKmph ?? fromApp?.avgSpeedKmph ?? 32;
+        const vc = Math.max(0, Number(toApp?.vOverC || 0));
+        const qLen = Math.max(0, Number(toApp?.queueLengthM || 0));
+        const hasStallOnTarget = Boolean(toJ?.stalledVehicleDetected);
+        const isPrimaryStallApproach =
+          hasStallOnTarget && (qLen > 24 || l.toApproachIdx === 0);
+        const effectiveVc = isPrimaryStallApproach
+          ? Math.max(vc, 2.45)
+          : hasStallOnTarget
+            ? Math.max(vc, 1.45)
+            : vc;
+        const bprFactor =
+          1 + 0.26 * Math.pow(Math.min(2.6, effectiveVc), 2.3) + Math.min(1.6, qLen / 70);
+        const weatherCap = world.weather?.speedFactor ?? 1;
+        const traversalKmph = (40 / bprFactor) * weatherCap;
+        const speedKmph = Number(clamp(Math.min(approachBaseKmph, traversalKmph), 4.5, 40).toFixed(1));
+        const vOverC = Number(Math.max(toApp?.vOverC || 0, fromApp?.vOverC || 0).toFixed(2));
+        return {
+          id: l.id,
+          corridor: l.corridor,
+          fromJunction: l.fromJunction,
+          toJunction: l.toJunction,
+          fromApproachIdx: l.fromApproachIdx,
+          toApproachIdx: l.toApproachIdx,
+          lengthKm: Number((l.lengthKm || 0).toFixed(2)),
+          speedKmph,
+          vOverC,
+        };
+      }),
       supervisoryPolicy: this.studyPolicy,
     };
   }
@@ -713,6 +1039,10 @@ class SimulatorService {
     return {
       ...comp,
       simSpeed: this.simSpeed,
+      simClockIst: formatIstClock(this.pair.live.simTimeMs),
+      scenario: this.activeScenario,
+      scenarioLabel: this.activeScenarioLabel,
+      simStartNote: this.simStartNote,
       emitHz: Number(this.emitHz.toFixed(2)),
       todPeriod: todPeriod.id,
       weatherActive: this.pair.live.weather.active,

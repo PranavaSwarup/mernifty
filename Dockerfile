@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for HyperPulse Telemetry Platform
+# Multi-stage Dockerfile for MetroPulse BLR Telemetry Platform
 # Stage 1: Build Frontend
 FROM node:20-alpine AS client-builder
 WORKDIR /app/client

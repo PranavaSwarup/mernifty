@@ -81,6 +81,11 @@ export const api = {
   // Simulator & Twin Control
   getSimulatorStatus: () => fetchJson('/api/simulator/status'),
   getSimState: () => fetchJson('/api/sim/state'),
+  getScenarios: () => fetchJson('/api/sim/scenarios'),
+  applyScenario: (scenarioId) =>
+    fetchJson('/api/sim/scenario', { method: 'POST', body: JSON.stringify({ scenarioId }) }),
+  setSimSpeed: (speed) =>
+    fetchJson('/api/simulator/speed', { method: 'POST', body: JSON.stringify({ speed }) }),
   getCounterfactual: () => fetchJson('/api/sim/counterfactual'),
   startSimulator: (rate = 24) =>
     fetchJson('/api/simulator/start', { method: 'POST', body: JSON.stringify({ rate }) }),
@@ -108,7 +113,11 @@ export const api = {
   },
 
   // Observability & Benchmarks
-  getTraces: (limit = 50) => fetchJson(`/api/observability/traces?limit=${limit}`),
+  getTraces: (limit = 50, { span = '', priority = 'informative' } = {}) => {
+    const params = new URLSearchParams({ limit: String(limit), priority });
+    if (span) params.set('span', span);
+    return fetchJson(`/api/observability/traces?${params.toString()}`);
+  },
   getObservabilityMetrics: () => fetchJson('/api/observability/metrics'),
   getBenchmarks: () => fetchJson('/api/benchmarks'),
   runLiveBenchmark: (payload = { durationSec: 10 }) =>

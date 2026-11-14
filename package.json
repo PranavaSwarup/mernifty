@@ -1,8 +1,8 @@
 {
-  "name": "mernify-hyperpulse",
+  "name": "metropulse-blr",
   "version": "1.0.0",
   "type": "module",
-  "description": "HyperPulse: Real-Time High-Throughput Streams & Telemetry Monitoring Platform (MERN + Socket.IO)",
+  "description": "MetroPulse BLR: Real-Time Traffic Operations, Paired-Twin Control & Telemetry Platform (MERN + Socket.IO)",
   "scripts": {
     "install:server": "cd server && npm install",
     "install:client": "cd client && npm install",

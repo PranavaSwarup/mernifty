@@ -12,11 +12,13 @@ import {
 
 const router = express.Router();
 
-// GET /api/observability/traces?limit=50
+// GET /api/observability/traces?limit=50&span=...&priority=informative|chronological
 router.get('/traces', publicReadOrAuth, (req, res) => {
   const limit = Math.max(1, Math.min(200, parseInt(req.query.limit, 10) || 50));
+  const spanFilter = typeof req.query.span === 'string' ? req.query.span : '';
+  const priority = req.query.priority === 'chronological' ? 'chronological' : 'informative';
   const otelState = getOtelState();
-  const grouped = getRecentTraces(limit);
+  const grouped = getRecentTraces(limit, { spanFilter, priority });
 
   res.json({
     success: true,
@@ -25,6 +27,8 @@ router.get('/traces', publicReadOrAuth, (req, res) => {
     serviceVersion: SERVICE_VERSION,
     sampleRatio: otelState.sampleRatio,
     otlpEndpointConfigured: Boolean(otelState.otlpEndpoint),
+    spanFilter,
+    priority,
     ...grouped,
   });
 });

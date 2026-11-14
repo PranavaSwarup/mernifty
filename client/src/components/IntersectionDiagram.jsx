@@ -18,7 +18,8 @@ function signalCode(signal) {
 
 function formatRoadShort(road) {
   if (!road) return 'Approach';
-  return String(road).replace(/\s*\(from [^)]+\)/i, '');
+  const cleaned = String(road).replace(/\s*\(from [^)]+\)/i, '').trim();
+  return cleaned.length > 18 ? `${cleaned.slice(0, 17)}…` : cleaned;
 }
 
 const VEHICLE_LABELS = [
@@ -73,7 +74,7 @@ export const IntersectionDiagram = React.memo(function IntersectionDiagram({ jun
       ? Math.max(0, Math.round(Number(rawRemSec)))
       : null;
 
-  // Coordinates centered around (250, 155) in 500x310 viewBox
+  // Coordinates centered around (290, 165) in 580x330 viewBox; all labels placed outside arm tips to prevent any overlap
   const sigTextFill = isDark ? '#0b0f14' : '#ffffff';
   const renderArm = (arm, slot) => {
     if (!arm) return null;
@@ -81,111 +82,104 @@ export const IntersectionDiagram = React.memo(function IntersectionDiagram({ jun
     const sigHex = signalColor(arm.signal, isDark);
     const barHex = fillRatio >= 0.78 ? (isDark ? '#f97316' : '#9a3412') : fillRatio >= 0.48 ? (isDark ? '#f59e0b' : '#92400e') : (isDark ? '#3b82f6' : '#1d4ed8');
     const roadTitle = `${arm.dirLabel}: ${formatRoadShort(arm.road)}`;
+    const statLine = `${fmtInt(arm.queueLengthM)} m · v/c ${arm.vOverC !== null && arm.vOverC !== undefined ? fmtNum(arm.vOverC, 2) : '—'}`;
 
     if (slot === 0) {
-      // North arm (approaching from top toward box top y=120)
-      const qH = Math.round(fillRatio * 74);
+      // North arm (road x=254..326, y=48..129) -> label strictly above y=48
+      const qH = Math.round(fillRatio * 72);
       return (
         <g key={arm.idx}>
-          <rect x="216" y="38" width="68" height="82" fill={roadBg} stroke={roadStroke} strokeWidth="1" />
-          <line x1="250" y1="40" x2="250" y2="118" stroke={roadStroke} strokeDasharray="4 4" strokeWidth="1" />
-          <rect x="223" y="42" width="18" height="72" rx="2" fill={queueTrack} stroke={roadStroke} strokeWidth="0.75" />
-          {qH > 0 && <rect x="223" y={114 - qH} width="18" height={qH} rx="2" fill={barHex} fillOpacity="0.88" />}
-          <circle cx="250" cy="110" r="8" fill={sigHex} />
-          <text x="250" y="113.5" textAnchor="middle" fontSize="9" fontWeight="700" fill={sigTextFill} fontFamily="JetBrains Mono, monospace">
+          <title>{`${arm.dirLabel}: ${arm.road} · ${statLine} · ${fmtInt(arm.vehiclesPerMin)} veh/min`}</title>
+          <rect x="254" y="48" width="72" height="81" fill={roadBg} stroke={roadStroke} strokeWidth="1" />
+          <line x1="290" y1="50" x2="290" y2="127" stroke={roadStroke} strokeDasharray="4 4" strokeWidth="1" />
+          <rect x="262" y="53" width="18" height="70" rx="2" fill={queueTrack} stroke={roadStroke} strokeWidth="0.75" />
+          {qH > 0 && <rect x="262" y={123 - qH} width="18" height={qH} rx="2" fill={barHex} fillOpacity="0.88" />}
+          <circle cx="290" cy="119" r="8" fill={sigHex} />
+          <text x="290" y="122.5" textAnchor="middle" fontSize="9" fontWeight="700" fill={sigTextFill} fontFamily="JetBrains Mono, monospace">
             {signalCode(arm.signal)}
           </text>
-          <text x="250" y="24" textAnchor="middle" fontSize="10.5" fontWeight="600" fill={labelColor}>
+          <text x="290" y="17" textAnchor="middle" fontSize="10.5" fontWeight="600" fill={labelColor}>
             {roadTitle}
           </text>
-          <text x="208" y="66" textAnchor="end" fontSize="10" fill={labelColor} fontFamily="JetBrains Mono, monospace">
-            {fmtInt(arm.queueLengthM)} m ({fmtNum(arm.queueVeh, 0)}v)
-          </text>
-          <text x="208" y="80" textAnchor="end" fontSize="9.5" fill={mutedColor} fontFamily="JetBrains Mono, monospace">
-            v/c {fmtNum(arm.vOverC, 2)} · {fmtInt(arm.vehiclesPerMin)}/m
+          <text x="290" y="34" textAnchor="middle" fontSize="10" fill={mutedColor} fontFamily="JetBrains Mono, monospace">
+            {statLine}
           </text>
         </g>
       );
     }
 
     if (slot === 2) {
-      // South arm (approaching from bottom toward box bottom y=190)
-      const qH = Math.round(fillRatio * 74);
+      // South arm (road x=254..326, y=201..282) -> label strictly below y=282
+      const qH = Math.round(fillRatio * 72);
       return (
         <g key={arm.idx}>
-          <rect x="216" y="190" width="68" height="82" fill={roadBg} stroke={roadStroke} strokeWidth="1" />
-          <line x1="250" y1="192" x2="250" y2="270" stroke={roadStroke} strokeDasharray="4 4" strokeWidth="1" />
-          <rect x="259" y="196" width="18" height="72" rx="2" fill={queueTrack} stroke={roadStroke} strokeWidth="0.75" />
-          {qH > 0 && <rect x="259" y="196" width="18" height={qH} rx="2" fill={barHex} fillOpacity="0.88" />}
-          <circle cx="250" cy="200" r="8" fill={sigHex} />
-          <text x="250" y="203.5" textAnchor="middle" fontSize="9" fontWeight="700" fill={sigTextFill} fontFamily="JetBrains Mono, monospace">
+          <title>{`${arm.dirLabel}: ${arm.road} · ${statLine} · ${fmtInt(arm.vehiclesPerMin)} veh/min`}</title>
+          <rect x="254" y="201" width="72" height="81" fill={roadBg} stroke={roadStroke} strokeWidth="1" />
+          <line x1="290" y1="203" x2="290" y2="280" stroke={roadStroke} strokeDasharray="4 4" strokeWidth="1" />
+          <rect x="300" y="207" width="18" height="70" rx="2" fill={queueTrack} stroke={roadStroke} strokeWidth="0.75" />
+          {qH > 0 && <rect x="300" y="207" width="18" height={qH} rx="2" fill={barHex} fillOpacity="0.88" />}
+          <circle cx="290" cy="211" r="8" fill={sigHex} />
+          <text x="290" y="214.5" textAnchor="middle" fontSize="9" fontWeight="700" fill={sigTextFill} fontFamily="JetBrains Mono, monospace">
             {signalCode(arm.signal)}
           </text>
-          <text x="250" y="290" textAnchor="middle" fontSize="10.5" fontWeight="600" fill={labelColor}>
+          <text x="290" y="301" textAnchor="middle" fontSize="10.5" fontWeight="600" fill={labelColor}>
             {roadTitle}
           </text>
-          <text x="292" y="230" textAnchor="start" fontSize="10" fill={labelColor} fontFamily="JetBrains Mono, monospace">
-            {fmtInt(arm.queueLengthM)} m ({fmtNum(arm.queueVeh, 0)}v)
-          </text>
-          <text x="292" y="244" textAnchor="start" fontSize="9.5" fill={mutedColor} fontFamily="JetBrains Mono, monospace">
-            v/c {fmtNum(arm.vOverC, 2)} · {fmtInt(arm.vehiclesPerMin)}/m
+          <text x="290" y="317" textAnchor="middle" fontSize="10" fill={mutedColor} fontFamily="JetBrains Mono, monospace">
+            {statLine}
           </text>
         </g>
       );
     }
 
     if (slot === 1) {
-      // East arm (approaching from right toward box right x=284)
+      // East arm (road x=326..432, y=129..201) -> label cleanly right of x=442
       const qW = Math.round(fillRatio * 84);
       return (
         <g key={arm.idx}>
-          <rect x="284" y="120" width="112" height="70" fill={roadBg} stroke={roadStroke} strokeWidth="1" />
-          <line x1="286" y1="155" x2="394" y2="155" stroke={roadStroke} strokeDasharray="4 4" strokeWidth="1" />
-          <rect x="292" y="128" width="90" height="16" rx="2" fill={queueTrack} stroke={roadStroke} strokeWidth="0.75" />
-          {qW > 0 && <rect x="292" y="128" width={qW} height="16" rx="2" fill={barHex} fillOpacity="0.88" />}
-          <circle cx="296" cy="155" r="8" fill={sigHex} />
-          <text x="296" y="158.5" textAnchor="middle" fontSize="9" fontWeight="700" fill={sigTextFill} fontFamily="JetBrains Mono, monospace">
+          <title>{`${arm.dirLabel}: ${arm.road} · ${statLine} · ${fmtInt(arm.vehiclesPerMin)} veh/min`}</title>
+          <rect x="326" y="129" width="106" height="72" fill={roadBg} stroke={roadStroke} strokeWidth="1" />
+          <line x1="328" y1="165" x2="430" y2="165" stroke={roadStroke} strokeDasharray="4 4" strokeWidth="1" />
+          <rect x="334" y="137" width="88" height="16" rx="2" fill={queueTrack} stroke={roadStroke} strokeWidth="0.75" />
+          {qW > 0 && <rect x="334" y="137" width={qW} height="16" rx="2" fill={barHex} fillOpacity="0.88" />}
+          <circle cx="338" cy="165" r="8" fill={sigHex} />
+          <text x="338" y="168.5" textAnchor="middle" fontSize="9" fontWeight="700" fill={sigTextFill} fontFamily="JetBrains Mono, monospace">
             {signalCode(arm.signal)}
           </text>
-          <text x="292" y="84" textAnchor="start" fontSize="10.5" fontWeight="600" fill={labelColor}>
+          <text x="442" y="158" textAnchor="start" fontSize="10.5" fontWeight="600" fill={labelColor}>
             {roadTitle}
           </text>
-          <text x="292" y="98" textAnchor="start" fontSize="10" fill={labelColor} fontFamily="JetBrains Mono, monospace">
-            {fmtInt(arm.queueLengthM)} m ({fmtNum(arm.queueVeh, 0)}v)
-          </text>
-          <text x="292" y="112" textAnchor="start" fontSize="9.5" fill={mutedColor} fontFamily="JetBrains Mono, monospace">
-            v/c {fmtNum(arm.vOverC, 2)} · {fmtInt(arm.vehiclesPerMin)}/m
+          <text x="442" y="175" textAnchor="start" fontSize="10" fill={mutedColor} fontFamily="JetBrains Mono, monospace">
+            {statLine}
           </text>
         </g>
       );
     }
 
-    // West arm (slot === 3, approaching from left toward box left x=216)
+    // West arm (slot === 3, road x=148..254, y=129..201) -> label cleanly left of x=138
     const qW = Math.round(fillRatio * 84);
     return (
       <g key={arm.idx}>
-        <rect x="104" y="120" width="112" height="70" fill={roadBg} stroke={roadStroke} strokeWidth="1" />
-        <line x1="106" y1="155" x2="214" y2="155" stroke={roadStroke} strokeDasharray="4 4" strokeWidth="1" />
-        <rect x="118" y="166" width="90" height="16" rx="2" fill={queueTrack} stroke={roadStroke} strokeWidth="0.75" />
-        {qW > 0 && <rect x={208 - qW} y="166" width={qW} height="16" rx="2" fill={barHex} fillOpacity="0.88" />}
-        <circle cx="204" cy="155" r="8" fill={sigHex} />
-        <text x="204" y="158.5" textAnchor="middle" fontSize="9" fontWeight="700" fill={sigTextFill} fontFamily="JetBrains Mono, monospace">
+        <title>{`${arm.dirLabel}: ${arm.road} · ${statLine} · ${fmtInt(arm.vehiclesPerMin)} veh/min`}</title>
+        <rect x="148" y="129" width="106" height="72" fill={roadBg} stroke={roadStroke} strokeWidth="1" />
+        <line x1="150" y1="165" x2="252" y2="165" stroke={roadStroke} strokeDasharray="4 4" strokeWidth="1" />
+        <rect x="158" y="177" width="88" height="16" rx="2" fill={queueTrack} stroke={roadStroke} strokeWidth="0.75" />
+        {qW > 0 && <rect x={246 - qW} y="177" width={qW} height="16" rx="2" fill={barHex} fillOpacity="0.88" />}
+        <circle cx="242" cy="165" r="8" fill={sigHex} />
+        <text x="242" y="168.5" textAnchor="middle" fontSize="9" fontWeight="700" fill={sigTextFill} fontFamily="JetBrains Mono, monospace">
           {signalCode(arm.signal)}
         </text>
-        <text x="208" y="206" textAnchor="end" fontSize="10.5" fontWeight="600" fill={labelColor}>
+        <text x="138" y="158" textAnchor="end" fontSize="10.5" fontWeight="600" fill={labelColor}>
           {roadTitle}
         </text>
-        <text x="208" y="220" textAnchor="end" fontSize="10" fill={labelColor} fontFamily="JetBrains Mono, monospace">
-          {fmtInt(arm.queueLengthM)} m ({fmtNum(arm.queueVeh, 0)}v)
-        </text>
-        <text x="208" y="234" textAnchor="end" fontSize="9.5" fill={mutedColor} fontFamily="JetBrains Mono, monospace">
-          v/c {fmtNum(arm.vOverC, 2)} · {fmtInt(arm.vehiclesPerMin)}/m
+        <text x="138" y="175" textAnchor="end" fontSize="10" fill={mutedColor} fontFamily="JetBrains Mono, monospace">
+          {statLine}
         </text>
       </g>
     );
   };
 
-  const schematicSummary = `${control.inIntergreen ? 'All-red intergreen' : activePhase ? `Phase ${activePhase}` : 'Synced'}, ${
+  const schematicSummary = `Intersection diagram: ${control.inIntergreen ? 'All-red intergreen' : activePhase ? `Phase ${activePhase}` : 'Synced'}, ${
     remainingSec !== null ? `${remainingSec}s remaining` : 'dynamic timing'
   }; ${arms
     .filter(Boolean)
@@ -213,8 +207,8 @@ export const IntersectionDiagram = React.memo(function IntersectionDiagram({ jun
       </div>
 
       <svg
-        viewBox="0 0 500 310"
-        className="w-full h-auto max-h-[260px] select-none"
+        viewBox="0 0 580 330"
+        className="w-full h-auto max-h-[270px] select-none"
         role="img"
         aria-label={schematicSummary}
       >
@@ -222,17 +216,17 @@ export const IntersectionDiagram = React.memo(function IntersectionDiagram({ jun
 
         {/* Center intersection box */}
         <rect
-          x="216"
-          y="120"
-          width="68"
-          height="70"
+          x="254"
+          y="129"
+          width="72"
+          height="72"
           fill={isDark ? '#141922' : '#ffffff'}
           stroke={roadStroke}
           strokeWidth="1.25"
         />
         <text
-          x="250"
-          y="148"
+          x="290"
+          y="159"
           textAnchor="middle"
           fontSize="11"
           fontWeight="600"
@@ -242,8 +236,8 @@ export const IntersectionDiagram = React.memo(function IntersectionDiagram({ jun
           {control.inIntergreen ? 'ALL-RED' : activePhase ? `P${activePhase}` : 'SYNC'}
         </text>
         <text
-          x="250"
-          y="167"
+          x="290"
+          y="179"
           textAnchor="middle"
           fontSize="13"
           fontWeight="700"

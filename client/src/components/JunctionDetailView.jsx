@@ -85,7 +85,11 @@ export function JunctionDetailView({
     const liveApps = Array.isArray(liveFrame?.data?.approaches) ? liveFrame.data.approaches : [];
     const mergedApps =
       liveApps.length > 0
-        ? liveApps.map((la, i) => ({ ...(simApps[i] || {}), ...la }))
+        ? liveApps.map((la, i) => ({
+            ...(simApps[i] || {}),
+            ...la,
+            vOverC: la.vOverC ?? simApps[i]?.vOverC ?? null,
+          }))
         : simApps;
 
     const mergedControl = {
@@ -133,9 +137,25 @@ export function JunctionDetailView({
   const activeMode =
     describe.activeController || control.activeController || assignedController;
   const recentSwitches = Array.isArray(describe.recentSwitches) ? describe.recentSwitches : [];
-  const plannedSplits = describe.planned?.splits || control.splits || [];
-  const realisedSplits = describe.realised?.splits || [];
-  const greenSharePct = describe.realised?.greenSharePct || [];
+  const hasExplicitPlanned = Boolean(
+    describe.planned && Array.isArray(describe.planned.splits) && describe.planned.splits.length > 0
+  );
+  const isAcyclic =
+    describe.planned === null &&
+    (activeMode === 'max-pressure' || activeMode === 'max-pressure-ca' || describe.planned !== undefined);
+  const plannedSplits = hasExplicitPlanned ? describe.planned.splits : [];
+  const realised = describe.realised || null;
+  const realisedSplits = realised?.splits || [];
+  const greenSharePct = realised?.greenSharePct || [];
+  const realisedObservedSec = Number(realised?.observedSec ?? 0);
+  const realisedSwitches = Number(realised?.phaseSwitches ?? 0);
+  const realisedWindowMin = Math.max(1, Math.round(Number(realised?.windowSec ?? 300) / 60));
+  const realisedWarmingUp = realisedObservedSec < 60 || realisedSwitches < 2;
+  const phaseColumnsCount = Math.max(
+    plannedSplits.length,
+    realisedSplits.length,
+    Array.isArray(merged.data?.approaches) ? merged.data.approaches.length : 0
+  );
 
   const canControlJunction =
     user?.role === 'admin' ||
@@ -300,41 +320,56 @@ export function JunctionDetailView({
         )}
 
         {/* Planned vs Realised Splits Table */}
-        {(plannedSplits.length > 0 || realisedSplits.length > 0) && (
+        {(hasExplicitPlanned || isAcyclic || realisedSplits.length > 0) && phaseColumnsCount > 0 && (
           <div className="overflow-x-auto pt-1">
             <table className="w-full text-left border-collapse text-[11px] font-mono tabular-nums">
               <thead>
                 <tr className="border-b border-hairline text-ink-muted font-sans">
                   <th scope="col" className="py-1 pr-3 font-medium">Splits</th>
                   <th scope="col" className="py-1 pr-3 font-medium text-right">Cycle</th>
-                  {(plannedSplits.length > 0 ? plannedSplits : realisedSplits).map((_, i) => (
+                  {Array.from({ length: phaseColumnsCount }, (_, i) => (
                     <th scope="col" key={i} className="py-1 pr-3 font-medium text-right">Phase {i + 1}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-hairline">
-                {plannedSplits.length > 0 && (
-                  <tr>
-                    <td className="py-1 pr-3 font-sans text-ink-secondary">Planned (s)</td>
-                    <td className="py-1 pr-3 text-right text-ink-primary">
-                      {(describe.planned?.cycleSec ?? control.cycleSec) > 0
-                        ? `${fmtInt(describe.planned?.cycleSec ?? control.cycleSec)}s`
-                        : 'Dynamic'}
-                    </td>
-                    {plannedSplits.map((s, i) => (
-                      <td key={i} className="py-1 pr-3 text-right text-ink-primary">{fmtInt(s)}s</td>
-                    ))}
-                  </tr>
-                )}
+                <tr>
+                  <td className="py-1 pr-3 font-sans text-ink-secondary">Planned (s)</td>
+                  {hasExplicitPlanned ? (
+                    <>
+                      <td className="py-1 pr-3 text-right text-ink-primary">
+                        {(describe.planned?.cycleSec ?? control.cycleSec) > 0
+                          ? `${fmtInt(describe.planned?.cycleSec ?? control.cycleSec)}s`
+                          : '—'}
+                      </td>
+                      {plannedSplits.map((s, i) => (
+                        <td key={i} className="py-1 pr-3 text-right text-ink-primary">{fmtInt(s)}s</td>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <td className="py-1 pr-3 text-right text-ink-muted">— (acyclic)</td>
+                      {Array.from({ length: phaseColumnsCount }, (_, i) => (
+                        <td key={i} className="py-1 pr-3 text-right text-ink-muted">—</td>
+                      ))}
+                    </>
+                  )}
+                </tr>
                 {realisedSplits.length > 0 && (
                   <tr>
-                    <td className="py-1 pr-3 font-sans text-ink-secondary">Realised 5m avg (s)</td>
+                    <td className="py-1 pr-3 font-sans text-ink-secondary">
+                      Realised {realisedWindowMin}m avg (s)
+                    </td>
                     <td className="py-1 pr-3 text-right text-ink-primary">
-                      {describe.realised?.cycleSec > 0 ? `${fmtInt(describe.realised?.cycleSec)}s` : 'Warming'}
+                      {!realisedWarmingUp && realised?.cycleSec > 0
+                        ? `${fmtInt(realised.cycleSec)}s`
+                        : <span className="text-ink-muted">warming up ({fmtInt(realisedObservedSec)}s observed)</span>}
                     </td>
                     {realisedSplits.map((s, i) => (
                       <td key={i} className="py-1 pr-3 text-right text-ink-secondary">
-                        {fmtInt(s)}s{greenSharePct[i] !== undefined ? ` (${fmtNum(greenSharePct[i], 0)}%)` : ''}
+                        {realisedWarmingUp
+                          ? '—'
+                          : `${fmtInt(s)}s${greenSharePct[i] !== undefined ? ` (${fmtNum(greenSharePct[i], 0)}%)` : ''}`}
                       </td>
                     ))}
                   </tr>

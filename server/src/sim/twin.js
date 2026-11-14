@@ -25,18 +25,21 @@ export class CounterfactualPair {
     network = DEFAULT_NETWORK,
     startTime = '2026-11-14T13:30:00.000Z',
     dtSec = 1,
+    demandScale = 1.0,
     liveControllerFactory = 'auto',
     prewarmLinks = true,
   } = {}) {
     this.seed = seed;
     this.network = network;
     this.dtSec = dtSec;
+    this.demandScale = demandScale;
 
     this.live = new TrafficWorld({
       seed,
       network,
       startTime,
       dtSec,
+      demandScale,
       controllerFactory: liveControllerFactory,
       prewarmLinks,
     });
@@ -46,6 +49,7 @@ export class CounterfactualPair {
       network,
       startTime,
       dtSec,
+      demandScale,
       controllerFactory: 'fixed-tod',
       prewarmLinks,
     });

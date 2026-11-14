@@ -8,7 +8,7 @@ import { User } from '../models/User.js';
 import { DeviceKey, hashDeviceKey } from '../models/DeviceKey.js';
 import { INITIAL_DEVICES } from '../services/simulatorService.js';
 
-const LEGACY_ADMIN_EMAIL = 'admin@hyperpulse.io';
+const LEGACY_ADMIN_EMAIL = 'admin@metropulse.io';
 const LEGACY_ADMIN_PASSWORDS = ['AdminPassword123!', 'admin123'];
 const LEGACY_API_KEY = 'blr_traffic_key_live_command_center_2026';
 
@@ -37,7 +37,7 @@ function resolvePassword(envKey, fallbackEnvKey = null) {
 }
 
 /**
- * Idempotent cleanup of the legacy seeded admin@hyperpulse.io (exposed git password / static apiKey)
+ * Idempotent cleanup of legacy seeded admin credentials (exposed git password / static apiKey)
  * and any User.apiKey field matching the leaked legacy key.
  */
 export async function cleanupLegacySeededAuth() {
@@ -121,14 +121,14 @@ export async function seedInitialData() {
     // 2. Seed RBAC Demo / Operator Users (passwords read from env or generated once randomly)
     const userSpecs = [
       {
-        email: 'admin@hyperpulse.io',
+        email: 'admin@metropulse.io',
         name: 'Bengaluru Traffic Operations Commander',
         role: 'admin',
         zones: ALL_ZONES,
         envKey: 'DEMO_ADMIN_PASSWORD',
       },
       {
-        email: 'south.operator@hyperpulse.io',
+        email: 'south.operator@metropulse.io',
         name: 'South Zone Desk Operator (Silk Board / Hosur Rd)',
         role: 'operator',
         zones: ['south-bangalore'],
@@ -136,7 +136,7 @@ export async function seedInitialData() {
         fallbackEnvKey: 'DEMO_OPERATOR_PASSWORD',
       },
       {
-        email: 'east.operator@hyperpulse.io',
+        email: 'east.operator@metropulse.io',
         name: 'East Zone Desk Operator (ORR / Whitefield)',
         role: 'operator',
         zones: ['east-bangalore'],
@@ -144,7 +144,7 @@ export async function seedInitialData() {
         fallbackEnvKey: 'DEMO_OPERATOR_PASSWORD',
       },
       {
-        email: 'viewer@hyperpulse.io',
+        email: 'viewer@metropulse.io',
         name: 'Public Mobility Observer',
         role: 'viewer',
         zones: [],

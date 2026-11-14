@@ -138,21 +138,21 @@ test.before(async () => {
   await User.create([
     {
       name: 'Chief Command Admin',
-      email: 'admin@hyperpulse.io',
+      email: 'admin@metropulse.io',
       password: 'test-admin-password-123!',
       role: 'admin',
       zones: ['south-bangalore', 'east-bangalore', 'north-bangalore', 'central-bangalore'],
     },
     {
       name: 'South Zone Operator',
-      email: 'south.operator@hyperpulse.io',
+      email: 'south.operator@metropulse.io',
       password: 'test-south-password-123!',
       role: 'operator',
       zones: ['south-bangalore'],
     },
     {
       name: 'Public Audit Viewer',
-      email: 'viewer@hyperpulse.io',
+      email: 'viewer@metropulse.io',
       password: 'test-viewer-password-123!',
       role: 'viewer',
       zones: [],

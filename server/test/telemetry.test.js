@@ -43,7 +43,30 @@ test('2. Anomaly Engine Gridlock & Stalled Vehicle Detection', (t) => {
     });
   }
 
-  // Trigger severe queue beyond critical threshold (>165m)
+  // Single transient frame must NOT trigger (persistence >= 3 required)
+  const transientOne = anomalyEngine.evaluate({
+    junctionId: testJunction,
+    deviceId: testJunction,
+    junctionName: 'Test Signal',
+    deviceName: 'Test Signal',
+    category: 'south-bangalore',
+    timestamp: new Date().toISOString(),
+    metrics: { maxQueueLengthM: 195, avgSpeedKmph: 4 },
+  });
+  assert.strictEqual(transientOne, null, '1-frame transient spike must not trigger alert');
+
+  const transientTwo = anomalyEngine.evaluate({
+    junctionId: testJunction,
+    deviceId: testJunction,
+    junctionName: 'Test Signal',
+    deviceName: 'Test Signal',
+    category: 'south-bangalore',
+    timestamp: new Date().toISOString(),
+    metrics: { maxQueueLengthM: 195, avgSpeedKmph: 4 },
+  });
+  assert.strictEqual(transientTwo, null, '2-frame transient spike must not trigger alert');
+
+  // 3rd consecutive severe frame triggers critical alert with non-zero threshold
   const spikeAlert = anomalyEngine.evaluate({
     junctionId: testJunction,
     deviceId: testJunction,
@@ -54,12 +77,14 @@ test('2. Anomaly Engine Gridlock & Stalled Vehicle Detection', (t) => {
     metrics: { maxQueueLengthM: 195, avgSpeedKmph: 4 },
   });
 
-  assert.ok(spikeAlert, 'Severe queue spike should trigger an anomaly alert');
+  assert.ok(spikeAlert, 'Sustained 3-frame queue spike should trigger an anomaly alert');
   assert.strictEqual(spikeAlert.severity, 'critical');
   assert.ok(
     spikeAlert.metric === 'maxQueueLengthM' || spikeAlert.metric === 'avgSpeedKmph',
     'Alert should be triggered for maxQueueLengthM or avgSpeedKmph'
   );
+  assert.ok(spikeAlert.thresholdValue > 0, 'Threshold must never be 0');
+  assert.ok(!spikeAlert.message.includes('Threshold: 0'), 'Alert message must never include Threshold: 0');
 });
 
 test('3. Metrics Service Throughput Calculations', (t) => {
@@ -143,18 +168,158 @@ test('5. Anomaly Engine uses null zScore for discrete event alerts while preserv
   assert.strictEqual(ambAlert.zScore, null, 'Discrete ambulance event must NOT fabricate a numeric zScore');
   assert.strictEqual(ambAlert.severity, 'high', 'Event severity should be derived from event payload');
 
-  const statisticalSpike = anomalyEngine.evaluate({
-    junctionId: jId,
-    deviceId: jId,
-    junctionName: 'Event Test Junction',
-    deviceName: 'Event Test Junction',
-    category: 'east-bangalore',
-    timestamp: new Date().toISOString(),
-    metrics: { maxQueueLengthM: 185, avgSpeedKmph: 24 },
-  });
+  let statisticalSpike = null;
+  for (let frame = 0; frame < 3; frame++) {
+    statisticalSpike = anomalyEngine.evaluate({
+      junctionId: jId,
+      deviceId: jId,
+      junctionName: 'Silk Board Junction (Hosur Rd & ORR)',
+      deviceName: 'Silk Board Junction (Hosur Rd & ORR)',
+      category: 'east-bangalore',
+      timestamp: new Date().toISOString(),
+      data: {
+        approaches: [
+          { road: 'Hosur Rd (from south)', queueLengthM: 185, avgSpeedKmph: 24, vehiclesPerMin: 55 },
+          { road: 'ORR (from east)', queueLengthM: 52, avgSpeedKmph: 24, vehiclesPerMin: 35 },
+        ],
+      },
+      metrics: { maxQueueLengthM: 185, avgSpeedKmph: 24 },
+    });
+  }
   assert.ok(statisticalSpike);
   assert.strictEqual(typeof statisticalSpike.zScore, 'number');
   assert.ok(statisticalSpike.zScore > 3, `Expected statistical queue spike zScore > 3, got ${statisticalSpike.zScore}`);
+  assert.ok(
+    statisticalSpike.title.includes('Hosur Rd (from south)'),
+    `Expected approach road in alert title, got: ${statisticalSpike.title}`
+  );
+  assert.ok(!statisticalSpike.message.includes('Threshold: 0'));
+});
+
+test('6. Anomaly Engine v2 suppresses false positives (39.9 km/h speed, 3.7 m queue, improvements, 2-frame flicker)', () => {
+  // 6a. avgSpeedKmph: 39.9 even sustained must NEVER alert (above 15 km/h practical floor)
+  for (let i = 0; i < 12; i++) {
+    const r = anomalyEngine.evaluate({
+      junctionId: 'JNC-BLR-095',
+      deviceId: 'JNC-BLR-095',
+      junctionName: 'Free Flow Junction',
+      category: 'central-bangalore',
+      timestamp: new Date().toISOString(),
+      metrics: { maxQueueLengthM: 8, avgSpeedKmph: 50 },
+    });
+    assert.strictEqual(r, null);
+  }
+  for (let i = 0; i < 5; i++) {
+    const fpSpeed = anomalyEngine.evaluate({
+      junctionId: 'JNC-BLR-095',
+      deviceId: 'JNC-BLR-095',
+      junctionName: 'Free Flow Junction',
+      category: 'central-bangalore',
+      timestamp: new Date().toISOString(),
+      metrics: { maxQueueLengthM: 8, avgSpeedKmph: 39.9 },
+    });
+    assert.strictEqual(fpSpeed, null, 'avgSpeedKmph: 39.9 must NEVER trigger an alert');
+  }
+
+  // 6b. maxQueueLengthM: 3.7 m even against near-zero baseline must NEVER alert (below 60 m floor)
+  for (let i = 0; i < 12; i++) {
+    anomalyEngine.evaluate({
+      junctionId: 'JNC-BLR-094',
+      deviceId: 'JNC-BLR-094',
+      junctionName: 'Night Junction',
+      category: 'north-bangalore',
+      timestamp: new Date().toISOString(),
+      metrics: { maxQueueLengthM: 1.0, avgSpeedKmph: 44 },
+    });
+  }
+  for (let i = 0; i < 5; i++) {
+    const fpQueue = anomalyEngine.evaluate({
+      junctionId: 'JNC-BLR-094',
+      deviceId: 'JNC-BLR-094',
+      junctionName: 'Night Junction',
+      category: 'north-bangalore',
+      timestamp: new Date().toISOString(),
+      metrics: { maxQueueLengthM: 3.7, avgSpeedKmph: 43 },
+    });
+    assert.strictEqual(fpQueue, null, 'maxQueueLengthM: 3.7 must NEVER trigger an alert');
+  }
+
+  // 6c. One-sided direction test: improving queue (80 -> 10) or improving speed (10 -> 39.9) never alerts
+  for (let i = 0; i < 12; i++) {
+    anomalyEngine.evaluate({
+      junctionId: 'JNC-BLR-093',
+      deviceId: 'JNC-BLR-093',
+      junctionName: 'Clearing Junction',
+      category: 'east-bangalore',
+      timestamp: new Date().toISOString(),
+      metrics: { maxQueueLengthM: 85, avgSpeedKmph: 10 + (i % 2) },
+    });
+  }
+  for (let i = 0; i < 5; i++) {
+    const improved = anomalyEngine.evaluate({
+      junctionId: 'JNC-BLR-093',
+      deviceId: 'JNC-BLR-093',
+      junctionName: 'Clearing Junction',
+      category: 'east-bangalore',
+      timestamp: new Date().toISOString(),
+      metrics: { maxQueueLengthM: 10, avgSpeedKmph: 39.9 },
+    });
+    assert.strictEqual(improved, null, 'Traffic improvement must NEVER trigger negative-z anomaly');
+  }
+
+  // 6d. 2-frame transient surge resets when normal resumes
+  for (let i = 0; i < 10; i++) {
+    anomalyEngine.evaluate({
+      junctionId: 'JNC-BLR-092',
+      deviceId: 'JNC-BLR-092',
+      junctionName: 'Transient Test',
+      category: 'south-bangalore',
+      timestamp: new Date().toISOString(),
+      metrics: { maxQueueLengthM: 40, avgSpeedKmph: 25 },
+    });
+  }
+  assert.strictEqual(
+    anomalyEngine.evaluate({
+      junctionId: 'JNC-BLR-092',
+      deviceId: 'JNC-BLR-092',
+      junctionName: 'Transient Test',
+      category: 'south-bangalore',
+      timestamp: new Date().toISOString(),
+      metrics: { maxQueueLengthM: 150, avgSpeedKmph: 25 },
+    }),
+    null
+  );
+  assert.strictEqual(
+    anomalyEngine.evaluate({
+      junctionId: 'JNC-BLR-092',
+      deviceId: 'JNC-BLR-092',
+      junctionName: 'Transient Test',
+      category: 'south-bangalore',
+      timestamp: new Date().toISOString(),
+      metrics: { maxQueueLengthM: 150, avgSpeedKmph: 25 },
+    }),
+    null
+  );
+  // Return to baseline resets streak; next 1 spike won't alert either
+  anomalyEngine.evaluate({
+    junctionId: 'JNC-BLR-092',
+    deviceId: 'JNC-BLR-092',
+    junctionName: 'Transient Test',
+    category: 'south-bangalore',
+    timestamp: new Date().toISOString(),
+    metrics: { maxQueueLengthM: 42, avgSpeedKmph: 25 },
+  });
+  assert.strictEqual(
+    anomalyEngine.evaluate({
+      junctionId: 'JNC-BLR-092',
+      deviceId: 'JNC-BLR-092',
+      junctionName: 'Transient Test',
+      category: 'south-bangalore',
+      timestamp: new Date().toISOString(),
+      metrics: { maxQueueLengthM: 155, avgSpeedKmph: 25 },
+    }),
+    null
+  );
 });
 
 test.after(() => {
