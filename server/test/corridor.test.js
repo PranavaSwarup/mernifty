@@ -13,6 +13,7 @@ import {
 import { CorridorTrip } from '../src/models/CorridorTrip.js';
 import { corridorService } from '../src/services/corridorService.js';
 import { simulatorService } from '../src/services/simulatorService.js';
+import { socketService } from '../src/services/socketService.js';
 
 let mongod;
 
@@ -139,4 +140,58 @@ test('5. Paired Simulator Twin: ambulance corridor scenario sets preemption on l
   assert.ok(em.longitude > 77.0 && em.longitude < 78.0, 'Must have valid interpolated longitude');
   assert.ok(typeof em.speedKmph === 'number');
   assert.ok(typeof em.progressPct === 'number');
+});
+
+// A minimal stand-in for a Socket.IO socket: it only records room membership and emits.
+function makeFakeSocket() {
+  const rooms = new Set();
+  return {
+    rooms,
+    emitted: [],
+    join(room) {
+      rooms.add(room);
+    },
+    leave(room) {
+      rooms.delete(room);
+    },
+    emit(event, payload) {
+      this.emitted.push({ event, payload });
+    },
+  };
+}
+
+test('City viewers join the corridor room, so trip start and end reach the map', () => {
+  const socket = makeFakeSocket();
+  const joined = socketService._joinAuthorizedRooms(
+    socket,
+    { city: true, engineering: false, zones: ['south-bangalore'], junctions: [], alerts: [] },
+    { replace: true }
+  );
+  assert.ok(socket.rooms.has('city'));
+  assert.ok(socket.rooms.has('corridor'), "a city viewer must be in the 'corridor' room");
+  assert.ok(joined.includes('corridor'));
+});
+
+test('A socket with no city subscription is not in the corridor room, and leaving city leaves it', () => {
+  const socket = makeFakeSocket();
+  socketService._joinAuthorizedRooms(
+    socket,
+    { city: false, engineering: false, zones: [], junctions: ['JNC-BLR-005'], alerts: [] },
+    { replace: true }
+  );
+  assert.equal(socket.rooms.has('corridor'), false);
+
+  socketService._joinAuthorizedRooms(
+    socket,
+    { city: true, engineering: false, zones: [], junctions: [], alerts: [] },
+    { replace: true }
+  );
+  assert.ok(socket.rooms.has('corridor'));
+
+  socketService._joinAuthorizedRooms(
+    socket,
+    { city: false, engineering: false, zones: [], junctions: [], alerts: [] },
+    { replace: true }
+  );
+  assert.equal(socket.rooms.has('corridor'), false, 'replacing subscriptions without city must leave corridor');
 });
