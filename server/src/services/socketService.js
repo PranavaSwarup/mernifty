@@ -478,11 +478,13 @@ class SocketService {
     // Legacy single-room events retained for compatibility and server-side zone auth
     socket.on('subscribe:city', () => {
       socket.join('city');
+      socket.join('corridor');
       socket.emit('subscribed', { room: 'city' });
     });
 
     socket.on('unsubscribe:city', () => {
       socket.leave('city');
+      socket.leave('corridor');
     });
 
     socket.on('subscribe:engineering', () => {
@@ -680,6 +682,7 @@ class SocketService {
       for (const room of Array.from(socket.rooms || [])) {
         if (
           room === 'city' ||
+          room === 'corridor' ||
           room === 'engineering' ||
           room === 'alerts:all' ||
           room.startsWith('zone:') ||
@@ -695,6 +698,11 @@ class SocketService {
     if (subs.city) {
       socket.join('city');
       joined.push('city');
+      // City viewers also follow ambulance corridor trips (start, position, end). Without
+      // this nobody is in the 'corridor' room, so 'corridor:started' and 'corridor:ended'
+      // reach no client and a finished trip never clears from the map.
+      socket.join('corridor');
+      joined.push('corridor');
     }
     if (subs.engineering) {
       socket.join('engineering');

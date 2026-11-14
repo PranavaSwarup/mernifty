@@ -217,14 +217,12 @@ class CorridorService {
           trip.positions.push(posPayload);
         }
 
-        // Broadcast 2 Hz GPS position
-        socketService.io?.to('corridor').emit('corridor:position', posPayload);
-        socketService.io?.to(`junction:${toJunctionId}`).emit('corridor:position', posPayload);
-
+        // Broadcast 2 Hz GPS position with one chained emit, so a socket that is in several
+        // of these rooms (map viewers, the next junction, its zone) receives each position once.
         const toZone = JUNCTION_COORDINATES[toJunctionId]?.zoneId;
-        if (toZone) {
-          socketService.io?.to(`zone:${toZone}`).emit('corridor:position', posPayload);
-        }
+        let positionTarget = socketService.io?.to('corridor').to(`junction:${toJunctionId}`);
+        if (positionTarget && toZone) positionTarget = positionTarget.to(`zone:${toZone}`);
+        positionTarget?.emit('corridor:position', posPayload);
 
         // Check completion
         if (tickCount >= totalTicks) {
