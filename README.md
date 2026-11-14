@@ -2,11 +2,12 @@
 
 > **High-Throughput Camera Vision Telemetry, Real-Time Gridlock Detection & Adaptive Signal Command Center**  
 > Built for the **MERNIFY Hackathon 2026** (Track: High-Throughput Streams & Telemetry).
+>
+> **Live demo: https://metropulse-blr.onrender.com** · use the persona switcher in the header to try each role. Hosted on Render's free plan, so the first visit after a quiet period can take about a minute to wake up.
 
 ![MetroPulse Architecture](https://img.shields.io/badge/Stack-MERN%20+%20Socket.IO-emerald)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Focus](https://img.shields.io/badge/Focus-Bengaluru%20Smart%20Traffic-orange)
-<!-- TODO(T09): populate verified throughput, latency, fan-out savings, and test count badges from benchmarks/results/latest.md -->
 
 ---
 
@@ -24,9 +25,7 @@ Deploying a real-time smart traffic telemetry command center introduces three fu
 **MetroPulse BLR** is a smart city traffic telemetry ingestion, gridlock detection, and adaptive signal coordination platform:
 - **Centralized Video Analytics Architecture**: Roadside CCTV/ANPR cameras stream optical video over municipal dark fiber to the **Centralized City Data Center**, where GPU worker clusters perform vehicle classification (two-wheelers, cars, buses, commercial trucks) and optical queue calculation, emitting structured JSON telemetry.
 - **One Problem, Done Properly**: Air quality and noise monitoring were considered and left out. The reason is focus: we chose to solve traffic telemetry completely instead of covering two domains thinly.
-- **High-Throughput Write-Behind Ingestion**: Accumulates junction frames in an in-memory ring queue and flushes micro-batches via `bulkWrite()` / `insertMany()` with `ordered: false` without event-loop blocking. <!-- TODO(T09): insert measured Atlas throughput from benchmarks/results/latest.md -->
-- **Selective Zonal Socket.IO Partitioning**: Emits frames into partitioned rooms (`zone:south-bangalore`, `zone:east-bangalore`, `junction:ID`) using compact Wire v1 tuples to cut client network payload. <!-- TODO(T09): insert measured egress reduction from benchmarks/results/latest.md -->
-- **Real-Time Anomaly Engine & AI Copilot**: Flags sustained one-sided queue surges and low-speed gridlocks (robust MAD/EWMA + practical effect + persistence), stalled vehicles, and approaching ambulances with **1-click automated runbook remediation** (Adaptive Green Wave, Tow Dispatch, Emergency Corridor Preemption).
+- **High-Throughput Write-Behind Ingestion**: Accumulates junction frames in an in-memory ring queue and flushes micro-batches via `bulkWrite()` / `insertMany()` with `ordered: false` without event-loop blocking. - **Selective Zonal Socket.IO Partitioning**: Emits frames into partitioned rooms (`zone:south-bangalore`, `zone:east-bangalore`, `junction:ID`) using compact Wire v1 tuples to cut client network payload. - **Real-Time Anomaly Engine & AI Copilot**: Flags sustained one-sided queue surges and low-speed gridlocks (robust MAD/EWMA + practical effect + persistence), stalled vehicles, and approaching ambulances with **1-click automated runbook remediation** (Adaptive Green Wave, Tow Dispatch, Emergency Corridor Preemption).
 
 ---
 
@@ -120,8 +119,7 @@ The platform comes pre-configured with 12 authentic, high-traffic Bengaluru junc
   - *Automated Emergency Green Wave Corridor* (preemptive green wave for ambulances)
   - *BTP Rapid Incident Tow Dispatch* (clears stalled vehicles)
   - *Upstream Variable Message Sign (VMS) Diversion* (reroutes 35% traffic to bypass corridors)
-- **Multi-Desk Zonal Sync View**: Demonstrates two independent dispatchers (South Zone Desk vs East Zone Desk) receiving only their subscribed room frames. <!-- TODO(T09): insert measured zonal reduction from benchmarks/results/latest.md -->
-- **Camera Stream Tap / Terminal Inspector**: Live packet stream showing formatted JSON frames with regex filtering and clipboard copying.
+- **Multi-Desk Zonal Sync View**: Demonstrates two independent dispatchers (South Zone Desk vs East Zone Desk) receiving only their subscribed room frames. - **Camera Stream Tap / Terminal Inspector**: Live packet stream showing formatted JSON frames with regex filtering and clipboard copying.
 - **Chaos & Stress Lab**: 1-click incident injection (Silk Board Surge, Stalled BMTC Bus on ORR, Hebbal Ambulance Corridor, Monsoonal Slowdown).
 - **Ambulance Green Corridor**: An ambulance trip is routed across the junction graph (by default Hebbal to Jayadeva, through Mekhri Circle, Town Hall, Richmond Circle and Dairy Circle). The ambulance streams its position twice a second; each junction is preempted shortly before it arrives (its incoming road is given green) and released after it passes. Clients watching a junction or zone on the route receive an officer alert and a give-way notice for it, clients watching other junctions receive neither, and the finished trip is stored in MongoDB. If a junction on the shortest route is gridlocked, the trip is routed around it. The corridor works through the signals and does not depend on drivers reacting to a notice.
 
