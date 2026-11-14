@@ -14,6 +14,8 @@ const DEMO_PERSONA_EMAILS = {
   'east-operator': 'east.operator@metropulse.io',
   east: 'east.operator@metropulse.io',
   viewer: 'viewer@metropulse.io',
+  anonymous: 'viewer@metropulse.io',
+  anon: 'viewer@metropulse.io',
 };
 
 function signUserToken(user, extra = {}) {
@@ -136,20 +138,27 @@ router.post('/demo-login', async (req, res) => {
       });
     }
 
-    const token = signUserToken(user, { demo: true });
+    const isAnon = persona === 'anonymous' || persona === 'anon';
+    const token = signUserToken(user, {
+      demo: true,
+      anonymous: isAnon,
+      persona: isAnon ? 'anonymous' : persona,
+    });
 
     res.json({
       success: true,
       demo: true,
-      persona,
+      persona: isAnon ? 'anonymous' : persona,
       notice: 'DEMO PERSONA JWT: issued for hackathon demo convenience only',
       token,
       user: {
-        id: user._id,
-        name: user.name,
+        id: isAnon ? 'anonymous-viewer' : user._id,
+        name: isAnon ? 'Anonymous Viewer' : user.name,
         email: user.email,
         role: user.role,
-        zones: user.zones || [],
+        zones: isAnon ? [] : (user.zones || []),
+        anonymous: isAnon,
+        persona: isAnon ? 'anonymous' : persona,
         demo: true,
       },
     });

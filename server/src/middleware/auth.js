@@ -20,14 +20,15 @@ async function resolveBearerUser(token) {
     throw new Error('User not found');
   }
   return {
-    id: String(user._id),
+    id: decoded.anonymous ? 'anonymous-viewer' : String(user._id),
     _id: user._id,
-    name: user.name,
+    name: decoded.anonymous ? 'Anonymous Viewer' : user.name,
     email: user.email,
     role: user.role,
-    zones: Array.isArray(user.zones) ? user.zones : [],
+    zones: decoded.anonymous ? [] : (Array.isArray(user.zones) ? user.zones : []),
     demo: Boolean(decoded.demo),
-    anonymous: false,
+    anonymous: Boolean(decoded.anonymous),
+    persona: decoded.persona || (decoded.anonymous ? 'anonymous' : undefined),
   };
 }
 

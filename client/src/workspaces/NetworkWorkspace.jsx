@@ -199,14 +199,13 @@ export function NetworkWorkspace({
   const { user } = useAuth();
   const { isDark } = useTheme();
   const isOperatorPlus =
-    user?.role === 'admin' ||
-    user?.role === 'operator' ||
-    user?.persona === 'admin' ||
-    user?.persona === 'supervisor' ||
-    user?.persona === 'south-operator' ||
-    user?.persona === 'east-operator' ||
-    !user ||
-    Boolean(user?.anonymous);
+    !user?.anonymous &&
+    (user?.role === 'admin' ||
+      user?.role === 'operator' ||
+      user?.persona === 'admin' ||
+      user?.persona === 'supervisor' ||
+      user?.persona === 'south-operator' ||
+      user?.persona === 'east-operator');
   const isAdmin = user?.role === 'admin' || user?.persona === 'admin' || user?.persona === 'supervisor';
   const isAmbulanceDriver = user?.role === 'ambulance';
   const isOfficer = user?.role === 'operator' || user?.persona?.includes('operator');
@@ -284,7 +283,7 @@ export function NetworkWorkspace({
     if (corridorDispatching) return;
     setCorridorDispatching(true);
     try {
-      if (!localStorage.getItem('hp_token')) {
+      if (!localStorage.getItem('hp_token') && !user?.anonymous) {
         try {
           const loginRes = await api.demoLogin('admin');
           if (loginRes?.token) {
@@ -334,7 +333,7 @@ export function NetworkWorkspace({
       if (!scenarioId || quickBusy) return;
       setQuickBusy(true);
       try {
-        if (!localStorage.getItem('hp_token')) {
+        if (!localStorage.getItem('hp_token') && !user?.anonymous) {
           try {
             const loginRes = await api.demoLogin('admin');
             if (loginRes?.token) {

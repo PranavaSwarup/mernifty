@@ -53,19 +53,20 @@ export function Navbar({ activeWorkspace, onChangeWorkspace }) {
     };
   }, [controlsOpen]);
 
-  const currentPersona = !user
-    ? 'anonymous'
-    : user.persona === 'supervisor'
-      ? 'supervisor'
-      : user.role === 'admin'
-        ? 'admin'
-        : user.role === 'viewer'
-          ? 'viewer'
-          : Array.isArray(user.zones) &&
-              user.zones.includes('east-bangalore') &&
-              !user.zones.includes('south-bangalore')
-            ? 'east-operator'
-            : 'south-operator';
+  const currentPersona =
+    !user || user.anonymous || user.persona === 'anonymous' || user.persona === 'anon'
+      ? 'anonymous'
+      : user.persona === 'supervisor'
+        ? 'supervisor'
+        : user.role === 'admin'
+          ? 'admin'
+          : user.role === 'viewer'
+            ? 'viewer'
+            : Array.isArray(user.zones) &&
+                user.zones.includes('east-bangalore') &&
+                !user.zones.includes('south-bangalore')
+              ? 'east-operator'
+              : 'south-operator';
 
   const isPrivileged = currentPersona === 'admin' || currentPersona === 'supervisor' || user?.role === 'admin';
 
@@ -201,6 +202,11 @@ export function Navbar({ activeWorkspace, onChangeWorkspace }) {
               {isPrivileged && (
                 <span className="hidden md:inline px-1 py-0.2 rounded text-[9px] font-mono bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
                   FULL ACCESS
+                </span>
+              )}
+              {currentPersona === 'anonymous' && (
+                <span className="hidden md:inline px-1 py-0.2 rounded text-[9px] font-mono bg-neutral-500/20 text-ink-muted font-bold border border-hairline">
+                  READ ONLY
                 </span>
               )}
             </label>

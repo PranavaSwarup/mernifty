@@ -31,6 +31,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let cancelled = false;
     const stored = localStorage.getItem('hp_token');
+    const storedPersona = localStorage.getItem('hp_persona');
     if (!stored) {
       // Auto-boot as Admin persona for hackathon demo convenience
       api
@@ -38,6 +39,7 @@ export function AuthProvider({ children }) {
         .then((res) => {
           if (!cancelled && res?.token && res?.user) {
             localStorage.setItem('hp_token', res.token);
+            localStorage.setItem('hp_persona', 'admin');
             setToken(res.token);
             setUser({ ...res.user, persona: 'admin' });
           }
@@ -50,11 +52,13 @@ export function AuthProvider({ children }) {
       .getMe()
       .then((res) => {
         if (!cancelled && res.user) {
+          const isAnon = Boolean(res.user.anonymous) || storedPersona === 'anonymous' || storedPersona === 'anon';
           setUser({
             ...res.user,
-            persona: res.user.anonymous
+            anonymous: isAnon,
+            persona: isAnon
               ? 'anonymous'
-              : res.user.persona === 'supervisor'
+              : res.user.persona === 'supervisor' || storedPersona === 'supervisor'
                 ? 'supervisor'
                 : res.user.role === 'admin'
                   ? 'admin'
@@ -70,6 +74,7 @@ export function AuthProvider({ children }) {
         if (!cancelled) {
           if (err.status === 401) {
             localStorage.removeItem('hp_token');
+            localStorage.removeItem('hp_persona');
             setToken(null);
             setUser(DEFAULT_ADMIN);
           }
@@ -87,6 +92,7 @@ export function AuthProvider({ children }) {
     try {
       const data = await api.login(email, password);
       localStorage.setItem('hp_token', data.token);
+      localStorage.setItem('hp_persona', data.user?.persona || data.user?.role || 'admin');
       setToken(data.token);
       setUser(data.user);
       return data;
@@ -100,20 +106,22 @@ export function AuthProvider({ children }) {
 
   const switchPersona = useCallback(async (persona) => {
     setAuthError(null);
-    if (!persona || persona === 'anonymous') {
-      localStorage.removeItem('hp_token');
-      setToken(null);
-      setUser(ANONYMOUS_VIEWER);
-      return { success: true, user: ANONYMOUS_VIEWER };
-    }
-
     setIsLoading(true);
+    const targetPersona = persona || 'anonymous';
     try {
-      const data = await api.demoLogin(persona);
+      const data = await api.demoLogin(targetPersona);
       localStorage.setItem('hp_token', data.token);
+      localStorage.setItem('hp_persona', targetPersona);
       setToken(data.token);
-      setUser({ ...data.user, persona: data.persona || persona });
-      return data;
+      const isAnon = targetPersona === 'anonymous' || targetPersona === 'anon' || Boolean(data.user?.anonymous);
+      const nextUser = {
+        ...data.user,
+        persona: targetPersona,
+        anonymous: isAnon,
+        name: isAnon ? 'Anonymous Viewer' : data.user?.name,
+      };
+      setUser(nextUser);
+      return { success: true, user: nextUser };
     } catch (err) {
       setAuthError(err.message);
       throw err;
@@ -123,11 +131,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('hp_token');
-    setToken(null);
-    setAuthError(null);
-    setUser(ANONYMOUS_VIEWER);
-  }, []);
+    switchPersona('anonymous');
+  }, [switchPersona]);
 
   const clearAuthError = useCallback(() => setAuthError(null), []);
 
