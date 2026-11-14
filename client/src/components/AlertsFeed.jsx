@@ -4,8 +4,6 @@ import {
   AlertOctagon,
   Info,
   CheckCircle,
-  Volume2,
-  VolumeX,
   Trash2,
   RefreshCw,
 } from 'lucide-react';
@@ -15,7 +13,6 @@ import { api } from '../services/api';
 export function AlertsFeed({ alerts = [], onAlertsChange }) {
   const { setAlerts } = useSocket();
   const [filterSeverity, setFilterSeverity] = useState('all');
-  const [soundEnabled, setSoundEnabled] = useState(false);
   const [resolvingId, setResolvingId] = useState(null);
 
   // Filter alerts by severity
@@ -100,13 +97,6 @@ export function AlertsFeed({ alerts = [], onAlertsChange }) {
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setSoundEnabled((prev) => !prev)}
-            title={soundEnabled ? 'Mute alert chime' : 'Enable alert sound'}
-            className="p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-          >
-            {soundEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4" />}
-          </button>
           <button
             onClick={handleClearResolved}
             title="Clear resolved alerts"

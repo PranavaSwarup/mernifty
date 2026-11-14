@@ -1,14 +1,10 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
-import { playAlertSound } from '../utils/sound';
 
 const SocketContext = createContext(null);
 
 export function SocketProvider({ children }) {
   const [isConnected, setIsConnected] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const soundEnabledRef = useRef(true);
-  soundEnabledRef.current = soundEnabled;
   const [stats, setStats] = useState({
     ingestRate: 0,
     broadcastRate: 0,
@@ -67,9 +63,6 @@ export function SocketProvider({ children }) {
     // Live alert events
     socket.on('alert:new', (newAlert) => {
       setAlerts((prev) => [newAlert, ...prev.slice(0, 49)]);
-      if (soundEnabledRef.current) {
-        playAlertSound(newAlert.severity);
-      }
     });
 
     // Telemetry ping-pong for real-time WebSocket RTT latency
@@ -155,8 +148,6 @@ export function SocketProvider({ children }) {
         recentEvents,
         isPaused,
         togglePause,
-        soundEnabled,
-        setSoundEnabled,
         clientLatency,
         activeCategory,
         subscribeCategory,

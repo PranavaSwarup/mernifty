@@ -9,8 +9,6 @@ import {
   Users,
   Terminal,
   Globe,
-  Volume2,
-  VolumeX,
   Gauge,
   Navigation,
 } from 'lucide-react';
@@ -18,7 +16,7 @@ import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 
 export function Navbar({ activeTab, setActiveTab }) {
-  const { isConnected, stats, isPaused, togglePause, clientLatency, soundEnabled, setSoundEnabled } = useSocket();
+  const { isConnected, stats, isPaused, togglePause, clientLatency } = useSocket();
   const { user } = useAuth();
 
   const tabs = [
@@ -81,19 +79,6 @@ export function Navbar({ activeTab, setActiveTab }) {
 
         {/* Live Metrics & Controls */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Audio Chime Toggle */}
-          <button
-            onClick={() => setSoundEnabled((prev) => !prev)}
-            title={soundEnabled ? 'Mute anomaly alarms' : 'Enable audio alarms'}
-            className={`p-1.5 rounded-lg border text-xs transition-colors ${
-              soundEnabled
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                : 'bg-slate-800/60 border-slate-700/60 text-slate-500'
-            }`}
-          >
-            {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-          </button>
-
           {/* Pause / Resume Live Stream */}
           <button
             onClick={togglePause}
