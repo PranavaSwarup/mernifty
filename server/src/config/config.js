@@ -35,7 +35,9 @@ export const config = {
   simulatorEnabled: process.env.SIMULATOR_ENABLED !== 'false',
   batchIntervalMs: parseInt(process.env.BATCH_INTERVAL_MS, 10) || 1000,
   batchSize: parseInt(process.env.BATCH_SIZE, 10) || 500,
-  telemetryTtlSec: parseInt(process.env.TELEMETRY_TTL_SEC, 10) || 7200,
+  // How long telemetry is kept in MongoDB. At the default 24 events/s each stored reading is
+  // about 2.6 KB, so one hour levels off near 230 MB: safe within a 512 MB Atlas free cluster.
+  telemetryTtlSec: parseInt(process.env.TELEMETRY_TTL_SEC, 10) || 3600,
   publicReadonly: process.env.PUBLIC_READONLY !== 'false',
   demoPersonas:
     process.env.DEMO_PERSONAS !== undefined

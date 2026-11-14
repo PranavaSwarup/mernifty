@@ -8,6 +8,8 @@ import { connectDB, getDatabaseInfo } from './config/db.js';
 import { socketService } from './services/socketService.js';
 import { simulatorService } from './services/simulatorService.js';
 import { seedInitialData } from './utils/seedData.js';
+import { ensureTelemetryRetention } from './utils/telemetryRetention.js';
+import { Telemetry } from './models/Telemetry.js';
 
 import telemetryRoutes from './routes/telemetryRoutes.js';
 import deviceRoutes from './routes/deviceRoutes.js';
@@ -104,6 +106,20 @@ async function startServer() {
     }
 
     await connectDB();
+
+    // Keep the telemetry expiry (TTL index) in line with TELEMETRY_TTL_SEC
+    try {
+      const retention = await ensureTelemetryRetention(Telemetry);
+      const note =
+        retention.action === 'updated'
+          ? ` (changed from ${retention.previousSec}s)`
+          : retention.action === 'created'
+            ? ' (index created)'
+            : '';
+      console.log(`[DB] Telemetry retention: ${retention.ttlSec}s${note}`);
+    } catch (err) {
+      console.error(`[DB] Could not apply telemetry retention: ${err.message}`);
+    }
 
     // 2. Seed Initial Devices & Admin User
     await seedInitialData();
