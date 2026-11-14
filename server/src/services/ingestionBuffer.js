@@ -447,6 +447,15 @@ class IngestionBuffer {
     };
   }
 
+  start() {
+    if (!this.timer) {
+      this.timer = setInterval(() => {
+        this.flush();
+      }, this.flushInterval);
+      if (this.timer.unref) this.timer.unref();
+    }
+  }
+
   shutdown() {
     if (this.timer) {
       clearInterval(this.timer);

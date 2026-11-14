@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   RefreshCw,
   WifiOff,
@@ -49,7 +49,7 @@ function isHistogramTailHigh(metricName, p99Val) {
   return false;
 }
 
-function ArchitectureSvg({ isDark }) {
+const ArchitectureSvg = React.memo(function ArchitectureSvg({ isDark }) {
   const boxFill = isDark ? '#141922' : '#ffffff';
   const insetFill = isDark ? '#1b222e' : '#e8ecf2';
   const border = isDark ? '#364257' : '#aebacb';
@@ -136,12 +136,40 @@ function ArchitectureSvg({ isDark }) {
       <line x1="594" y1="130" x2="594" y2="152" stroke={border} strokeWidth="1.25" markerEnd="url(#hp-link-arrow)" />
     </svg>
   );
-}
+});
+
+const WireFrameRow = React.memo(function WireFrameRow({ evt, wireMode }) {
+  const jsonStr = useMemo(() => {
+    return wireMode === 'tuple'
+      ? JSON.stringify(evt._wire || evt)
+      : JSON.stringify({
+          status: evt.status,
+          controller: evt.controller,
+          metrics: evt.metrics,
+        });
+  }, [evt, wireMode]);
+
+  return (
+    <div className="p-2 rounded border border-hairline bg-surface">
+      <div className="flex items-center justify-between text-[10px] text-ink-muted mb-1">
+        <span className="text-ink-primary font-semibold">
+          {evt.junctionId || evt.deviceId} · seq #{evt.sequence}
+        </span>
+        <span>{fmtClockTime(evt.timestamp)}</span>
+      </div>
+      <pre className="text-[10px] text-ink-secondary whitespace-pre-wrap break-all">
+        {jsonStr}
+      </pre>
+    </div>
+  );
+});
 
 const WireStreamTap = React.memo(function WireStreamTap({ wireComp, isPaused, togglePause }) {
   const recentEvents = useRecentFrames();
   const [streamFilter, setStreamFilter] = useState('');
   const [wireMode, setWireMode] = useState('decoded');
+  const [isHovered, setIsHovered] = useState(false);
+  const frozenBufferRef = useRef(null);
 
   const filteredStream = useMemo(() => {
     const q = streamFilter.trim().toLowerCase();
@@ -157,12 +185,29 @@ const WireStreamTap = React.memo(function WireStreamTap({ wireComp, isPaused, to
       .slice(0, 30);
   }, [recentEvents, streamFilter]);
 
+  const activeStream = isHovered && frozenBufferRef.current ? frozenBufferRef.current : filteredStream;
+
+  const handleMouseEnter = () => {
+    setIsHovered(true);
+    frozenBufferRef.current = filteredStream;
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+    frozenBufferRef.current = null;
+  };
+
   return (
     <div className="xl:col-span-7 min-w-0 console-panel p-4 flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <h2 className="text-xs font-semibold text-ink-primary">
-            Wire v1 Stream Tap ({recentEvents.length} frames buffered)
+          <h2 className="text-xs font-semibold text-ink-primary flex items-center gap-2">
+            <span>Wire v1 Stream Tap ({recentEvents.length} frames buffered)</span>
+            {isHovered && (
+              <span className="text-[10px] text-amber-400 font-normal px-1.5 py-0.2 rounded border border-amber-400/30 bg-amber-400/10">
+                Frozen on hover
+              </span>
+            )}
           </h2>
           <p className="text-[11px] text-ink-muted">
             Inspect compact numeric tuples emitted on the wire vs decoded UI structures
@@ -216,31 +261,21 @@ const WireStreamTap = React.memo(function WireStreamTap({ wireComp, isPaused, to
         tabIndex={0}
         role="region"
         aria-label="Wire stream buffer"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         className="console-inset p-2.5 h-[260px] overflow-y-auto font-mono text-[11px] space-y-1.5"
       >
-        {filteredStream.length === 0 ? (
+        {activeStream.length === 0 ? (
           <div className="py-10 text-center font-sans text-xs text-ink-muted">
             No matching frames in local buffer.
           </div>
         ) : (
-          filteredStream.map((evt, idx) => (
-            <div key={`${evt.eventId || idx}-${idx}`} className="p-2 rounded border border-hairline bg-surface">
-              <div className="flex items-center justify-between text-[10px] text-ink-muted mb-1">
-                <span className="text-ink-primary font-semibold">
-                  {evt.junctionId || evt.deviceId} · seq #{evt.sequence}
-                </span>
-                <span>{fmtClockTime(evt.timestamp)}</span>
-              </div>
-              <pre className="text-[10px] text-ink-secondary whitespace-pre-wrap break-all">
-                {wireMode === 'tuple'
-                  ? JSON.stringify(evt._wire || evt)
-                  : JSON.stringify({
-                      status: evt.status,
-                      controller: evt.controller,
-                      metrics: evt.metrics,
-                    })}
-              </pre>
-            </div>
+          activeStream.map((evt, idx) => (
+            <WireFrameRow
+              key={`${evt.eventId || idx}-${idx}`}
+              evt={evt}
+              wireMode={wireMode}
+            />
           ))
         )}
       </div>
@@ -329,7 +364,7 @@ export function EngineeringWorkspace({ devices = [] }) {
 
   useEffect(() => {
     loadEngineeringData();
-    const t = setInterval(loadEngineeringData, 4000);
+    const t = setInterval(loadEngineeringData, 6000);
     return () => clearInterval(t);
   }, [loadEngineeringData]);
 

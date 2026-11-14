@@ -34,11 +34,11 @@ export const WORKSPACES = [
 ];
 
 export const PERSONA_OPTIONS = [
-  { id: 'anonymous', label: 'Anonymous', shortLabel: 'Anon', roleLabel: 'Read-only' },
-  { id: 'viewer', label: 'Viewer', shortLabel: 'Viewer', roleLabel: 'City + Alerts' },
-  { id: 'south-operator', label: 'South Desk', shortLabel: 'South Op', roleLabel: 'South Zone Op' },
-  { id: 'east-operator', label: 'East Desk', shortLabel: 'East Op', roleLabel: 'East Zone Op' },
-  { id: 'admin', label: 'Supervisor', shortLabel: 'Supervisor', roleLabel: 'Network Admin' },
+  { id: 'admin', label: 'Admin (Full Access)', shortLabel: 'Admin', roleLabel: 'Network Admin & Full Control' },
+  { id: 'south-operator', label: 'South Zone Operator', shortLabel: 'South Op', roleLabel: 'South Zone Control' },
+  { id: 'east-operator', label: 'East Zone Operator', shortLabel: 'East Op', roleLabel: 'East Zone Control' },
+  { id: 'viewer', label: 'Viewer (Read Only)', shortLabel: 'Viewer', roleLabel: 'City Summary & Alerts' },
+  { id: 'anonymous', label: 'Anonymous', shortLabel: 'Anon', roleLabel: 'Public Read-only' },
 ];
 
 const ThemeContext = createContext({

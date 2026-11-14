@@ -18,6 +18,40 @@ const EngineeringWorkspace = lazy(() =>
   import('./workspaces/EngineeringWorkspace').then((m) => ({ default: m.EngineeringWorkspace }))
 );
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('[ErrorBoundary caught]', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="max-w-2xl mx-auto my-12 p-6 rounded-xl border border-rose-500/30 bg-rose-950/20 text-rose-200">
+          <h2 className="text-sm font-bold text-rose-400 mb-2">Workspace Encountered an Error</h2>
+          <p className="text-xs text-rose-300/80 mb-4 font-mono">{this.state.error?.message || 'Unknown runtime error'}</p>
+          <button
+            type="button"
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
+            className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-semibold border border-rose-500/40"
+          >
+            Reload Workspace
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function WorkspaceFallback() {
   return (
     <div className="max-w-[1680px] mx-auto px-4 py-12 text-center text-xs text-ink-muted">
@@ -150,30 +184,32 @@ function ControlConsole() {
       />
 
       <main className="flex-1">
-        <Suspense fallback={<WorkspaceFallback />}>
-          {activeWorkspace === 'network' && (
-            <NetworkWorkspace
-              devices={devices}
-              selectedZone={zoneFilter}
-              onZoneChange={setZoneFilter}
-              selectedJunctionId={drawerJunctionId}
-              onOpenJunction={handleOpenDrawer}
-              onCloseJunction={handleCloseDrawer}
-            />
-          )}
+        <ErrorBoundary>
+          <Suspense fallback={<WorkspaceFallback />}>
+            {activeWorkspace === 'network' && (
+              <NetworkWorkspace
+                devices={devices}
+                selectedZone={zoneFilter}
+                onZoneChange={setZoneFilter}
+                selectedJunctionId={drawerJunctionId}
+                onOpenJunction={handleOpenDrawer}
+                onCloseJunction={handleCloseDrawer}
+              />
+            )}
 
-          {activeWorkspace === 'junction' && (
-            <JunctionWorkspace
-              devices={devices}
-              selectedJunctionId={activeJunctionId}
-              onSelectJunction={setActiveJunctionId}
-            />
-          )}
+            {activeWorkspace === 'junction' && (
+              <JunctionWorkspace
+                devices={devices}
+                selectedJunctionId={activeJunctionId}
+                onSelectJunction={setActiveJunctionId}
+              />
+            )}
 
-          {activeWorkspace === 'desks' && <DesksWorkspace />}
+            {activeWorkspace === 'desks' && <DesksWorkspace />}
 
-          {activeWorkspace === 'engineering' && <EngineeringWorkspace devices={devices} />}
-        </Suspense>
+            {activeWorkspace === 'engineering' && <EngineeringWorkspace devices={devices} />}
+          </Suspense>
+        </ErrorBoundary>
       </main>
     </div>
   );

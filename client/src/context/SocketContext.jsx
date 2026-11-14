@@ -136,7 +136,14 @@ class TelemetryHotStore {
       if (set) set.forEach((cb) => cb());
     }
     this.allJunctionListeners.forEach((cb) => cb());
-    this.recentListeners.forEach((cb) => cb());
+
+    // Throttle high-frequency recent frame notifications to 300ms so UI stays responsive
+    if (!this._recentTimer) {
+      this._recentTimer = setTimeout(() => {
+        this._recentTimer = null;
+        this.recentListeners.forEach((cb) => cb());
+      }, 300);
+    }
   }
 
   setStats(nextStats) {
@@ -153,8 +160,8 @@ export function SocketProvider({ children }) {
   const { token, user } = useAuth();
 
   const [isConnected, setIsConnected] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const soundEnabledRef = useRef(true);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const soundEnabledRef = useRef(false);
   soundEnabledRef.current = soundEnabled;
 
   const [alerts, setAlerts] = useState([]);

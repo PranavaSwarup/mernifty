@@ -3,6 +3,15 @@ import { api } from '../services/api';
 
 const AuthContext = createContext(null);
 
+const DEFAULT_ADMIN = {
+  id: 'admin-default',
+  name: 'Bengaluru Traffic Operations Commander',
+  email: 'admin@metropulse.io',
+  role: 'admin',
+  zones: ['south-bangalore', 'east-bangalore', 'north-bangalore', 'central-bangalore'],
+  persona: 'admin',
+};
+
 const ANONYMOUS_VIEWER = {
   id: 'anonymous-viewer',
   name: 'Anonymous Viewer',
@@ -15,12 +24,28 @@ const ANONYMOUS_VIEWER = {
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem('hp_token') || null);
-  const [user, setUser] = useState(ANONYMOUS_VIEWER);
+  const [user, setUser] = useState(DEFAULT_ADMIN);
   const [isLoading, setIsLoading] = useState(false);
   const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
+    const stored = localStorage.getItem('hp_token');
+    if (!stored) {
+      // Auto-boot as Admin persona for hackathon demo convenience
+      api
+        .demoLogin('admin')
+        .then((res) => {
+          if (!cancelled && res?.token && res?.user) {
+            localStorage.setItem('hp_token', res.token);
+            setToken(res.token);
+            setUser({ ...res.user, persona: 'admin' });
+          }
+        })
+        .catch(() => {});
+      return;
+    }
+
     api
       .getMe()
       .then((res) => {
@@ -44,7 +69,7 @@ export function AuthProvider({ children }) {
           if (err.status === 401) {
             localStorage.removeItem('hp_token');
             setToken(null);
-            setUser(ANONYMOUS_VIEWER);
+            setUser(DEFAULT_ADMIN);
           }
         }
       });

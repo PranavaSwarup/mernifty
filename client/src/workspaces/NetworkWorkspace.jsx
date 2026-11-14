@@ -28,6 +28,7 @@ import {
 } from '../utils/semantics';
 import { StatusGlyph, StatusPill } from '../components/StatusPill';
 import { JunctionDetailView } from '../components/JunctionDetailView';
+import { getCorridorRoadWaypoints } from '../utils/roadWaypoints';
 
 const BENGALURU_CENTER = [12.976, 77.622];
 const DEFAULT_ZOOM = 12;
@@ -214,6 +215,8 @@ export function NetworkWorkspace({
   const linkLayerRef = useRef(null);
   const markerLayerRef = useRef(null);
   const emergencyLayerRef = useRef(null);
+  const markerInstancesRef = useRef(new Map());
+  const linkInstancesRef = useRef(new Map());
 
   // Sync /api/sim/state + initial /api/sim/counterfactual periodically
   const fetchSimOverview = useCallback(async () => {
@@ -406,6 +409,8 @@ export function NetworkWorkspace({
       linkLayerRef.current = null;
       emergencyLayerRef.current = null;
       markerLayerRef.current = null;
+      markerInstancesRef.current.clear();
+      linkInstancesRef.current.clear();
     };
   }, []);
 
@@ -452,7 +457,6 @@ export function NetworkWorkspace({
     }
 
     // 1. Corridor links colored by bottleneck (worst directional speed) per undirected segment
-    linkLayerRef.current.clearLayers();
     const corridorGroups = new Map();
     for (const lnk of simState?.corridors || []) {
       const fromPos = posById.get(lnk.fromJunction);
@@ -477,6 +481,8 @@ export function NetworkWorkspace({
       const entry = corridorGroups.get(pairKey) || {
         fromPos,
         toPos,
+        fromId: lnk.fromJunction,
+        toId: lnk.toJunction,
         corridor: lnk.corridor,
         worstSpeed: Infinity,
         worstVc: 0,
@@ -494,38 +500,82 @@ export function NetworkWorkspace({
       corridorGroups.set(pairKey, entry);
     }
 
-    for (const group of corridorGroups.values()) {
+    const activeLinkKeys = new Set();
+    for (const [pairKey, group] of corridorGroups.entries()) {
+      activeLinkKeys.add(pairKey);
       const linkSpeed = Number.isFinite(group.worstSpeed) ? group.worstSpeed : 25;
       const speedStyle = classifyLinkSpeed(linkSpeed, isDark);
+      const tooltipText = `${group.corridor} · ${group.dirs.join(' | ')}`;
+      const roadPath = getCorridorRoadWaypoints(group.fromId, group.toId, group.fromPos, group.toPos);
 
-      L.polyline([group.fromPos, group.toPos], {
-        color: speedStyle.hex,
-        weight: speedStyle.weight,
-        dashArray: speedStyle.dashArray,
-        opacity: speedStyle.opacity,
-      })
-        .bindTooltip(
-          `${group.corridor} · ${group.dirs.join(' | ')}`,
-          {
+      let linkEntry = linkInstancesRef.current.get(pairKey);
+      if (!linkEntry) {
+        const poly = L.polyline(roadPath, {
+          color: speedStyle.hex,
+          weight: speedStyle.weight,
+          dashArray: speedStyle.dashArray,
+          opacity: speedStyle.opacity,
+        })
+          .bindTooltip(tooltipText, {
             className: 'mp-tooltip',
             sticky: true,
-          }
-        )
-        .addTo(linkLayerRef.current);
+          })
+          .addTo(linkLayerRef.current);
+        linkInstancesRef.current.set(pairKey, { poly, lastColor: speedStyle.hex, lastTooltip: tooltipText });
+      } else {
+        if (!linkLayerRef.current.hasLayer(linkEntry.poly)) {
+          linkLayerRef.current.addLayer(linkEntry.poly);
+        }
+        if (linkEntry.lastColor !== speedStyle.hex) {
+          linkEntry.poly.setStyle({
+            color: speedStyle.hex,
+            weight: speedStyle.weight,
+            dashArray: speedStyle.dashArray,
+            opacity: speedStyle.opacity,
+          });
+          linkEntry.lastColor = speedStyle.hex;
+        }
+        if (linkEntry.lastTooltip !== tooltipText) {
+          linkEntry.poly.setTooltipContent(tooltipText);
+          linkEntry.lastTooltip = tooltipText;
+        }
+        linkEntry.poly.setLatLngs(roadPath);
+      }
+    }
+    for (const [key, entry] of linkInstancesRef.current.entries()) {
+      if (!activeLinkKeys.has(key)) {
+        linkLayerRef.current.removeLayer(entry.poly);
+        linkInstancesRef.current.delete(key);
+      }
     }
 
-    // 2. Active emergency responder routes
+    // 2. Active emergency responder routes (snapped to arterial street curves)
     emergencyLayerRef.current.clearLayers();
     for (const em of simState?.activeEmergencies || []) {
-      const pts = (em.path || []).map((id) => posById.get(id)).filter(Boolean);
-      if (pts.length >= 2) {
-        L.polyline(pts, {
+      const pathIds = (em.path || []).filter((id) => posById.has(id));
+      const fullPathPts = [];
+      for (let i = 0; i < pathIds.length - 1; i++) {
+        const segPts = getCorridorRoadWaypoints(
+          pathIds[i],
+          pathIds[i + 1],
+          posById.get(pathIds[i]),
+          posById.get(pathIds[i + 1])
+        );
+        if (i === 0) {
+          fullPathPts.push(...segPts);
+        } else {
+          fullPathPts.push(...segPts.slice(1));
+        }
+      }
+      if (fullPathPts.length >= 2) {
+        L.polyline(fullPathPts, {
           color: isDark ? '#38bdf8' : '#0369a1',
           weight: 4,
           dashArray: '6 5',
           opacity: 0.9,
         }).addTo(emergencyLayerRef.current);
       }
+      const pts = pathIds.map((id) => posById.get(id)).filter(Boolean);
       const legIdx = Math.max(0, Math.min(pts.length - 1, em.legIndex ?? 0));
       const pos = pts[legIdx];
       if (pos) {
@@ -543,11 +593,12 @@ export function NetworkWorkspace({
       }
     }
 
-    // 3. Signal-ring junction glyphs
-    markerLayerRef.current.clearLayers();
+    // 3. Signal-ring junction glyphs (cached in-place to prevent hover cursor glitching)
+    const activeMarkerIds = new Set();
     for (const j of visibleJunctions) {
       const pos = posById.get(j.junctionId);
       if (!pos) continue;
+      activeMarkerIds.add(j.junctionId);
 
       const info = classifyJunctionStatus(j, isDark);
       const isSelected = selectedJunctionId === j.junctionId;
@@ -557,33 +608,61 @@ export function NetworkWorkspace({
       const activeDir = j.data?.control?.activeDir || j.control?.activeDir || j.activeDir || null;
       const inIntergreen = Boolean(j.data?.control?.inIntergreen ?? j.control?.inIntergreen ?? j.inIntergreen);
 
-      const icon = L.divIcon({
-        className: '',
-        html: buildMarkerSvg(info, isSelected, isDark, {
-          maxQueueM: qM,
-          activeDir,
-          inIntergreen,
-        }),
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
+      const svgHtml = buildMarkerSvg(info, isSelected, isDark, {
+        maxQueueM: qM,
+        activeDir,
+        inIntergreen,
       });
 
       const phaseStr = activeDir ? ` · Phase ${activeDir}${inIntergreen ? ' (amber)' : ''}` : '';
-
-      const marker = L.marker(pos, { icon });
-      marker.bindTooltip(
-        `<div class="space-y-0.5">
+      const tooltipHtml = `<div class="space-y-0.5">
           <div style="font-weight:600">${j.name || j.junctionId}</div>
           <div style="font-family:JetBrains Mono,monospace;font-size:10px">
             ${info.label} · Q ${fmtInt(qM)}m · ${fmtNum(spd, 1)} km/h · ${controllerLabel(ctrl)}${phaseStr}
           </div>
-        </div>`,
-        { className: 'mp-tooltip', direction: 'top', offset: [0, -14] }
-      );
-      marker.on('click', () => {
-        onOpenJunction(j.junctionId);
-      });
-      marker.addTo(markerLayerRef.current);
+        </div>`;
+
+      let entry = markerInstancesRef.current.get(j.junctionId);
+      if (!entry) {
+        const icon = L.divIcon({
+          className: '',
+          html: svgHtml,
+          iconSize: [36, 36],
+          iconAnchor: [18, 18],
+        });
+        const marker = L.marker(pos, { icon });
+        marker.bindTooltip(tooltipHtml, { className: 'mp-tooltip', direction: 'top', offset: [0, -14] });
+        marker.on('click', () => {
+          onOpenJunction(j.junctionId);
+        });
+        marker.addTo(markerLayerRef.current);
+        markerInstancesRef.current.set(j.junctionId, { marker, lastHtml: svgHtml, lastTooltip: tooltipHtml });
+      } else {
+        if (!markerLayerRef.current.hasLayer(entry.marker)) {
+          markerLayerRef.current.addLayer(entry.marker);
+        }
+        if (entry.lastHtml !== svgHtml) {
+          entry.marker.setIcon(L.divIcon({
+            className: '',
+            html: svgHtml,
+            iconSize: [36, 36],
+            iconAnchor: [18, 18],
+          }));
+          entry.lastHtml = svgHtml;
+        }
+        if (entry.lastTooltip !== tooltipHtml) {
+          entry.marker.setTooltipContent(tooltipHtml);
+          entry.lastTooltip = tooltipHtml;
+        }
+        entry.marker.setLatLng(pos);
+      }
+    }
+
+    for (const [id, entry] of markerInstancesRef.current.entries()) {
+      if (!activeMarkerIds.has(id)) {
+        markerLayerRef.current.removeLayer(entry.marker);
+        markerInstancesRef.current.delete(id);
+      }
     }
   }, [
     mergedJunctions,

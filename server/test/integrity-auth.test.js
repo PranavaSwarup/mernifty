@@ -489,6 +489,7 @@ test('7. Token-bucket rate limiter (429 + Retry-After) & >80% buffer load sheddi
   }
 
   // Test >80% buffer backpressure (fill > 80% of maxQueueSize)
+  clearInterval(ingestionBuffer.timer);
   ingestionBuffer.reset();
   const fillCount = Math.floor(ingestionBuffer.maxQueueSize * 0.8) + 5;
   for (let i = 0; i < fillCount; i++) {
@@ -504,6 +505,7 @@ test('7. Token-bucket rate limiter (429 + Retry-After) & >80% buffer load sheddi
   assert.ok(Number(shedRes.headers.get('retry-after')) >= 1);
   assert.ok(metricsService.getSnapshot().totalLoadShed >= beforeShed + 1);
   ingestionBuffer.reset();
+  ingestionBuffer.start();
 });
 
 test('8. Zone-scoped RBAC, viewer-only /register, DEMO_PERSONAS toggle, PUBLIC_READONLY toggle', async () => {

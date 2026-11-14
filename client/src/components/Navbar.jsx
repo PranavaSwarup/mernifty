@@ -170,31 +170,48 @@ export function Navbar({ activeWorkspace, onChangeWorkspace }) {
             </span>
           )}
 
-          {/* Persona Selector (concise label in closed button; full role in tooltip & option title) */}
-          <label
-            className="flex items-center gap-1 px-1.5 py-1 rounded border border-hairline bg-inset text-xs"
-            title="Switch signed-in demo persona (requires DEMO_PERSONAS=true)"
-          >
-            <UserCheck className="w-3.5 h-3.5 text-ink-muted shrink-0" aria-hidden="true" />
-            <select
-              aria-label="Demo personas"
-              value={currentPersona}
-              disabled={authLoading}
-              onChange={handlePersonaChange}
-              className="max-w-[82px] sm:max-w-[110px] bg-transparent text-xs font-medium text-ink-primary cursor-pointer rounded truncate"
+          {/* Persona Selector (with distinct Admin indicator & 1-click switch) */}
+          <div className="flex items-center gap-1.5">
+            <label
+              className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors ${
+                currentPersona === 'admin'
+                  ? 'border-purple-500/50 bg-purple-500/10 text-purple-200'
+                  : 'border-hairline bg-inset text-ink-primary'
+              }`}
+              title={`Active Persona: ${currentPersona}. Switch demo persona.`}
             >
-              {PERSONA_OPTIONS.map((p) => (
-                <option key={p.id} value={p.id} className="bg-surface text-ink-primary" title={`${p.label} (${p.roleLabel})`}>
-                  {p.shortLabel}
-                </option>
-              ))}
-            </select>
-            {user?.zones?.length > 0 && user.role === 'operator' && (
-              <span className="hidden xl:inline text-[10px] font-mono text-ink-muted pl-1 border-l border-hairline">
-                {user.zones.map(zoneLabel).join(',')}
-              </span>
+              <UserCheck className={`w-3.5 h-3.5 ${currentPersona === 'admin' ? 'text-purple-400' : 'text-ink-muted'} shrink-0`} aria-hidden="true" />
+              <select
+                aria-label="Demo personas"
+                value={currentPersona}
+                disabled={authLoading}
+                onChange={handlePersonaChange}
+                className="max-w-[82px] sm:max-w-[110px] bg-transparent text-xs font-semibold cursor-pointer rounded truncate focus:outline-none"
+              >
+                {PERSONA_OPTIONS.map((p) => (
+                  <option key={p.id} value={p.id} className="bg-surface text-ink-primary" title={`${p.label} (${p.roleLabel})`}>
+                    {p.shortLabel}
+                  </option>
+                ))}
+              </select>
+              {currentPersona === 'admin' && (
+                <span className="hidden md:inline px-1 py-0.2 rounded text-[9px] font-mono bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
+                  FULL ACCESS
+                </span>
+              )}
+            </label>
+
+            {currentPersona !== 'admin' && (
+              <button
+                type="button"
+                onClick={() => switchPersona('admin')}
+                className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 transition-colors"
+                title="Switch to Admin for full control (Chaos, Scenarios, Speed Multipliers, Runbooks)"
+              >
+                Switch to Admin
+              </button>
             )}
-          </label>
+          </div>
 
           {/* Live / RTT Status Pill */}
           <button
