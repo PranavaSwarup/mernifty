@@ -7,66 +7,113 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  ReferenceLine,
 } from 'recharts';
-import { TrendingUp, RefreshCw, MapPin, Gauge, Activity } from 'lucide-react';
-import { useSocket } from '../context/SocketContext';
+import { TrendingUp, Database, Radio } from 'lucide-react';
+import {
+  useSocket,
+  useJunctionLive,
+  getJunctionSnapshot,
+} from '../context/SocketContext';
+import { api } from '../services/api';
+import { createHistoryLiveState, mergeLiveFrame } from '../utils/historyMerge';
 
 export function TelemetryCharts({ devices = [] }) {
-  const { latestByDevice, isPaused } = useSocket();
+  const { isPaused, subscribeDevice, unsubscribeDevice } = useSocket();
   const [selectedZone, setSelectedZone] = useState('all');
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
-  const [windowPoints, setWindowPoints] = useState(30);
+  const [windowPoints, setWindowPoints] = useState(120);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
-  const [chartData, setChartData] = useState([]);
+  const [historyState, setHistoryState] = useState(() =>
+    createHistoryLiveState([], 0, 1200)
+  );
+  const historyReadyForRef = useRef(null);
+  const liveEvt = useJunctionLive(selectedDeviceId);
 
   // Filter devices by zone
   const filteredDevices = useMemo(() => {
     if (selectedZone === 'all') return devices;
-    return devices.filter((d) => d.category === selectedZone || d.zoneId === selectedZone);
+    return devices.filter(
+      (d) => d.category === selectedZone || d.zoneId === selectedZone
+    );
   }, [devices, selectedZone]);
 
   // Set default selected junction
   useEffect(() => {
-    if (filteredDevices.length > 0 && (!selectedDeviceId || !filteredDevices.some((d) => d.deviceId === selectedDeviceId))) {
+    if (
+      filteredDevices.length > 0 &&
+      (!selectedDeviceId ||
+        !filteredDevices.some((d) => d.deviceId === selectedDeviceId))
+    ) {
       setSelectedDeviceId(filteredDevices[0].deviceId);
     }
   }, [filteredDevices, selectedDeviceId]);
 
-  // Append new telemetry point
+  // Fetch /api/telemetry/history?junctionId=...&limit=1200, subscribe to junction room, and seed merge state
   useEffect(() => {
-    if (isPaused || !selectedDeviceId) return;
+    if (!selectedDeviceId) return;
+    let cancelled = false;
 
-    const event = latestByDevice[selectedDeviceId];
-    if (!event || (!event.metrics && !event.data)) return;
+    historyReadyForRef.current = null;
+    setIsLoadingHistory(true);
+    setHistoryState(createHistoryLiveState([], 0, 1200));
+    subscribeDevice(selectedDeviceId);
 
-    const timeStr = new Date(event.timestamp).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
+    api
+      .getHistory({ junctionId: selectedDeviceId, limit: 1200 })
+      .then((res) => {
+        if (cancelled) return;
+        const records = Array.isArray(res?.records) ? res.records : [];
+        const serverCursor =
+          Number(res?.maxSequence) ||
+          Number(res?.cursor?.[selectedDeviceId]) ||
+          0;
+        let nextState = createHistoryLiveState(records, serverCursor, 1200);
 
-    const metrics = event.metrics || event.data || {};
+        // Reconcile latest buffered live frame without duplicating historical records
+        const currentLive = getJunctionSnapshot(selectedDeviceId);
+        if (currentLive && !isPaused) {
+          nextState = mergeLiveFrame(nextState, currentLive);
+        }
 
-    const newPoint = {
-      timestamp: timeStr,
-      maxQueueLengthM: metrics.maxQueueLengthM || 0,
-      avgSpeedKmph: metrics.avgSpeedKmph || 0,
-      totalFlowVehiclesPerMin: metrics.totalFlowVehiclesPerMin || 0,
-      congestionScore: metrics.congestionScore || 0,
-      status: event.status,
+        historyReadyForRef.current = selectedDeviceId;
+        setHistoryState(nextState);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('Failed to fetch junction history:', err);
+          historyReadyForRef.current = selectedDeviceId;
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingHistory(false);
+      });
+
+    return () => {
+      cancelled = true;
+      unsubscribeDevice(selectedDeviceId);
     };
+  }, [selectedDeviceId, subscribeDevice, unsubscribeDevice]);
 
-    setChartData((prev) => {
-      if (prev.length > 0 && prev[prev.length - 1].timestamp === timeStr) {
-        return prev;
-      }
-      const updated = [...prev, newPoint];
-      return updated.slice(-windowPoints);
-    });
-  }, [latestByDevice, selectedDeviceId, windowPoints, isPaused]);
+  // Merge new live frame into reconciled timeline strictly for sequence > cursor
+  useEffect(() => {
+    if (isPaused || !selectedDeviceId || !liveEvt) return;
+    const evtJunction = liveEvt.junctionId || liveEvt.deviceId;
+    if (evtJunction !== selectedDeviceId) return;
+    if (historyReadyForRef.current !== selectedDeviceId) return;
 
-  const currentDev = devices.find((d) => d.deviceId === selectedDeviceId) || devices[0];
-  const liveEvt = selectedDeviceId ? latestByDevice[selectedDeviceId] : null;
+    setHistoryState((prev) => mergeLiveFrame(prev, liveEvt));
+  }, [liveEvt, selectedDeviceId, isPaused]);
+
+  const displayedPoints = useMemo(() => {
+    return historyState.points.slice(-windowPoints);
+  }, [historyState.points, windowPoints]);
+
+  const seamVisible = Boolean(
+    historyState.seamLabel &&
+      displayedPoints.some((p) => p.timestamp === historyState.seamLabel)
+  );
 
   return (
     <div className="rounded-xl border border-slate-800 bg-[#0B101D]/70 p-4 backdrop-blur-md">
@@ -85,14 +132,13 @@ export function TelemetryCharts({ devices = [] }) {
               </span>
             </h3>
             <p className="text-[11px] text-slate-400">
-              Real-time optical queue accumulation & corridor velocity dynamics
+              Real-time optical queue accumulation & corridor velocity dynamics (history + live merge)
             </p>
           </div>
         </div>
 
         {/* Junction & Window Selectors */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          {/* Zone Selector */}
           <select
             value={selectedZone}
             onChange={(e) => setSelectedZone(e.target.value)}
@@ -105,13 +151,9 @@ export function TelemetryCharts({ devices = [] }) {
             <option value="central-bangalore">Central Zone</option>
           </select>
 
-          {/* Junction Selector */}
           <select
             value={selectedDeviceId}
-            onChange={(e) => {
-              setSelectedDeviceId(e.target.value);
-              setChartData([]);
-            }}
+            onChange={(e) => setSelectedDeviceId(e.target.value)}
             className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-emerald-400 font-semibold focus:outline-none focus:border-emerald-500 max-w-[210px] truncate"
           >
             {filteredDevices.map((d) => (
@@ -121,9 +163,8 @@ export function TelemetryCharts({ devices = [] }) {
             ))}
           </select>
 
-          {/* Time Window Buttons */}
           <div className="flex bg-slate-900 rounded-lg p-0.5 border border-slate-800 text-xs">
-            {[20, 30, 60].map((pts) => (
+            {[60, 120, 300, 1200].map((pts) => (
               <button
                 key={pts}
                 onClick={() => setWindowPoints(pts)}
@@ -133,10 +174,38 @@ export function TelemetryCharts({ devices = [] }) {
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                {pts}s
+                {pts === 1200 ? '1200' : `${pts}p`}
               </button>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* History + Live Merge Counters */}
+      <div className="flex flex-wrap items-center justify-between gap-2 mt-2.5 px-2.5 py-1.5 rounded-lg bg-slate-900/60 border border-slate-800/80 text-[11px] font-mono">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="flex items-center gap-1.5 text-cyan-300">
+            <Database className="w-3 h-3 text-cyan-400" />
+            Historical: <strong>{historyState.historicalCount}</strong>
+          </span>
+          <span className="flex items-center gap-1.5 text-emerald-300">
+            <Radio className="w-3 h-3 text-emerald-400" />
+            Live: <strong>{historyState.liveCount}</strong>
+          </span>
+          <span className="text-amber-300">
+            Duplicates suppressed: <strong>{historyState.duplicateSuppressed}</strong>
+          </span>
+        </div>
+        <div className="text-[10px] text-slate-400">
+          {isLoadingHistory ? (
+            <span>Loading 1200-pt history...</span>
+          ) : historyState.seamLabel ? (
+            <span className="text-emerald-400 font-semibold">
+              Seam: live since {historyState.seamLabel} (cursor #{historyState.cursor})
+            </span>
+          ) : (
+            <span>Cursor #{historyState.cursor} • awaiting live frame</span>
+          )}
         </div>
       </div>
 
@@ -210,7 +279,7 @@ export function TelemetryCharts({ devices = [] }) {
 
           <div className="h-44 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
+              <AreaChart data={displayedPoints}>
                 <defs>
                   <linearGradient id="gradQueue" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#EF4444" stopOpacity={0.4} />
@@ -232,6 +301,20 @@ export function TelemetryCharts({ devices = [] }) {
                     fontSize: '11px',
                   }}
                 />
+                {seamVisible && (
+                  <ReferenceLine
+                    x={historyState.seamLabel}
+                    stroke="#10B981"
+                    strokeDasharray="4 4"
+                    strokeWidth={1.5}
+                    label={{
+                      value: `live since ${historyState.seamLabel}`,
+                      position: 'insideTopRight',
+                      fill: '#34D399',
+                      fontSize: 10,
+                    }}
+                  />
+                )}
                 <Area type="monotone" dataKey="maxQueueLengthM" name="Queue (m)" stroke="#EF4444" fill="url(#gradQueue)" strokeWidth={2} isAnimationActive={false} />
                 <Area type="monotone" dataKey="totalFlowVehiclesPerMin" name="Flow (veh/min)" stroke="#10B981" fill="url(#gradFlow)" strokeWidth={1.5} isAnimationActive={false} />
               </AreaChart>
@@ -254,7 +337,7 @@ export function TelemetryCharts({ devices = [] }) {
 
           <div className="h-44 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
+              <AreaChart data={displayedPoints}>
                 <defs>
                   <linearGradient id="gradSpeed" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.4} />
@@ -276,6 +359,20 @@ export function TelemetryCharts({ devices = [] }) {
                     fontSize: '11px',
                   }}
                 />
+                {seamVisible && (
+                  <ReferenceLine
+                    x={historyState.seamLabel}
+                    stroke="#10B981"
+                    strokeDasharray="4 4"
+                    strokeWidth={1.5}
+                    label={{
+                      value: `live since ${historyState.seamLabel}`,
+                      position: 'insideTopRight',
+                      fill: '#34D399',
+                      fontSize: 10,
+                    }}
+                  />
+                )}
                 <Area type="monotone" dataKey="avgSpeedKmph" name="Speed (km/h)" stroke="#06B6D4" fill="url(#gradSpeed)" strokeWidth={2} isAnimationActive={false} />
                 <Area type="monotone" dataKey="congestionScore" name="Congestion %" stroke="#F59E0B" fill="url(#gradCongest)" strokeWidth={1.5} isAnimationActive={false} />
               </AreaChart>

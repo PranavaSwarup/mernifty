@@ -8,6 +8,7 @@ export function SimulatorControls() {
   const [isRunning, setIsRunning] = useState(true);
   const [targetRate, setTargetRate] = useState(12);
   const [chaosMessage, setChaosMessage] = useState('');
+  const [actionError, setActionError] = useState('');
   const [loadingAction, setLoadingAction] = useState(false);
 
   // Sync simulator status on mount
@@ -24,6 +25,7 @@ export function SimulatorControls() {
 
   const handleToggleSimulator = async () => {
     setLoadingAction(true);
+    setActionError('');
     try {
       if (isRunning) {
         await api.stopSimulator();
@@ -33,19 +35,20 @@ export function SimulatorControls() {
         setIsRunning(true);
       }
     } catch (err) {
-      console.error(err);
+      setActionError(err.message || 'Simulator action denied');
     } finally {
       setLoadingAction(false);
     }
   };
 
   const handleRateChange = async (rate) => {
-    setTargetRate(rate);
+    setActionError('');
     try {
       await api.setSimulatorRate(rate);
+      setTargetRate(rate);
       setIsRunning(true);
     } catch (err) {
-      console.error(err);
+      setActionError(err.message || 'Rate update denied');
     }
   };
 
@@ -155,6 +158,18 @@ export function SimulatorControls() {
         </button>
       </div>
 
+      {actionError && (
+        <div className="mt-3 p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs font-mono flex items-center justify-between gap-2">
+          <span>{actionError}</span>
+          <button
+            onClick={() => setActionError('')}
+            className="text-rose-200 hover:text-white underline text-[10px]"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Target Throughput Rate Controls */}
       <div className="py-4 border-b border-slate-800">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
@@ -203,7 +218,13 @@ export function SimulatorControls() {
         </div>
 
         {chaosMessage && (
-          <div className="mb-3 p-3 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-mono animate-fadeIn flex items-center gap-2">
+          <div
+            className={`mb-3 p-3 rounded-xl text-xs font-mono animate-fadeIn flex items-center gap-2 ${
+              chaosMessage.startsWith('Error:')
+                ? 'bg-rose-500/15 border border-rose-500/40 text-rose-300'
+                : 'bg-purple-500/15 border border-purple-500/30 text-purple-300'
+            }`}
+          >
             <Sparkles className="w-4 h-4 flex-shrink-0" />
             <span>{chaosMessage}</span>
           </div>

@@ -1,7 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Activity,
-  Radio,
   MapPin,
   Database,
   Zap,
@@ -13,13 +12,16 @@ import {
   VolumeX,
   Gauge,
   Navigation,
+  Shield,
 } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 
 export function Navbar({ activeTab, setActiveTab }) {
-  const { isConnected, stats, isPaused, togglePause, clientLatency, soundEnabled, setSoundEnabled } = useSocket();
-  const { user } = useAuth();
+  const { isConnected, isPaused, togglePause, clientLatency, soundEnabled, setSoundEnabled, socketError } =
+    useSocket();
+  const { user, switchPersona, isLoading, authError, clearAuthError } = useAuth();
+  const [localError, setLocalError] = useState(null);
 
   const tabs = [
     { id: 'dashboard', label: 'Junction Operations', icon: Activity },
@@ -32,6 +34,20 @@ export function Navbar({ activeTab, setActiveTab }) {
     { id: 'benchmarks', label: 'Throughput Engine', icon: Gauge },
     { id: 'architecture', label: 'Architecture & Design', icon: BookOpen },
   ];
+
+  const handlePersonaChange = async (e) => {
+    const val = e.target.value;
+    setLocalError(null);
+    clearAuthError();
+    try {
+      await switchPersona(val);
+    } catch (err) {
+      setLocalError(err.message);
+    }
+  };
+
+  const activePersonaValue = user?.anonymous ? 'anonymous' : user?.persona || user?.role || 'viewer';
+  const bannerError = localError || authError || socketError;
 
   return (
     <header className="sticky top-0 z-50 bg-[#0B101D]/90 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-6 py-2.5">
@@ -79,8 +95,36 @@ export function Navbar({ activeTab, setActiveTab }) {
           })}
         </nav>
 
-        {/* Live Metrics & Controls */}
+        {/* Persona Switcher, Live Metrics & Controls */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Functional Role Persona Switcher */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1">
+            <Shield className="w-3.5 h-3.5 text-cyan-400" />
+            <select
+              aria-label="Active Persona"
+              disabled={isLoading}
+              value={activePersonaValue}
+              onChange={handlePersonaChange}
+              className="bg-transparent text-[11px] font-semibold text-slate-200 focus:outline-none cursor-pointer"
+            >
+              <option value="anonymous" className="bg-slate-900">
+                Viewer (Anon Read-Only)
+              </option>
+              <option value="viewer" className="bg-slate-900">
+                Viewer (Signed JWT)
+              </option>
+              <option value="south-operator" className="bg-slate-900">
+                South Operator (south-bangalore)
+              </option>
+              <option value="east-operator" className="bg-slate-900">
+                East Operator (east-bangalore)
+              </option>
+              <option value="admin" className="bg-slate-900">
+                Admin (All Zones)
+              </option>
+            </select>
+          </div>
+
           {/* Audio Chime Toggle */}
           <button
             onClick={() => setSoundEnabled((prev) => !prev)}
@@ -119,6 +163,21 @@ export function Navbar({ activeTab, setActiveTab }) {
           </div>
         </div>
       </div>
+
+      {bannerError && (
+        <div className="mt-2 px-3 py-1.5 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs flex items-center justify-between">
+          <span>{bannerError}</span>
+          <button
+            onClick={() => {
+              setLocalError(null);
+              clearAuthError();
+            }}
+            className="text-[11px] underline ml-3"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Mobile Nav Scroller */}
       <div className="xl:hidden flex items-center gap-1 overflow-x-auto pt-2 pb-1 border-t border-slate-800/60 mt-2">

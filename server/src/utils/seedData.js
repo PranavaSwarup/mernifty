@@ -2,10 +2,15 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import bcrypt from 'bcryptjs';
 import { Device } from '../models/Device.js';
 import { User } from '../models/User.js';
 import { DeviceKey, hashDeviceKey } from '../models/DeviceKey.js';
 import { INITIAL_DEVICES } from '../services/simulatorService.js';
+
+const LEGACY_ADMIN_EMAIL = 'admin@hyperpulse.io';
+const LEGACY_ADMIN_PASSWORDS = ['AdminPassword123!', 'admin123'];
+const LEGACY_API_KEY = 'blr_traffic_key_live_command_center_2026';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,8 +36,60 @@ function resolvePassword(envKey, fallbackEnvKey = null) {
   };
 }
 
+/**
+ * Idempotent cleanup of the legacy seeded admin@hyperpulse.io (exposed git password / static apiKey)
+ * and any User.apiKey field matching the leaked legacy key.
+ */
+export async function cleanupLegacySeededAuth() {
+  let deletedUsers = 0;
+  let clearedApiKeys = 0;
+  let deletedDeviceKeys = 0;
+
+  const candidates = await User.collection
+    .find({
+      $or: [{ email: LEGACY_ADMIN_EMAIL }, { apiKey: LEGACY_API_KEY }],
+    })
+    .toArray();
+
+  for (const doc of candidates) {
+    let usesLegacyPassword = false;
+    if (doc.email === LEGACY_ADMIN_EMAIL && typeof doc.password === 'string') {
+      for (const candidatePw of LEGACY_ADMIN_PASSWORDS) {
+        if (await bcrypt.compare(candidatePw, doc.password)) {
+          usesLegacyPassword = true;
+          break;
+        }
+      }
+    }
+
+    if (doc.apiKey === LEGACY_API_KEY || usesLegacyPassword) {
+      const delRes = await User.collection.deleteOne({ _id: doc._id });
+      deletedUsers += delRes.deletedCount || 0;
+    }
+  }
+
+  const unsetRes = await User.collection.updateMany(
+    { apiKey: LEGACY_API_KEY },
+    { $unset: { apiKey: '' } }
+  );
+  clearedApiKeys = unsetRes.modifiedCount || 0;
+
+  const dkRes = await DeviceKey.deleteMany({ keyHash: hashDeviceKey(LEGACY_API_KEY) });
+  deletedDeviceKeys = dkRes.deletedCount || 0;
+
+  if (deletedUsers > 0 || clearedApiKeys > 0 || deletedDeviceKeys > 0) {
+    console.log(
+      `[Seed] Legacy auth cleanup: deletedUsers=${deletedUsers}, clearedApiKeys=${clearedApiKeys}, deletedDeviceKeys=${deletedDeviceKeys}`
+    );
+  }
+
+  return { deletedUsers, clearedApiKeys, deletedDeviceKeys };
+}
+
 export async function seedInitialData() {
   try {
+    await cleanupLegacySeededAuth();
+
     // 1. Clean up legacy non-traffic devices & seed 12 BLR junctions
     const trafficIds = INITIAL_DEVICES.map((d) => d.deviceId);
     await Device.deleteMany({ deviceId: { $nin: trafficIds } });

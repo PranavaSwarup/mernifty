@@ -17,6 +17,7 @@ export function AlertsFeed({ alerts = [], onAlertsChange }) {
   const [filterSeverity, setFilterSeverity] = useState('all');
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [resolvingId, setResolvingId] = useState(null);
+  const [errorMsg, setErrorMsg] = useState('');
 
   // Filter alerts by severity
   const filtered = alerts.filter((a) => {
@@ -26,6 +27,7 @@ export function AlertsFeed({ alerts = [], onAlertsChange }) {
 
   const handleResolve = async (alertId) => {
     setResolvingId(alertId);
+    setErrorMsg('');
     try {
       await api.resolveAlert(alertId);
       setAlerts((prev) =>
@@ -33,19 +35,20 @@ export function AlertsFeed({ alerts = [], onAlertsChange }) {
       );
       if (onAlertsChange) onAlertsChange();
     } catch (err) {
-      console.error('Failed to resolve alert:', err);
+      setErrorMsg(err.message || 'Failed to resolve alert');
     } finally {
       setResolvingId(null);
     }
   };
 
   const handleClearResolved = async () => {
+    setErrorMsg('');
     try {
       await api.clearResolvedAlerts();
       setAlerts((prev) => prev.filter((a) => !a.resolved));
       if (onAlertsChange) onAlertsChange();
     } catch (err) {
-      console.error('Failed to clear resolved alerts:', err);
+      setErrorMsg(err.message || 'Failed to clear resolved alerts');
     }
   };
 
@@ -131,6 +134,18 @@ export function AlertsFeed({ alerts = [], onAlertsChange }) {
           </button>
         ))}
       </div>
+
+      {errorMsg && (
+        <div className="mb-2.5 p-2.5 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-300 text-[11px] font-mono flex items-center justify-between gap-2">
+          <span>{errorMsg}</span>
+          <button
+            onClick={() => setErrorMsg('')}
+            className="text-rose-200 hover:text-white underline text-[10px]"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Feed List */}
       <div className="flex-1 overflow-y-auto space-y-2.5 max-h-96 pr-1">

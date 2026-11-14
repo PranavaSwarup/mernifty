@@ -225,17 +225,29 @@ router.get('/history', publicReadOrAuth, async (req, res) => {
       if (to) query.timestamp.$lte = new Date(to);
     }
 
-    const maxLimit = Math.min(parseInt(limit, 10) || 100, 1000);
+    const maxLimit = Math.min(parseInt(limit, 10) || 100, 2000);
 
     const records = await Telemetry.find(query)
       .sort({ timestamp: -1 })
       .limit(maxLimit)
       .lean();
 
+    const ordered = records.reverse();
+    const cursor = {};
+    for (const rec of ordered) {
+      const jId = rec.junctionId || rec.deviceId;
+      const seq = Number(rec.sequence) || 0;
+      if (jId && seq > (cursor[jId] || 0)) {
+        cursor[jId] = seq;
+      }
+    }
+
     res.json({
       success: true,
-      count: records.length,
-      records: records.reverse(),
+      count: ordered.length,
+      cursor,
+      maxSequence: targetId ? cursor[targetId] || 0 : Math.max(0, ...Object.values(cursor)),
+      records: ordered,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

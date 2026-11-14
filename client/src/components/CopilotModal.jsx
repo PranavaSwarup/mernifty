@@ -7,18 +7,20 @@ export function CopilotModal({ device, onClose, onRemediated }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isExecuting, setIsExecuting] = useState(false);
   const [remediationResult, setRemediationResult] = useState(null);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const fetchDiagnosis = async () => {
     if (!device) return;
     setIsLoading(true);
+    setErrorMsg('');
     setRemediationResult(null);
     try {
-      const res = await api.fetchJson(`/api/copilot/diagnose/${device.deviceId}`);
+      const res = await api.diagnose(device.deviceId);
       if (res.diagnosis) {
         setDiagnosis(res.diagnosis);
       }
     } catch (err) {
-      console.error(err);
+      setErrorMsg(err.message || 'Failed to load traffic diagnosis');
     } finally {
       setIsLoading(false);
     }
@@ -28,18 +30,22 @@ export function CopilotModal({ device, onClose, onRemediated }) {
     fetchDiagnosis();
   }, [device]);
 
-  const handleExecuteRunbook = async (action) => {
+  const handleExecuteRunbook = async (runbookOrAction) => {
+    const action = typeof runbookOrAction === 'string' ? runbookOrAction : runbookOrAction?.action;
+    const params = typeof runbookOrAction === 'object' ? runbookOrAction?.params : undefined;
     setIsExecuting(true);
+    setErrorMsg('');
     try {
-      const res = await api.fetchJson('/api/copilot/remediate', {
-        method: 'POST',
-        body: JSON.stringify({ deviceId: device.deviceId, action }),
+      const res = await api.remediate({
+        deviceId: device.deviceId,
+        action,
+        ...(params ? { params } : {}),
       });
       setRemediationResult(res);
       if (onRemediated) onRemediated(res);
       setTimeout(() => fetchDiagnosis(), 1200);
     } catch (err) {
-      console.error(err);
+      setErrorMsg(err.message || 'Failed to execute remediation runbook');
     } finally {
       setIsExecuting(false);
     }
@@ -79,6 +85,11 @@ export function CopilotModal({ device, onClose, onRemediated }) {
 
         {/* Body */}
         <div className="p-5 overflow-y-auto max-h-[75vh] space-y-4">
+          {errorMsg && (
+            <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs font-mono">
+              {errorMsg}
+            </div>
+          )}
           {isLoading ? (
             <div className="py-12 flex flex-col items-center justify-center text-slate-500 text-xs gap-2">
               <RefreshCw className="w-6 h-6 animate-spin text-purple-400" />
@@ -162,8 +173,8 @@ export function CopilotModal({ device, onClose, onRemediated }) {
                               {f.severity}
                             </span>
                           </div>
-                          <span className="text-[10px] text-slate-500 font-mono mt-0.5 block">
-                            Confidence: {f.confidence}%
+                          <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
+                            Confidence: {f.confidence}% ({f.rolloutsRatio || `${f.improvedRollouts ?? 0}/${f.rolloutsCount ?? 8}`} rollouts improved) • Evidence: {f.evidenceScore ?? f.confidence}/100
                           </span>
                         </div>
                       </div>
@@ -197,7 +208,7 @@ export function CopilotModal({ device, onClose, onRemediated }) {
                           </div>
 
                           <button
-                            onClick={() => handleExecuteRunbook(f.runbook.action)}
+                            onClick={() => handleExecuteRunbook(f.runbook)}
                             disabled={isExecuting}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-colors shadow-md shadow-purple-600/30 disabled:opacity-50 whitespace-nowrap self-start sm:self-auto"
                           >

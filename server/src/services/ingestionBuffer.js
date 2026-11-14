@@ -360,6 +360,14 @@ class IngestionBuffer {
       byJunction,
     };
   }
+
+  shutdown() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    this.isFlushing = false;
+  }
 }
 
 export const ingestionBuffer = new IngestionBuffer();

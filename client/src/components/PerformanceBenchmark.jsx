@@ -1,10 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Cpu, Zap, Activity, HardDrive, CheckCircle2, AlertOctagon, Play, BarChart2 } from 'lucide-react';
+import {
+  Zap,
+  Activity,
+  HardDrive,
+  CheckCircle2,
+  AlertOctagon,
+  Play,
+  WifiOff,
+  RotateCcw,
+} from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { api } from '../services/api';
 
 export function PerformanceBenchmark() {
-  const { stats, clientLatency } = useSocket();
+  const {
+    stats,
+    clientLatency,
+    isConnected,
+    lastReplayStats,
+    disconnectCountdownSec,
+    simulateDisconnect,
+  } = useSocket();
   const [isStressTesting, setIsStressTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [fps, setFps] = useState(60);
@@ -31,50 +47,88 @@ export function PerformanceBenchmark() {
     return () => cancelAnimationFrame(animId);
   }, []);
 
-  const runBrowserStressTest = async (count = 1000) => {
+  const runBrowserStressTest = async (count = 500) => {
     setIsStressTesting(true);
     setTestResult(null);
 
     const startTime = performance.now();
-    const batch = [];
     const now = Date.now();
+    const events = [];
 
     for (let i = 0; i < count; i++) {
-      batch.push({
+      events.push({
         eventId: `BENCH-${now}-${i}`,
-        deviceId: 'srv-us-east-prod',
-        category: 'server',
-        timestamp: new Date().toISOString(),
-        sequence: i,
-        metrics: {
-          cpuPercent: parseFloat((45 + Math.random() * 30).toFixed(2)),
-          memoryPercent: 70,
-          latencyMs: Math.round(20 + Math.random() * 20),
+        junctionId: 'JNC-BLR-001',
+        deviceId: 'JNC-BLR-001',
+        zoneId: 'south-bangalore',
+        category: 'south-bangalore',
+        timestamp: new Date(now + i).toISOString(),
+        sequence: now + i,
+        status: 'healthy',
+        data: {
+          approaches: [
+            {
+              road: 'Hosur Rd (from south)',
+              dir: 'S',
+              lanes: 3,
+              vehiclesPerMin: 52,
+              queueLengthM: 48,
+              avgSpeedKmph: 24.5,
+              signal: 'green',
+            },
+            {
+              road: 'ORR (from east)',
+              dir: 'E',
+              lanes: 3,
+              vehiclesPerMin: 44,
+              queueLengthM: 62,
+              avgSpeedKmph: 19.2,
+              signal: 'red',
+            },
+          ],
+          vehicleMix: { twoWheeler: 0.55, car: 0.3, bus: 0.05, truck: 0.1 },
+          totalFlowVehiclesPerMin: 96,
+          maxQueueLengthM: 62,
+          avgSpeedKmph: 21.8,
+          congestionScore: 34,
         },
       });
     }
 
     try {
-      const res = await api.ingestBatch(batch);
-      const totalTimeMs = Math.round(performance.now() - startTime);
-      const throughput = Math.round((count / totalTimeMs) * 1000);
+      let totalAccepted = 0;
+      let totalAnomalies = 0;
+      let serverLatencyMs = 0;
+      const chunkSize = 1000;
+
+      for (let offset = 0; offset < events.length; offset += chunkSize) {
+        const chunk = events.slice(offset, offset + chunkSize);
+        const res = await api.ingestBatch(chunk);
+        totalAccepted += res.accepted ?? chunk.length;
+        totalAnomalies += res.anomaliesCount || 0;
+        serverLatencyMs += res.batchProcessingLatencyMs || 0;
+      }
+
+      const totalTimeMs = Math.max(1, Math.round(performance.now() - startTime));
+      const throughput = Math.round((totalAccepted / totalTimeMs) * 1000);
 
       setTestResult({
-        count,
+        count: totalAccepted,
         totalTimeMs,
         throughput,
-        serverLatencyMs: res.batchProcessingLatencyMs,
-        anomaliesCount: res.anomaliesCount,
+        serverLatencyMs,
+        anomaliesCount: totalAnomalies,
       });
     } catch (err) {
-      console.error(err);
       setTestResult({ error: err.message });
     } finally {
       setIsStressTesting(false);
     }
   };
 
-  const bufferPercentage = Math.min(100, Math.round((stats.bufferSize / 10000) * 100));
+  const bufferPercentage = Math.min(100, Math.round(((stats.bufferSize || 0) / 10000) * 100));
+  const roomEntries = Object.entries(stats.socketBytesByRoom || {}).sort((a, b) => b[1] - a[1]);
+  const wireComp = stats.wireComparison;
 
   return (
     <div className="space-y-4">
@@ -87,10 +141,10 @@ export function PerformanceBenchmark() {
           </div>
           <div className="mt-2 text-2xl font-bold font-mono text-white flex items-baseline gap-2">
             <span>{fps}</span>
-            <span className="text-xs text-emerald-400 font-semibold">Smooth 60 FPS Target</span>
+            <span className="text-xs text-emerald-400 font-semibold">60 FPS External Store</span>
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            Throttled micro-batching prevents excessive DOM re-renders
+            useSyncExternalStore isolates hot 100ms ticks per junction
           </p>
         </div>
 
@@ -100,7 +154,7 @@ export function PerformanceBenchmark() {
             <HardDrive className="w-4 h-4 text-cyan-400" />
           </div>
           <div className="mt-2 text-2xl font-bold font-mono text-white flex items-baseline gap-2">
-            <span>{stats.bufferSize}</span>
+            <span>{stats.bufferSize || 0}</span>
             <span className="text-xs text-slate-400 font-normal">/ 10,000 max</span>
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
@@ -118,25 +172,120 @@ export function PerformanceBenchmark() {
           </div>
           <div className="mt-2 text-2xl font-bold font-mono text-white flex items-baseline gap-2">
             <span>{clientLatency || 1} ms</span>
-            <span className="text-xs text-emerald-400 font-semibold">Real-time</span>
+            <span className="text-xs text-emerald-400 font-semibold">
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </span>
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            Socket.IO bi-directional ping-pong measurement
+            {(stats.socketBytesPerSec || 0).toLocaleString()} B/s server egress
           </p>
         </div>
 
         <div className="rounded-xl border border-slate-800 bg-[#0B101D] p-4">
           <div className="flex items-center justify-between text-xs text-slate-400">
-            <span>Dropped Packets</span>
+            <span>Backpressure / Dropped</span>
             <AlertOctagon className="w-4 h-4 text-rose-400" />
           </div>
           <div className="mt-2 text-2xl font-bold font-mono text-white flex items-baseline gap-2">
-            <span>{stats.totalDropped}</span>
-            <span className="text-xs text-emerald-400 font-semibold">Zero Loss</span>
+            <span>{stats.socketCoalescedCount || 0}</span>
+            <span className="text-xs text-amber-400 font-semibold">coalesced</span>
+            <span className="text-xs text-slate-400 font-mono">
+              / {stats.socketDroppedCount || 0} dropped
+            </span>
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            Backpressure protection & deduplication filter
+            Queue dropped: {stats.totalDropped || 0} • Bounded per-socket coalesce
           </p>
+        </div>
+      </div>
+
+      {/* Wire v1 Egress & Resume Lab */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="rounded-xl border border-slate-800 bg-[#0B101D] p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-sm text-slate-100">
+              Wire v1 Bandwidth & Per-Room Egress
+            </h3>
+            {wireComp && (
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                -{wireComp.zoneSavingsPct}% vs JSON
+              </span>
+            )}
+          </div>
+
+          {wireComp && (
+            <div className="grid grid-cols-3 gap-2 font-mono text-xs">
+              <div className="p-2.5 rounded bg-slate-950/70 border border-slate-800">
+                <span className="text-[10px] text-slate-500 block">FULL JSON / EVT</span>
+                <span className="text-rose-300 font-bold">{wireComp.fullBytesPerEvent} B</span>
+              </div>
+              <div className="p-2.5 rounded bg-slate-950/70 border border-slate-800">
+                <span className="text-[10px] text-slate-500 block">ZONE TUPLE / EVT</span>
+                <span className="text-emerald-400 font-bold">{wireComp.zoneWireBytesPerEvent} B</span>
+              </div>
+              <div className="p-2.5 rounded bg-slate-950/70 border border-slate-800">
+                <span className="text-[10px] text-slate-500 block">JUNCTION WIRE / EVT</span>
+                <span className="text-cyan-400 font-bold">{wireComp.junctionWireBytesPerEvent} B</span>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-1 font-mono text-[11px]">
+            <span className="text-[10px] text-slate-500 uppercase block">
+              Egress Bytes by Room (latest 1s window: {(stats.socketBytesPerSec || 0).toLocaleString()} B/s)
+            </span>
+            {roomEntries.length === 0 ? (
+              <div className="text-slate-500 py-2">Awaiting room traffic...</div>
+            ) : (
+              roomEntries.slice(0, 6).map(([room, bytes]) => (
+                <div key={room} className="flex items-center justify-between text-slate-300 py-0.5 border-b border-slate-900">
+                  <span>{room}</span>
+                  <span className="text-cyan-400 font-semibold">{bytes.toLocaleString()} B</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Disconnect & Gapless Resume Control */}
+        <div className="rounded-xl border border-slate-800 bg-[#0B101D] p-4 flex flex-col justify-between gap-3">
+          <div>
+            <h3 className="font-bold text-sm text-slate-100">
+              Disconnect & Cursor Resume Verification
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Closes the client WebSocket for 10 seconds, then auto-resumes via sequence cursor ring + MongoDB fallback with zero dropped live frames.
+            </p>
+          </div>
+
+          {lastReplayStats && (
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono flex items-center gap-2">
+              <RotateCcw className="w-4 h-4 flex-shrink-0" />
+              <span>
+                replayed {lastReplayStats.replayed} frames, {lastReplayStats.fromMemory} from memory,{' '}
+                {lastReplayStats.fromDb} from DB, gap {lastReplayStats.gap}
+                {lastReplayStats.clipped ? ' (clipped)' : ''}
+              </span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs font-mono text-slate-400">
+              Socket state: <strong className={isConnected ? 'text-emerald-400' : 'text-rose-400'}>{isConnected ? 'ONLINE' : 'OFFLINE'}</strong>
+            </span>
+            <button
+              onClick={() => simulateDisconnect(10000)}
+              disabled={disconnectCountdownSec > 0}
+              className="px-3.5 py-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-60"
+            >
+              <WifiOff className="w-3.5 h-3.5" />
+              <span>
+                {disconnectCountdownSec > 0
+                  ? `Reconnecting in ${disconnectCountdownSec}s...`
+                  : 'Simulate disconnect 10 s'}
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -151,11 +300,10 @@ export function PerformanceBenchmark() {
               </span>
             </h3>
             <p className="text-xs text-slate-400">
-              Injects dense synthetic batches to measure raw HTTP ingestion, pipeline validation, and Socket.IO broadcast latency
+              Injects dense synthetic Bengaluru junction batches (requires City Admin role) to measure ingestion & Socket.IO fanout
             </p>
           </div>
 
-          {/* Test Buttons */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => runBrowserStressTest(500)}

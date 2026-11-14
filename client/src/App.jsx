@@ -18,13 +18,21 @@ import { NetworkTopologyView } from './components/NetworkTopologyView';
 import { CopilotModal } from './components/CopilotModal';
 import { api } from './services/api';
 
+const ALL_ZONES = [
+  'south-bangalore',
+  'east-bangalore',
+  'north-bangalore',
+  'central-bangalore',
+];
+
 function MainApp() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [devices, setDevices] = useState([]);
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [copilotDevice, setCopilotDevice] = useState(null);
   const [alertsList, setAlertsList] = useState([]);
-  const { alerts } = useSocket();
+  const [dashboardZoneFilter, setDashboardZoneFilter] = useState('all');
+  const { alerts, setViewSubscription } = useSocket();
 
   // Load devices on mount
   const loadDevices = async () => {
@@ -50,6 +58,78 @@ function MainApp() {
     loadDevices();
     loadAlerts();
   }, []);
+
+  // Selective room subscriptions following the currently open view
+  useEffect(() => {
+    if (selectedDevice) {
+      setViewSubscription({
+        city: true,
+        zones: [],
+        junctions: [selectedDevice.deviceId],
+        alerts: ['all'],
+        engineering: false,
+      });
+      return;
+    }
+
+    switch (activeTab) {
+      case 'dashboard': {
+        const zones =
+          dashboardZoneFilter === 'all' ? ALL_ZONES : [dashboardZoneFilter];
+        const alertsScope =
+          dashboardZoneFilter === 'all' ? ['all'] : [dashboardZoneFilter];
+        setViewSubscription({
+          city: true,
+          zones,
+          junctions: [],
+          alerts: alertsScope,
+          engineering: false,
+        });
+        break;
+      }
+      case 'map':
+      case 'topology':
+        setViewSubscription({
+          city: true,
+          zones: ALL_ZONES,
+          junctions: [],
+          alerts: [],
+          engineering: false,
+        });
+        break;
+      case 'inspector':
+      case 'multiclient':
+        setViewSubscription({
+          city: true,
+          zones: ALL_ZONES,
+          junctions: [],
+          alerts: ['all'],
+          engineering: true,
+        });
+        break;
+      case 'benchmarks':
+      case 'simulator':
+        setViewSubscription({
+          city: true,
+          zones: [],
+          junctions: [],
+          alerts: [],
+          engineering: true,
+        });
+        break;
+      case 'historical':
+      case 'architecture':
+      default:
+        setViewSubscription({
+          city: true,
+          zones: [],
+          junctions: [],
+          alerts: [],
+          engineering: false,
+        });
+        break;
+    }
+  }, [activeTab, dashboardZoneFilter, selectedDevice, setViewSubscription]);
 
   // Sync incoming socket alerts into local alert list
   useEffect(() => {
@@ -94,6 +174,8 @@ function MainApp() {
               devices={devices}
               onSelectDevice={(dev) => setSelectedDevice(dev)}
               onOpenCopilot={(dev) => setCopilotDevice(dev)}
+              zoneFilter={dashboardZoneFilter}
+              onZoneFilterChange={setDashboardZoneFilter}
             />
           </>
         )}

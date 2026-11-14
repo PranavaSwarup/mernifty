@@ -6,7 +6,8 @@ let mongodInstance = null;
 export async function connectDB() {
   // Option 1: Try connecting to configured MONGODB_URI
   try {
-    console.log(`[DB] Attempting connection to MongoDB at: ${config.mongoUri}...`);
+    const safeUri = config.mongoUri.replace(/:\/\/([^:@]+):([^@]+)@/, '://$1:***@');
+    console.log(`[DB] Attempting connection to MongoDB at: ${safeUri}...`);
     await mongoose.connect(config.mongoUri, {
       serverSelectionTimeoutMS: 3000,
       connectTimeoutMS: 3000,

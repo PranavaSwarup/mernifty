@@ -159,6 +159,10 @@ class SimulatorService {
     console.log('[TrafficSimulator] Stopped.');
   }
 
+  shutdown() {
+    this.stop();
+  }
+
   setRate(rate) {
     this.start(rate);
   }

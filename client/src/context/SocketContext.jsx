@@ -1,70 +1,326 @@
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useSyncExternalStore,
+} from 'react';
 import { io } from 'socket.io-client';
 import { playAlertSound } from '../utils/sound';
+import { useAuth } from './AuthContext';
+import {
+  DEFAULT_WIRE_SCHEMA,
+  decodeZoneBatch,
+  decodeJunctionBatch,
+} from '../shared/wire.js';
+
+const ALL_ZONES = [
+  'south-bangalore',
+  'east-bangalore',
+  'north-bangalore',
+  'central-bangalore',
+];
+
+/**
+ * External hot-state store backed by useSyncExternalStore.
+ * Eliminates full-tree React re-renders on 24+ frames/sec by dispatching
+ * per-junction updates at a 100ms render cadence.
+ */
+class TelemetryHotStore {
+  constructor() {
+    this.latestByJunction = {};
+    this.recentFrames = [];
+    this.stats = {
+      ingestRate: 0,
+      broadcastRate: 0,
+      persistRate: 0,
+      totalIngested: 0,
+      totalBroadcasted: 0,
+      totalPersisted: 0,
+      totalDropped: 0,
+      avgLatencyMs: 0,
+      connectedSockets: 1,
+      bufferSize: 0,
+      uptimeSeconds: 0,
+      socketBytesPerSec: 0,
+      socketBytesByRoom: {},
+      totalSocketBytes: 0,
+      socketCoalescedCount: 0,
+      socketDroppedCount: 0,
+      wireComparison: null,
+    };
+
+    this.junctionListeners = new Map();
+    this.allJunctionListeners = new Set();
+    this.recentListeners = new Set();
+    this.statsListeners = new Set();
+  }
+
+  subscribeJunction(junctionId, cb) {
+    if (!this.junctionListeners.has(junctionId)) {
+      this.junctionListeners.set(junctionId, new Set());
+    }
+    this.junctionListeners.get(junctionId).add(cb);
+    return () => {
+      const set = this.junctionListeners.get(junctionId);
+      if (set) {
+        set.delete(cb);
+        if (set.size === 0) this.junctionListeners.delete(junctionId);
+      }
+    };
+  }
+
+  subscribeAllJunctions(cb) {
+    this.allJunctionListeners.add(cb);
+    return () => this.allJunctionListeners.delete(cb);
+  }
+
+  subscribeRecent(cb) {
+    this.recentListeners.add(cb);
+    return () => this.recentListeners.delete(cb);
+  }
+
+  subscribeStats(cb) {
+    this.statsListeners.add(cb);
+    return () => this.statsListeners.delete(cb);
+  }
+
+  getJunctionSnapshot(junctionId) {
+    return this.latestByJunction[junctionId] || null;
+  }
+
+  getAllJunctionsSnapshot = () => this.latestByJunction;
+  getRecentSnapshot = () => this.recentFrames;
+  getStatsSnapshot = () => this.stats;
+
+  applyBatch(decodedEvents) {
+    if (!decodedEvents || decodedEvents.length === 0) return;
+
+    const changedIds = new Set();
+    const nextLatest = { ...this.latestByJunction };
+
+    for (const item of decodedEvents) {
+      const jId = item.junctionId || item.deviceId;
+      if (!jId) continue;
+      // Preserve nested approaches when a zone summary update arrives for the same junction
+      const existing = nextLatest[jId];
+      const mergedItem =
+        existing?.data?.approaches?.length && !item.data?.approaches?.length
+          ? {
+              ...item,
+              data: {
+                ...item.data,
+                approaches: existing.data.approaches,
+                vehicleMix: item.data?.vehicleMix || existing.data.vehicleMix,
+              },
+            }
+          : item;
+      nextLatest[jId] = mergedItem;
+      changedIds.add(jId);
+    }
+
+    this.latestByJunction = nextLatest;
+    this.recentFrames = [...decodedEvents.slice().reverse(), ...this.recentFrames].slice(0, 100);
+
+    for (const jId of changedIds) {
+      const set = this.junctionListeners.get(jId);
+      if (set) set.forEach((cb) => cb());
+    }
+    this.allJunctionListeners.forEach((cb) => cb());
+    this.recentListeners.forEach((cb) => cb());
+  }
+
+  setStats(nextStats) {
+    this.stats = nextStats;
+    this.statsListeners.forEach((cb) => cb());
+  }
+}
+
+const hotStore = new TelemetryHotStore();
 
 const SocketContext = createContext(null);
 
 export function SocketProvider({ children }) {
+  const { token, user } = useAuth();
+
   const [isConnected, setIsConnected] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const soundEnabledRef = useRef(true);
   soundEnabledRef.current = soundEnabled;
-  const [stats, setStats] = useState({
-    ingestRate: 0,
-    broadcastRate: 0,
-    persistRate: 0,
-    totalIngested: 0,
-    totalBroadcasted: 0,
-    totalPersisted: 0,
-    avgLatencyMs: 0,
-    connectedSockets: 1,
-    bufferSize: 0,
-    uptimeSeconds: 0,
-  });
 
   const [alerts, setAlerts] = useState([]);
-  const [latestByDevice, setLatestByDevice] = useState({});
-  const [recentEvents, setRecentEvents] = useState([]);
+  const [counterfactual, setCounterfactual] = useState(null);
   const [isPaused, setIsPaused] = useState(false);
   const [clientLatency, setClientLatency] = useState(0);
-  const [activeCategory, setActiveCategory] = useState('all');
+  const [schema, setSchema] = useState(DEFAULT_WIRE_SCHEMA);
+  const [lastReplayStats, setLastReplayStats] = useState(null);
+  const [socketError, setSocketError] = useState(null);
+  const [disconnectCountdownSec, setDisconnectCountdownSec] = useState(0);
 
+  const schemaRef = useRef(DEFAULT_WIRE_SCHEMA);
   const socketRef = useRef(null);
   const pendingBufferRef = useRef([]);
+  const cursorsRef = useRef({});
+  const hasConnectedOnceRef = useRef(false);
   const isPausedRef = useRef(false);
   isPausedRef.current = isPaused;
 
+  const viewSubsRef = useRef({
+    city: true,
+    zones: [...ALL_ZONES],
+    junctions: [],
+    alerts: ['all'],
+    engineering: false,
+  });
+  const detailJunctionsRef = useRef(new Set());
+  const disconnectTimerRef = useRef(null);
+
+  const computeEffectiveSubscriptions = useCallback(() => {
+    const base = viewSubsRef.current;
+    const isOperator = user?.role === 'operator';
+    const userZones = Array.isArray(user?.zones) ? user.zones : [];
+
+    let zones = Array.isArray(base.zones) ? base.zones : [];
+    if (isOperator && userZones.length > 0) {
+      zones = zones.filter((z) => userZones.includes(z));
+      if (zones.length === 0) zones = [...userZones];
+    }
+
+    const alertsSub =
+      Array.isArray(base.alerts) && base.alerts.length > 0
+        ? isOperator
+          ? userZones
+          : base.alerts
+        : isOperator
+          ? userZones
+          : ['all'];
+
+    const junctions = Array.from(
+      new Set([...(base.junctions || []), ...Array.from(detailJunctionsRef.current)])
+    );
+
+    return {
+      city: Boolean(base.city),
+      engineering: Boolean(base.engineering),
+      zones,
+      junctions,
+      alerts: alertsSub,
+    };
+  }, [user]);
+
+  const sendActiveSubscription = useCallback(
+    (forceResume = false) => {
+      const sock = socketRef.current;
+      if (!sock || !sock.connected) return;
+      const subs = computeEffectiveSubscriptions();
+      const hasCursors = Object.keys(cursorsRef.current).length > 0;
+
+      if (forceResume || hasCursors) {
+        sock.emit('resume', { subscriptions: subs, cursors: cursorsRef.current });
+      } else {
+        sock.emit('subscribe', subs);
+      }
+    },
+    [computeEffectiveSubscriptions]
+  );
+
+  // Recreate socket whenever auth token changes so server re-authenticates JWT cleanly
   useEffect(() => {
-    // Connect to backend Socket.IO
+    if (disconnectTimerRef.current) {
+      clearInterval(disconnectTimerRef.current);
+      disconnectTimerRef.current = null;
+      setDisconnectCountdownSec(0);
+    }
+
     const socket = io({
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 15,
+      reconnectionAttempts: 20,
       reconnectionDelay: 1000,
+      auth: token ? { token } : {},
     });
     socketRef.current = socket;
 
+    const acceptDecodedEvents = (events) => {
+      if (isPausedRef.current || !Array.isArray(events) || events.length === 0) return;
+      const fresh = [];
+      for (const evt of events) {
+        const jId = evt.junctionId || evt.deviceId;
+        const seq = Number(evt.sequence) || 0;
+        const prevSeq = cursorsRef.current[jId] || 0;
+        if (seq > 0 && seq <= prevSeq) continue;
+        if (seq > prevSeq) {
+          cursorsRef.current[jId] = seq;
+        }
+        fresh.push(evt);
+      }
+      if (fresh.length > 0) {
+        pendingBufferRef.current.push(...fresh);
+      }
+    };
+
     socket.on('connect', () => {
       setIsConnected(true);
-      console.log('[Socket] Connected to telemetry server, ID:', socket.id);
+      setSocketError(null);
+      const isReconnect = hasConnectedOnceRef.current || Object.keys(cursorsRef.current).length > 0;
+      hasConnectedOnceRef.current = true;
+      sendActiveSubscription(isReconnect);
+    });
+
+    socket.on('connect_error', (err) => {
+      setSocketError(err?.message || 'Socket connection failed');
     });
 
     socket.on('disconnect', () => {
       setIsConnected(false);
-      console.log('[Socket] Disconnected from telemetry server');
     });
 
-    // Throughput stats
+    socket.on('error', (errPayload) => {
+      setSocketError(errPayload?.message || errPayload?.code || 'Socket authorization error');
+    });
+
+    socket.on('wire:schema', (srvSchema) => {
+      if (srvSchema && Array.isArray(srvSchema.junctionIds)) {
+        schemaRef.current = srvSchema;
+        setSchema(srvSchema);
+      }
+    });
+
     socket.on('metrics:snapshot', (snapshot) => {
-      setStats(snapshot);
+      hotStore.setStats(snapshot);
     });
 
-    // Ingested & broadcast telemetry batches
-    socket.on('telemetry:batch', (batch) => {
+    socket.on('cf:update', (cf) => {
+      setCounterfactual(cf);
+    });
+
+    socket.on('telemetry:zone', (wirePkt) => {
       if (isPausedRef.current) return;
-      pendingBufferRef.current.push(...batch);
+      const decoded = decodeZoneBatch(wirePkt, schemaRef.current);
+      acceptDecodedEvents(decoded);
     });
 
-    // Live alert events
+    socket.on('telemetry:junction', (wirePkt) => {
+      if (isPausedRef.current) return;
+      const decoded = decodeJunctionBatch(wirePkt, schemaRef.current);
+      acceptDecodedEvents(decoded);
+    });
+
+    socket.on('replay', (replayPkt) => {
+      if (Array.isArray(replayPkt?.events)) {
+        acceptDecodedEvents(replayPkt.events);
+      }
+      setLastReplayStats({
+        replayed: replayPkt?.replayed || 0,
+        fromMemory: replayPkt?.fromMemory || 0,
+        fromDb: replayPkt?.fromDb || 0,
+        clipped: Boolean(replayPkt?.clipped),
+        gap: 0,
+        receivedAt: new Date().toISOString(),
+      });
+    });
+
     socket.on('alert:new', (newAlert) => {
       setAlerts((prev) => [newAlert, ...prev.slice(0, 49)]);
       if (soundEnabledRef.current) {
@@ -72,7 +328,6 @@ export function SocketProvider({ children }) {
       }
     });
 
-    // Telemetry ping-pong for real-time WebSocket RTT latency
     const pingInterval = setInterval(() => {
       if (socket.connected) {
         socket.emit('telemetry:ping', Date.now());
@@ -84,26 +339,11 @@ export function SocketProvider({ children }) {
       setClientLatency(rtt);
     });
 
-    // Client-side Throttled Window Flush (every 100ms ~ 10 FPS)
-    // Prevents excessive React re-renders when handling 100-1000+ events/sec
+    // 100ms throttled render flush to external hot store
     const flushInterval = setInterval(() => {
       if (pendingBufferRef.current.length === 0) return;
-
       const batchToProcess = pendingBufferRef.current.splice(0, pendingBufferRef.current.length);
-
-      setLatestByDevice((prev) => {
-        const next = { ...prev };
-        for (const item of batchToProcess) {
-          next[item.deviceId] = item;
-        }
-        return next;
-      });
-
-      setRecentEvents((prev) => {
-        // Keep circular buffer of last 100 events
-        const merged = [...batchToProcess.reverse(), ...prev];
-        return merged.slice(0, 100);
-      });
+      hotStore.applyBatch(batchToProcess);
     }, 100);
 
     return () => {
@@ -111,37 +351,88 @@ export function SocketProvider({ children }) {
       clearInterval(flushInterval);
       socket.disconnect();
     };
-  }, []);
+  }, [token, sendActiveSubscription]);
 
-  // Room Subscription helper
-  const subscribeCategory = useCallback((category) => {
-    setActiveCategory(category);
-    if (!socketRef.current) return;
+  const setViewSubscription = useCallback(
+    (nextViewSubs) => {
+      viewSubsRef.current = {
+        city: Boolean(nextViewSubs.city),
+        engineering: Boolean(nextViewSubs.engineering),
+        zones: Array.isArray(nextViewSubs.zones) ? nextViewSubs.zones : [],
+        junctions: Array.isArray(nextViewSubs.junctions) ? nextViewSubs.junctions : [],
+        alerts: Array.isArray(nextViewSubs.alerts) ? nextViewSubs.alerts : ['all'],
+      };
+      sendActiveSubscription(false);
+    },
+    [sendActiveSubscription]
+  );
 
-    if (category === 'all') {
-      socketRef.current.emit('subscribe:category', 'server');
-      socketRef.current.emit('subscribe:category', 'fleet');
-      socketRef.current.emit('subscribe:category', 'turbine');
-    } else {
-      socketRef.current.emit('subscribe:category', category);
-    }
-  }, []);
+  const subscribeCategory = useCallback(
+    (category) => {
+      const zones = !category || category === 'all' ? [...ALL_ZONES] : [category];
+      setViewSubscription({ ...viewSubsRef.current, zones });
+    },
+    [setViewSubscription]
+  );
 
-  const subscribeDevice = useCallback((deviceId) => {
-    if (socketRef.current && deviceId) {
-      socketRef.current.emit('subscribe:device', deviceId);
-    }
-  }, []);
+  const subscribeDevice = useCallback(
+    (deviceId) => {
+      if (!deviceId) return;
+      detailJunctionsRef.current.add(deviceId);
+      sendActiveSubscription(false);
+    },
+    [sendActiveSubscription]
+  );
 
-  const unsubscribeDevice = useCallback((deviceId) => {
-    if (socketRef.current && deviceId) {
-      socketRef.current.emit('unsubscribe:device', deviceId);
-    }
+  const unsubscribeDevice = useCallback(
+    (deviceId) => {
+      if (!deviceId) return;
+      detailJunctionsRef.current.delete(deviceId);
+      sendActiveSubscription(false);
+    },
+    [sendActiveSubscription]
+  );
+
+  const simulateDisconnect = useCallback((durationMs = 10000) => {
+    const sock = socketRef.current;
+    if (!sock) return;
+    if (disconnectTimerRef.current) clearInterval(disconnectTimerRef.current);
+
+    let remainingSec = Math.max(1, Math.round(durationMs / 1000));
+    setDisconnectCountdownSec(remainingSec);
+    sock.disconnect();
+
+    disconnectTimerRef.current = setInterval(() => {
+      remainingSec -= 1;
+      if (remainingSec <= 0) {
+        clearInterval(disconnectTimerRef.current);
+        disconnectTimerRef.current = null;
+        setDisconnectCountdownSec(0);
+        if (socketRef.current) {
+          socketRef.current.connect();
+        }
+      } else {
+        setDisconnectCountdownSec(remainingSec);
+      }
+    }, 1000);
   }, []);
 
   const togglePause = useCallback(() => {
     setIsPaused((prev) => !prev);
   }, []);
+
+  const stats = useSyncExternalStore(
+    hotStore.subscribeStats.bind(hotStore),
+    hotStore.getStatsSnapshot
+  );
+  const latestByDevice = useSyncExternalStore(
+    hotStore.subscribeAllJunctions.bind(hotStore),
+    hotStore.getAllJunctionsSnapshot
+  );
+  const recentEvents = useSyncExternalStore(
+    hotStore.subscribeRecent.bind(hotStore),
+    hotStore.getRecentSnapshot
+  );
 
   return (
     <SocketContext.Provider
@@ -151,6 +442,7 @@ export function SocketProvider({ children }) {
         stats,
         alerts,
         setAlerts,
+        counterfactual,
         latestByDevice,
         recentEvents,
         isPaused,
@@ -158,14 +450,52 @@ export function SocketProvider({ children }) {
         soundEnabled,
         setSoundEnabled,
         clientLatency,
-        activeCategory,
+        schema,
+        lastReplayStats,
+        socketError,
+        setSocketError,
+        disconnectCountdownSec,
+        simulateDisconnect,
+        setViewSubscription,
         subscribeCategory,
         subscribeDevice,
         unsubscribeDevice,
+        cursorsRef,
       }}
     >
       {children}
     </SocketContext.Provider>
+  );
+}
+
+export function getJunctionSnapshot(junctionId) {
+  return junctionId ? hotStore.getJunctionSnapshot(junctionId) : null;
+}
+
+export function useJunctionLive(junctionId) {
+  return useSyncExternalStore(
+    useCallback(
+      (cb) => (junctionId ? hotStore.subscribeJunction(junctionId, cb) : () => {}),
+      [junctionId]
+    ),
+    useCallback(
+      () => (junctionId ? hotStore.getJunctionSnapshot(junctionId) : null),
+      [junctionId]
+    )
+  );
+}
+
+export function useSocketStats() {
+  return useSyncExternalStore(
+    useCallback((cb) => hotStore.subscribeStats(cb), []),
+    hotStore.getStatsSnapshot
+  );
+}
+
+export function useRecentFrames() {
+  return useSyncExternalStore(
+    useCallback((cb) => hotStore.subscribeRecent(cb), []),
+    hotStore.getRecentSnapshot
   );
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -7,94 +7,105 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  ReferenceLine,
 } from 'recharts';
 import {
   X as CloseIcon,
   Copy as CopyIcon,
   Check as CheckIcon,
   Camera as CameraIcon,
-  MapPin,
-  Clock,
-  Layers,
-  Database,
-  Radio,
-  Car,
-  AlertTriangle,
 } from 'lucide-react';
 import { api } from '../services/api';
-import { useSocket } from '../context/SocketContext';
+import {
+  useSocket,
+  useJunctionLive,
+  getJunctionSnapshot,
+} from '../context/SocketContext';
+import { createHistoryLiveState, mergeLiveFrame } from '../utils/historyMerge';
 
 export function DeviceDetailModal({ device, onClose }) {
-  const { latestByDevice, subscribeDevice, unsubscribeDevice } = useSocket();
-  const [historicalData, setHistoricalData] = useState([]);
-  const [mergedTimeline, setMergedTimeline] = useState([]);
+  const { subscribeDevice, unsubscribeDevice } = useSocket();
+  const currentLive = useJunctionLive(device?.deviceId);
+  const [historyState, setHistoryState] = useState(() =>
+    createHistoryLiveState([], 0, 1200)
+  );
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [copied, setCopied] = useState(false);
-  const seenEventIdsRef = useRef(new Set());
+  const historyReadyRef = useRef(null);
 
-  // 1. Fetch historical data from MongoDB on mount
+  // 1. Fetch 1200-pt historical data + cursor from MongoDB and subscribe to junction room
   useEffect(() => {
     if (!device) return;
+    let cancelled = false;
 
+    historyReadyRef.current = null;
     subscribeDevice(device.deviceId);
     setIsLoadingHistory(true);
+    setHistoryState(createHistoryLiveState([], 0, 1200));
 
-    api.getHistory({ deviceId: device.deviceId, limit: 40 })
+    api
+      .getHistory({ junctionId: device.deviceId, limit: 1200 })
       .then((res) => {
-        if (res.records) {
-          const formattedHistory = res.records.map((r) => {
-            seenEventIdsRef.current.add(r.eventId);
-            return {
-              ...r,
-              sourceType: 'HISTORICAL_MONGODB',
-              formattedTime: new Date(r.timestamp).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-              }),
-            };
-          });
-          setHistoricalData(formattedHistory);
-          setMergedTimeline(formattedHistory);
+        if (cancelled) return;
+        const records = Array.isArray(res?.records) ? res.records : [];
+        const serverCursor =
+          Number(res?.maxSequence) ||
+          Number(res?.cursor?.[device.deviceId]) ||
+          0;
+        let nextState = createHistoryLiveState(records, serverCursor, 1200);
+
+        const cachedLive = getJunctionSnapshot(device.deviceId);
+        if (cachedLive) {
+          nextState = mergeLiveFrame(nextState, cachedLive);
+        }
+
+        historyReadyRef.current = device.deviceId;
+        setHistoryState(nextState);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('Error fetching history:', err);
+          historyReadyRef.current = device.deviceId;
         }
       })
-      .catch((err) => console.error('Error fetching history:', err))
-      .finally(() => setIsLoadingHistory(false));
+      .finally(() => {
+        if (!cancelled) setIsLoadingHistory(false);
+      });
 
     return () => {
+      cancelled = true;
       unsubscribeDevice(device.deviceId);
-      seenEventIdsRef.current.clear();
     };
   }, [device, subscribeDevice, unsubscribeDevice]);
 
-  // 2. Seamlessly reconcile incoming live Socket.IO events into the timeline
+  // 2. Reconcile incoming live Socket.IO frames strictly for sequence > cursor without duplicates
   useEffect(() => {
-    if (!device) return;
-    const liveEvt = latestByDevice[device.deviceId];
-    if (!liveEvt || !liveEvt.eventId) return;
+    if (!device || !currentLive) return;
+    const evtJunction = currentLive.junctionId || currentLive.deviceId;
+    if (evtJunction !== device.deviceId) return;
+    if (historyReadyRef.current !== device.deviceId) return;
 
-    if (seenEventIdsRef.current.has(liveEvt.eventId)) return;
-    seenEventIdsRef.current.add(liveEvt.eventId);
+    setHistoryState((prev) => mergeLiveFrame(prev, currentLive));
+  }, [currentLive, device]);
 
-    const liveRecord = {
-      ...liveEvt,
-      sourceType: 'LIVE_SOCKET_IO',
-      formattedTime: new Date(liveEvt.timestamp).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      }),
-    };
+  const chartSeries = useMemo(
+    () =>
+      historyState.points.map((pt) => ({
+        time: pt.formattedTime,
+        queue: pt.maxQueueLengthM,
+        speed: pt.avgSpeedKmph,
+        source: pt.sourceType,
+      })),
+    [historyState.points]
+  );
 
-    setMergedTimeline((prev) => {
-      const updated = [...prev, liveRecord];
-      return updated.slice(-60);
-    });
-  }, [latestByDevice, device]);
+  const seamVisible = Boolean(
+    historyState.seamLabel &&
+      chartSeries.some((p) => p.time === historyState.seamLabel)
+  );
 
   if (!device) return null;
 
-  const currentLive = latestByDevice[device.deviceId];
   const metrics = currentLive?.metrics || currentLive?.data || device.lastMetrics || device.lastData || {};
   const data = currentLive?.data || device.lastData || {};
   const approaches = data.approaches || device.approaches || [];
@@ -309,28 +320,27 @@ export function DeviceDetailModal({ device, onClose }) {
                 </p>
               </div>
 
-              <div className="flex items-center gap-3 text-[10px] font-mono">
+              <div className="flex flex-wrap items-center gap-3 text-[10px] font-mono">
                 <div className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
-                  <span className="text-slate-300">HISTORICAL_MONGODB</span>
+                  <span className="text-slate-300">Historical: {historyState.historicalCount}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-emerald-300">LIVE_SOCKET_IO</span>
+                  <span className="text-emerald-300">Live: {historyState.liveCount}</span>
                 </div>
+                <div className="text-amber-300">
+                  Duplicates suppressed: {historyState.duplicateSuppressed}
+                </div>
+                {isLoadingHistory && (
+                  <span className="text-slate-400">Syncing history...</span>
+                )}
               </div>
             </div>
 
             <div className="h-48 w-full mt-2">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={mergedTimeline.map((item) => ({
-                    time: item.formattedTime,
-                    queue: item.metrics?.maxQueueLengthM || item.data?.maxQueueLengthM || 45,
-                    speed: item.metrics?.avgSpeedKmph || item.data?.avgSpeedKmph || 18,
-                    source: item.sourceType,
-                  }))}
-                >
+                <LineChart data={chartSeries}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
                   <XAxis dataKey="time" stroke="#64748B" tick={{ fontSize: 9 }} />
                   <YAxis stroke="#64748B" tick={{ fontSize: 9 }} />
@@ -342,6 +352,20 @@ export function DeviceDetailModal({ device, onClose }) {
                       fontSize: '11px',
                     }}
                   />
+                  {seamVisible && (
+                    <ReferenceLine
+                      x={historyState.seamLabel}
+                      stroke="#10B981"
+                      strokeDasharray="4 4"
+                      strokeWidth={1.5}
+                      label={{
+                        value: `live since ${historyState.seamLabel}`,
+                        position: 'insideTopRight',
+                        fill: '#34D399',
+                        fontSize: 10,
+                      }}
+                    />
+                  )}
                   <Line type="monotone" dataKey="queue" name="Queue (m)" stroke="#EF4444" strokeWidth={2} dot={false} isAnimationActive={false} />
                   <Line type="monotone" dataKey="speed" name="Speed (km/h)" stroke="#06B6D4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
                 </LineChart>
