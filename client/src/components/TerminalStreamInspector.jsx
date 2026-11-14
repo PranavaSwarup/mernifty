@@ -52,7 +52,7 @@ export function TerminalStreamInspector() {
             <Search className="w-3 h-3 absolute left-2 top-2 text-slate-500" />
             <input
               type="text"
-              placeholder="Grep 'Hosur' / 'stalled'..."
+              placeholder="Grep 'Hosur' / 'JNC-BLR-001'..."
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
               className="w-full bg-slate-900 border border-slate-800 rounded px-2 pl-7 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-emerald-500"
@@ -97,8 +97,7 @@ export function TerminalStreamInspector() {
             const jId = evt.junctionId || evt.deviceId;
             const zId = evt.zoneId || evt.category;
             const approaches = evt.data?.approaches || [];
-            const isStalled = Boolean(evt.data?.stalledVehicleDetected || evt.metrics?.stalledVehicleDetected);
-            const isAmb = Boolean(evt.data?.ambulanceDetected || evt.metrics?.ambulanceDetected);
+            const isCorridor = Boolean(evt.data?.inCorridor || evt.data?.adaptiveSignalMode === 'emergency-corridor');
 
             return (
               <div
@@ -112,14 +111,9 @@ export function TerminalStreamInspector() {
                     <span className="text-purple-400 font-medium">{zId}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {isAmb && (
+                    {isCorridor && (
                       <span className="text-blue-400 font-bold px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/30 animate-pulse">
-                        AMBULANCE
-                      </span>
-                    )}
-                    {isStalled && (
-                      <span className="text-rose-400 font-bold px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/30 animate-pulse">
-                        STALLED
+                        CORRIDOR
                       </span>
                     )}
                     <span>{new Date(evt.timestamp).toLocaleTimeString()}</span>

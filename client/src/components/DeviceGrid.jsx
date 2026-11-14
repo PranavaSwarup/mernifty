@@ -40,20 +40,12 @@ export function DeviceGrid({ devices = [], onSelectDevice, onOpenCopilot }) {
     });
   }, [devices, latestByDevice, filterZone, searchQuery, filterStatus]);
 
-  const getStatusBadge = (status, stalled, ambulance) => {
-    if (ambulance) {
+  const getStatusBadge = (status, inCorridor) => {
+    if (inCorridor) {
       return (
         <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40 animate-pulse flex items-center gap-1">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping" />
           AMBULANCE
-        </span>
-      );
-    }
-    if (stalled) {
-      return (
-        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-          STALLED VEHICLE
         </span>
       );
     }
@@ -171,8 +163,7 @@ export function DeviceGrid({ devices = [], onSelectDevice, onOpenCopilot }) {
           const status = live?.status || dev.status || 'healthy';
           const approaches = live?.data?.approaches || dev.approaches || [];
           const vehicleMix = live?.data?.vehicleMix || dev.vehicleMix || { twoWheeler: 0.55, car: 0.3, bus: 0.05, truck: 0.1 };
-          const stalled = Boolean(live?.data?.stalledVehicleDetected || metrics.stalledVehicleDetected || dev.stalledVehicleDetected);
-          const ambulance = Boolean(live?.data?.ambulanceDetected || metrics.ambulanceDetected || dev.ambulanceDetected);
+          const inCorridor = Boolean(live?.data?.inCorridor || live?.data?.adaptiveSignalMode === 'emergency-corridor' || dev.adaptiveSignalMode === 'emergency-corridor');
 
           const maxQueue = metrics.maxQueueLengthM || (approaches.length > 0 ? Math.max(...approaches.map(a => a.queueLengthM || 0)) : 45);
           const avgSpeed = metrics.avgSpeedKmph || (approaches.length > 0 ? (approaches.reduce((a, b) => a + (b.avgSpeedKmph || 15), 0) / approaches.length).toFixed(1) : 18);
@@ -182,7 +173,9 @@ export function DeviceGrid({ devices = [], onSelectDevice, onOpenCopilot }) {
             <div
               key={dev.deviceId}
               className={`group relative rounded-xl border p-4 transition-all duration-200 flex flex-col justify-between ${
-                stalled || ambulance || status === 'gridlock' || status === 'critical'
+                inCorridor
+                  ? 'bg-blue-950/20 border-blue-500/50 shadow-lg shadow-blue-950/20'
+                  : status === 'gridlock' || status === 'critical'
                   ? 'bg-rose-950/15 border-rose-500/40 hover:border-rose-500/70 shadow-lg shadow-rose-950/20'
                   : status === 'congested' || status === 'warning'
                   ? 'bg-amber-950/10 border-amber-500/30 hover:border-amber-500/60'
@@ -208,7 +201,7 @@ export function DeviceGrid({ devices = [], onSelectDevice, onOpenCopilot }) {
                       </div>
                     </div>
                   </div>
-                  <div>{getStatusBadge(status, stalled, ambulance)}</div>
+                  <div>{getStatusBadge(status, inCorridor)}</div>
                 </div>
 
                 {/* Road label / subtitle */}

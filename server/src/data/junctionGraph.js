@@ -50,6 +50,20 @@ export function haversineDistanceKm(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
+// Find nearest registered junction to given GPS coordinates
+export function findNearestJunction(lat, lon) {
+  let nearestId = null;
+  let minDistance = Infinity;
+  for (const [id, coord] of Object.entries(JUNCTION_COORDINATES)) {
+    const dist = haversineDistanceKm(lat, lon, coord.latitude, coord.longitude);
+    if (dist < minDistance) {
+      minDistance = dist;
+      nearestId = id;
+    }
+  }
+  return { nearestJunctionId: nearestId, distanceKm: minDistance, coord: JUNCTION_COORDINATES[nearestId] };
+}
+
 // Build symmetric adjacency list
 function buildSymmetricGraph() {
   const adj = {};

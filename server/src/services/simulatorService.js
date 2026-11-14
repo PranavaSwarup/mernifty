@@ -1,9 +1,12 @@
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import { ingestionBuffer } from './ingestionBuffer.js';
 import { anomalyEngine } from './anomalyEngine.js';
 import { socketService } from './socketService.js';
 import { metricsService } from './metricsService.js';
 import { corridorService } from './corridorService.js';
+import { JUNCTION_GRAPH, JUNCTION_COORDINATES } from '../data/junctionGraph.js';
+import { Alert } from '../models/Alert.js';
 
 // Predefined Bengaluru Smart City Traffic Junctions
 export const INITIAL_DEVICES = [
@@ -228,16 +231,31 @@ class SimulatorService {
     this.intervalId = null;
     this.targetRate = 12; // events per second
     this.sequenceMap = new Map();
-    this.chaosSpikes = new Map(); // junctionId -> { metric, multiplier, expiresAt, stalled, ambulance }
     this.signalPhases = new Map(); // junctionId -> { activeApproachIndex, phaseTimeRemaining }
 
-    // Initialize signal phase timers
+    // Section 5.7: Persistent Junction State
+    this.junctionStates = new Map();
     for (const junc of this.junctions) {
       this.signalPhases.set(junc.junctionId, {
         activeApproachIndex: 0,
         phaseTimeRemaining: junc.baseApproaches[0].greenSplitSec || 35,
       });
+
+      this.junctionStates.set(junc.junctionId, {
+        junctionId: junc.junctionId,
+        name: junc.name,
+        zoneId: junc.zoneId,
+        congestionScore: 40,
+        highCongestionTicks: 0, // ticks where congestionScore > 75
+        activeScenario: null, // { type: 'blockage', road, expiresAt } or { type: 'rush-hour', multiplier, expiresAt }
+        spreadPressure: 0, // 0 to 0.40 added by 1-hop neighbours
+        remediation: null, // { action: 'extend_green', road, expiresAt }
+        signalModeOverride: null, // 'manual-override' | 'dynamic-ai'
+        crossZoneAlertSentAt: 0,
+      });
     }
+
+    this.tickCount = 0;
   }
 
   start(rate = 12) {
@@ -272,37 +290,144 @@ class SimulatorService {
     this.start(rate);
   }
 
-  injectChaos(junctionId, metric, multiplier = 2.5, durationSec = 20, flags = {}) {
-    this.chaosSpikes.set(junctionId, {
-      metric,
-      multiplier,
+  // --- Named Scenarios (Section 5.6 & 5.7) ---
+
+  triggerBlockage(junctionId, road = null, durationSec = 35) {
+    const state = this.junctionStates.get(junctionId);
+    if (!state) return { success: false, error: 'Unknown junction' };
+
+    const junc = this.junctions.find((j) => j.junctionId === junctionId);
+    const targetRoad = road || junc?.baseApproaches[0]?.road || 'Arterial Entry';
+
+    state.activeScenario = {
+      type: 'blockage',
+      road: targetRoad,
       expiresAt: Date.now() + durationSec * 1000,
-      stalled: Boolean(flags.stalled),
-      ambulance: Boolean(flags.ambulance),
-    });
-    console.log(`[TrafficSimulator] Injected traffic chaos on ${junctionId}: ${metric} x${multiplier} for ${durationSec}s`);
+    };
+
+    console.log(`[TrafficSimulator] Scenario started: Sudden blockage on ${targetRoad} at ${junctionId} for ${durationSec}s`);
     return {
       success: true,
-      message: `Chaos active: ${metric} spike on ${junctionId} for ${durationSec}s`,
+      scenario: 'sudden_blockage',
+      junctionId,
+      road: targetRoad,
+      durationSec,
+      message: `Sudden blockage injected on ${targetRoad} at ${junctionId}. Speed collapsing.`,
     };
   }
 
-  clearChaos(junctionId) {
-    this.chaosSpikes.delete(junctionId);
+  triggerRushHour(zoneId = null, multiplier = 1.9, durationSec = 45) {
+    const now = Date.now();
+    let affectedCount = 0;
+
+    for (const [juncId, state] of this.junctionStates.entries()) {
+      if (!zoneId || state.zoneId === zoneId) {
+        state.activeScenario = {
+          type: 'rush-hour',
+          multiplier: parseFloat(multiplier) || 1.9,
+          expiresAt: now + durationSec * 1000,
+        };
+        affectedCount++;
+      }
+    }
+
+    console.log(`[TrafficSimulator] Scenario started: Rush hour surge in ${zoneId || 'all zones'} (x${multiplier}) for ${durationSec}s`);
+    return {
+      success: true,
+      scenario: 'rush_hour',
+      zoneId: zoneId || 'all',
+      multiplier,
+      durationSec,
+      affectedJunctions: affectedCount,
+      message: `Rush hour surge active across ${affectedCount} junctions in ${zoneId || 'city'}`,
+    };
   }
+
+  clearScenarios(junctionId = null) {
+    if (junctionId) {
+      const state = this.junctionStates.get(junctionId);
+      if (state) state.activeScenario = null;
+    } else {
+      for (const state of this.junctionStates.values()) {
+        state.activeScenario = null;
+      }
+    }
+    return { success: true, message: 'Active scenarios cleared' };
+  }
+
+  // Backward-compatible chaos method for simulatorRoutes
+  injectChaos(junctionId, metric, multiplier = 2.5, durationSec = 20) {
+    if (metric === 'blockage') {
+      return this.triggerBlockage(junctionId, null, durationSec);
+    }
+    const state = this.junctionStates.get(junctionId);
+    if (state) {
+      state.activeScenario = {
+        type: 'chaos',
+        metric,
+        multiplier,
+        expiresAt: Date.now() + durationSec * 1000,
+      };
+    }
+    return { success: true, message: `Chaos active on ${junctionId}` };
+  }
+
+  clearChaos(junctionId) {
+    const state = this.junctionStates.get(junctionId);
+    if (state) {
+      state.activeScenario = null;
+      state.remediation = null;
+    }
+  }
+
+  // --- Automatic Remediation & Officer Override Hooks (Section 5.10) ---
+
+  applyRemediationAction(junctionId, action, affectedRoad = null, durationSec = 60) {
+    const state = this.junctionStates.get(junctionId);
+    if (!state) return false;
+
+    state.remediation = {
+      action,
+      road: affectedRoad,
+      expiresAt: Date.now() + durationSec * 1000,
+    };
+    state.signalModeOverride = null;
+
+    console.log(`[TrafficSimulator] Remediation applied to ${junctionId}: ${action} for ${durationSec}s`);
+    return true;
+  }
+
+  overrideSignalMode(junctionId, mode = 'manual-override') {
+    const state = this.junctionStates.get(junctionId);
+    if (!state) return false;
+
+    state.signalModeOverride = mode;
+    if (mode === 'manual-override') {
+      // Officer took manual control, pause automated remediations
+      state.remediation = null;
+    }
+    return true;
+  }
+
+  // --- Generation Tick & Jam Spreading ---
 
   generateTick(count = 1) {
     const now = Date.now();
+    this.tickCount++;
+
+    // Every 10 ticks (~1 second), evaluate 1-hop jam spreading across the graph (Section 5.7)
+    if (this.tickCount % 10 === 0) {
+      this.evaluateJamSpreading(now);
+    }
 
     for (let i = 0; i < count; i++) {
-      // Pick junction round-robin or randomly
       const juncIndex = Math.floor(Math.random() * this.junctions.length);
       const junc = this.junctions[juncIndex];
 
       const seq = (this.sequenceMap.get(junc.junctionId) || 0) + 1;
       this.sequenceMap.set(junc.junctionId, seq);
 
-      // Compute dynamic traffic data
+      // Compute dynamic traffic data incorporating scenarios, spreading, and corridor preemption
       const trafficData = this.computeTrafficData(junc, now);
 
       const status = this.determineStatus(trafficData);
@@ -335,10 +460,10 @@ class SimulatorService {
       // 1. Write-behind ingestion queue
       ingestionBuffer.enqueue(event);
 
-      // 2. Real-time traffic anomaly & gridlock detector
+      // 2. Incident detection engine (jam, sudden_blockage, congestion_building)
       anomalyEngine.evaluate(event);
 
-      // 3. Low-latency Socket.IO broadcast
+      // 3. Selective broadcast
       socketService.broadcastTelemetry(event);
 
       const latency = Date.now() - startT;
@@ -346,12 +471,98 @@ class SimulatorService {
     }
   }
 
+  // Section 5.7: Jam spreading to 1-hop neighbours
+  evaluateJamSpreading(now) {
+    // Reset spread pressure base
+    const spreadPressures = new Map();
+
+    for (const [juncId, state] of this.junctionStates.entries()) {
+      const isBlockage = state.activeScenario?.type === 'blockage' && state.activeScenario.expiresAt > now;
+      const isSevereCongestion = state.congestionScore > 75;
+
+      if (isBlockage || isSevereCongestion) {
+        state.highCongestionTicks += 10;
+      } else {
+        state.highCongestionTicks = Math.max(0, state.highCongestionTicks - 5);
+      }
+
+      // If jam sustained for > 10 seconds (100 ticks), spread to 1-hop neighbours
+      if (state.highCongestionTicks >= 100 || isBlockage) {
+        const neighbours = JUNCTION_GRAPH[juncId] || [];
+        const intensity = isBlockage ? 0.35 : Math.min(0.35, ((state.congestionScore - 70) / 30) * 0.35);
+
+        for (const nbrId of neighbours) {
+          const current = spreadPressures.get(nbrId) || 0;
+          spreadPressures.set(nbrId, Math.max(current, intensity));
+
+          // Cross-zone alert check: if neighbour is in a different zone
+          const nbrState = this.junctionStates.get(nbrId);
+          if (nbrState && nbrState.zoneId !== state.zoneId) {
+            if (now - nbrState.crossZoneAlertSentAt > 45000) {
+              nbrState.crossZoneAlertSentAt = now;
+              this.emitCrossZoneAlert(state, nbrState);
+            }
+          }
+        }
+      }
+    }
+
+    // Apply calculated spread pressure to all junction states
+    for (const [juncId, state] of this.junctionStates.entries()) {
+      const targetPressure = spreadPressures.get(juncId) || 0;
+      // Smooth gradual adjustment
+      state.spreadPressure = parseFloat((state.spreadPressure * 0.7 + targetPressure * 0.3).toFixed(2));
+    }
+  }
+
+  async emitCrossZoneAlert(sourceState, neighbourState) {
+    const alertDoc = {
+      alertId: `ALT-XZ-${crypto.randomBytes(4).toString('hex').toUpperCase()}`,
+      junctionId: neighbourState.junctionId,
+      deviceId: neighbourState.junctionId,
+      deviceName: neighbourState.name,
+      zoneId: neighbourState.zoneId,
+      category: neighbourState.zoneId,
+      severity: 'info',
+      title: 'Cross-Zone Congestion Spillover',
+      message: `Congestion from ${sourceState.name} (${sourceState.zoneId}) is spreading into ${neighbourState.name} (${neighbourState.zoneId}). Inflow queue building.`,
+      metric: 'congestion_spillover',
+      triggerValue: sourceState.congestionScore,
+      thresholdValue: 75,
+      timestamp: new Date(),
+      resolved: false,
+      cause: 'congestion_spillover',
+      causeSource: 'system',
+      affectedRoad: null,
+      status: 'open',
+    };
+
+    try {
+      if (mongoose.connection?.readyState === 1) {
+        await Alert.create(alertDoc);
+      }
+      if (socketService?.io) {
+        socketService.broadcastAlert(alertDoc);
+      }
+      console.log(`[TrafficSimulator] Cross-zone alert emitted: ${alertDoc.message}`);
+    } catch (err) {
+      console.error('[TrafficSimulator] Cross-zone alert emit error:', err.message);
+    }
+  }
+
   computeTrafficData(junc, now) {
-    const chaos = this.chaosSpikes.get(junc.junctionId);
-    const hasActiveChaos = chaos && chaos.expiresAt > now;
+    const state = this.junctionStates.get(junc.junctionId);
     const inCorridor = corridorService.isJunctionInCorridor(junc.junctionId);
 
-    // Advance signal cycle for this junction (paused if under emergency corridor preemption)
+    // Active scenario check
+    const scenario = state?.activeScenario;
+    const hasScenario = scenario && scenario.expiresAt > now;
+
+    // Active remediation check (Section 5.10)
+    const remediation = state?.remediation;
+    const hasRemediation = remediation && remediation.expiresAt > now;
+
+    // Advance signal cycle
     let phase = this.signalPhases.get(junc.junctionId);
     if (!phase) {
       phase = { activeApproachIndex: 0, phaseTimeRemaining: 35 };
@@ -359,19 +570,22 @@ class SimulatorService {
     }
 
     if (!inCorridor) {
-      // Step cycle down normally
       phase.phaseTimeRemaining -= 0.5;
       if (phase.phaseTimeRemaining <= 0) {
         phase.activeApproachIndex = (phase.activeApproachIndex + 1) % junc.baseApproaches.length;
         const nextApproach = junc.baseApproaches[phase.activeApproachIndex];
-        phase.phaseTimeRemaining = nextApproach.greenSplitSec || 35;
+        // If extend_green remediation is active on this approach, extend duration
+        let splitSec = nextApproach.greenSplitSec || 35;
+        if (hasRemediation && remediation.action === 'extend_green') {
+          splitSec += 25;
+        }
+        phase.phaseTimeRemaining = splitSec;
       }
     } else {
       // Emergency corridor: hold arrival arterial on green
       phase.activeApproachIndex = 0;
     }
 
-    // Generate approaches
     let totalFlow = 0;
     let maxQueue = 0;
     let sumSpeed = 0;
@@ -383,11 +597,11 @@ class SimulatorService {
       }
       const signalState = isGreen ? 'green' : 'red';
 
-      // Vehicles per minute fluctuates naturally +/- 15%
-      const jitterFactor = 1 + (Math.random() - 0.5) * 0.2;
+      // Vehicles per minute fluctuates naturally +/- 12%
+      const jitterFactor = 1 + (Math.random() - 0.5) * 0.15;
       let vehiclesPerMin = Math.round(app.baseVehiclesPerMin * jitterFactor);
 
-      // Queue length: shrinks on green, accumulates on red
+      // Queue and speed dynamics
       let queueLengthM = app.baseQueueM;
       let avgSpeedKmph = app.baseSpeed;
 
@@ -407,14 +621,40 @@ class SimulatorService {
         avgSpeedKmph = Math.max(3, Math.round(app.baseSpeed * 0.75 * jitterFactor));
       }
 
-      // Apply chaos spike if active
-      if (hasActiveChaos) {
-        if (chaos.metric === 'queueLengthM' || chaos.metric === 'congestion') {
-          queueLengthM = Math.min(350, Math.round(queueLengthM * chaos.multiplier));
-          avgSpeedKmph = Math.max(2, Math.round(avgSpeedKmph / chaos.multiplier));
-          vehiclesPerMin = Math.round(vehiclesPerMin * 1.4);
-        } else if (chaos.metric === 'vehiclesPerMin') {
-          vehiclesPerMin = Math.round(vehiclesPerMin * chaos.multiplier);
+      // Apply 1-hop neighbour congestion spreading (Section 5.7)
+      if (state && state.spreadPressure > 0) {
+        queueLengthM = Math.round(queueLengthM * (1 + state.spreadPressure));
+        avgSpeedKmph = Math.max(3, Math.round(avgSpeedKmph * (1 - state.spreadPressure * 0.5)));
+      }
+
+      // Apply Scenarios
+      if (hasScenario) {
+        if (scenario.type === 'blockage') {
+          // If this is the blocked road (or default first approach if road matches or unspecified)
+          if (!scenario.road || app.road.toLowerCase().includes(scenario.road.toLowerCase()) || idx === 0) {
+            avgSpeedKmph = 2; // velocity collapse
+            queueLengthM = Math.min(350, Math.round(app.baseQueueM * 2.1));
+            vehiclesPerMin = Math.round(vehiclesPerMin * 0.4); // choked inflow
+          }
+        } else if (scenario.type === 'rush-hour') {
+          vehiclesPerMin = Math.round(vehiclesPerMin * scenario.multiplier);
+          queueLengthM = Math.min(340, Math.round(queueLengthM * 1.45));
+          avgSpeedKmph = Math.max(4, Math.round(avgSpeedKmph * 0.7));
+        }
+      }
+
+      // Apply Remediation Effects (Section 5.10 - actions actually change the traffic!)
+      if (hasRemediation) {
+        if (remediation.action === 'extend_green') {
+          // Extra green time: drains queue faster, speeds up traffic
+          queueLengthM = Math.max(20, Math.round(queueLengthM * 0.5));
+          avgSpeedKmph = Math.min(35, Math.round(avgSpeedKmph * 1.5));
+        } else if (remediation.action === 'divert') {
+          // Diversion notice: reduces incoming traffic on that arterial
+          vehiclesPerMin = Math.round(vehiclesPerMin * 0.55);
+          queueLengthM = Math.max(25, Math.round(queueLengthM * 0.6));
+        } else if (remediation.action === 'hold_upstream') {
+          vehiclesPerMin = Math.round(vehiclesPerMin * 0.65);
         }
       }
 
@@ -439,12 +679,21 @@ class SimulatorService {
     const speedFactor = Math.max(0, (1 - avgSpeed / 30) * 40);
     let congestionScore = Math.min(100, Math.round(queueFactor + speedFactor));
 
-    // Vehicle mix with subtle fluctuations
+    // Update persistent state's congestion score
+    if (state) {
+      state.congestionScore = congestionScore;
+    }
+
+    let adaptiveSignalMode = inCorridor ? 'emergency-corridor' : 'dynamic-ai';
+    if (state?.signalModeOverride) {
+      adaptiveSignalMode = state.signalModeOverride;
+    }
+
     const vm = junc.vehicleMix;
 
     return {
       approaches,
-      adaptiveSignalMode: inCorridor ? 'emergency-corridor' : 'dynamic-ai',
+      adaptiveSignalMode,
       inCorridor,
       vehicleMix: {
         twoWheeler: parseFloat((vm.twoWheeler + (Math.random() - 0.5) * 0.02).toFixed(2)),
@@ -456,33 +705,38 @@ class SimulatorService {
       maxQueueLengthM: maxQueue,
       avgSpeedKmph: avgSpeed,
       congestionScore,
-      cameraProcessingLatencyMs: Math.round(10 + Math.random() * 8), // 10-18ms GPU Central DC latency
+      cameraProcessingLatencyMs: Math.round(10 + Math.random() * 8),
     };
   }
 
   determineStatus(trafficData) {
-    if (trafficData.stalledVehicleDetected || trafficData.ambulanceDetected) {
-      return 'critical';
-    }
-    if (trafficData.maxQueueLengthM > 180 || trafficData.avgSpeedKmph < 7) {
+    if (trafficData.congestionScore >= 88 || trafficData.maxQueueLengthM >= 210 || trafficData.avgSpeedKmph <= 4) {
       return 'gridlock';
     }
-    if (trafficData.maxQueueLengthM > 120 || trafficData.avgSpeedKmph < 12) {
+    if (trafficData.congestionScore >= 70 || trafficData.maxQueueLengthM >= 140 || trafficData.avgSpeedKmph <= 10) {
       return 'congested';
     }
-    if (trafficData.maxQueueLengthM > 85) {
+    if (trafficData.congestionScore >= 50 || trafficData.maxQueueLengthM >= 90) {
       return 'warning';
     }
     return 'healthy';
   }
 
   getStatus() {
+    const activeScenarios = Array.from(this.junctionStates.values())
+      .filter((s) => s.activeScenario && s.activeScenario.expiresAt > Date.now())
+      .map((s) => ({
+        junctionId: s.junctionId,
+        scenario: s.activeScenario.type,
+        expiresAt: s.activeScenario.expiresAt,
+      }));
+
     return {
       isRunning: this.isRunning,
       targetRate: this.targetRate,
       deviceCount: this.junctions.length,
       junctionCount: this.junctions.length,
-      activeChaosCount: Array.from(this.chaosSpikes.values()).filter((c) => c.expiresAt > Date.now()).length,
+      activeScenarios,
     };
   }
 }

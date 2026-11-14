@@ -94,10 +94,22 @@ router.get('/history', async (req, res) => {
       .limit(maxLimit)
       .lean();
 
+    // Section 5.9: Deduplicate by eventId
+    const seenEventIds = new Set();
+    const uniqueRecords = [];
+    for (const rec of records) {
+      if (rec.eventId && !seenEventIds.has(rec.eventId)) {
+        seenEventIds.add(rec.eventId);
+        uniqueRecords.push(rec);
+      } else if (!rec.eventId) {
+        uniqueRecords.push(rec);
+      }
+    }
+
     res.json({
       success: true,
-      count: records.length,
-      records: records.reverse(), // chronologically ascending for charts
+      count: uniqueRecords.length,
+      records: uniqueRecords.reverse(), // chronologically ascending for charts
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

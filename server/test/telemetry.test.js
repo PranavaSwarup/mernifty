@@ -4,8 +4,9 @@ import { ingestionBuffer } from '../src/services/ingestionBuffer.js';
 import { anomalyEngine } from '../src/services/anomalyEngine.js';
 import { metricsService } from '../src/services/metricsService.js';
 import { normalizeTrafficEvent, validateTrafficEvent } from '../src/middleware/validator.js';
-import { JUNCTION_GRAPH, getShortestRoute } from '../src/data/junctionGraph.js';
+import { JUNCTION_GRAPH, getShortestRoute, findNearestJunction } from '../src/data/junctionGraph.js';
 import { corridorService } from '../src/services/corridorService.js';
+import { simulatorService } from '../src/services/simulatorService.js';
 import { checkAreaAuthorization } from '../src/middleware/auth.js';
 
 test('1. Ingestion Buffer & Deduplication Logic', (t) => {
@@ -30,23 +31,11 @@ test('1. Ingestion Buffer & Deduplication Logic', (t) => {
   assert.strictEqual(res2.reason, 'Duplicate eventId');
 });
 
-test('2. Anomaly Engine Gridlock & Stalled Vehicle Detection', (t) => {
+test('2. Incident Detection: Measured Effects (Jam & Sudden Blockage) and Human Cause', (t) => {
   const testJunction = 'JNC-BLR-099';
+  anomalyEngine.clearHistory();
 
-  // Seed baseline values
-  for (let i = 0; i < 12; i++) {
-    anomalyEngine.evaluate({
-      junctionId: testJunction,
-      deviceId: testJunction,
-      junctionName: 'Test Signal',
-      deviceName: 'Test Signal',
-      category: 'south-bangalore',
-      timestamp: new Date().toISOString(),
-      metrics: { maxQueueLengthM: 40 + Math.random() * 5, avgSpeedKmph: 22 },
-    });
-  }
-
-  // Trigger severe queue beyond critical threshold (>165m)
+  // 1. Test Severe Jam Detection
   const spikeAlert = anomalyEngine.evaluate({
     junctionId: testJunction,
     deviceId: testJunction,
@@ -54,15 +43,53 @@ test('2. Anomaly Engine Gridlock & Stalled Vehicle Detection', (t) => {
     deviceName: 'Test Signal',
     category: 'south-bangalore',
     timestamp: new Date().toISOString(),
-    metrics: { maxQueueLengthM: 195, avgSpeedKmph: 4 },
+    metrics: { maxQueueLengthM: 195, avgSpeedKmph: 4, congestionScore: 89 },
   });
 
-  assert.ok(spikeAlert, 'Severe queue spike should trigger an anomaly alert');
+  assert.ok(spikeAlert, 'Severe queue spike should trigger an incident alert');
   assert.strictEqual(spikeAlert.severity, 'critical');
-  assert.ok(
-    spikeAlert.metric === 'maxQueueLengthM' || spikeAlert.metric === 'avgSpeedKmph',
-    'Alert should be triggered for maxQueueLengthM or avgSpeedKmph'
-  );
+  assert.strictEqual(spikeAlert.metric, 'jam');
+  assert.strictEqual(spikeAlert.cause, 'unknown', 'Cause should start as unknown (leave causes to people)');
+  assert.strictEqual(spikeAlert.status, 'open');
+  assert.ok(spikeAlert.suggestedAction?.action, 'Should include suggested remediation action');
+
+  // 2. Test Sudden Blockage Detection (speed collapse on green signal)
+  const blockJunction = 'JNC-BLR-098';
+  // Seed initial approaches with healthy speed
+  for (let i = 0; i < 4; i++) {
+    anomalyEngine.evaluate({
+      junctionId: blockJunction,
+      deviceId: blockJunction,
+      junctionName: 'Blockage Test',
+      zoneId: 'south-bangalore',
+      timestamp: new Date().toISOString(),
+      data: {
+        approaches: [
+          { road: 'Hosur Entry', vehiclesPerMin: 35, queueLengthM: 40, avgSpeedKmph: 22, signal: 'green' },
+        ],
+      },
+    });
+  }
+
+  // Speed suddenly collapses to 2 km/h while green
+  const blockAlert = anomalyEngine.evaluate({
+    junctionId: blockJunction,
+    deviceId: blockJunction,
+    junctionName: 'Blockage Test',
+    zoneId: 'south-bangalore',
+    timestamp: new Date().toISOString(),
+    data: {
+      approaches: [
+        { road: 'Hosur Entry', vehiclesPerMin: 10, queueLengthM: 155, avgSpeedKmph: 2, signal: 'green' },
+      ],
+    },
+  });
+
+  assert.ok(blockAlert, 'Sudden velocity collapse on green arterial should trigger alert');
+  assert.strictEqual(blockAlert.metric, 'sudden_blockage');
+  assert.strictEqual(blockAlert.severity, 'critical');
+  assert.strictEqual(blockAlert.affectedRoad, 'Hosur Entry');
+  assert.strictEqual(blockAlert.suggestedAction.action, 'divert');
 });
 
 test('3. Metrics Service Throughput Calculations', (t) => {
@@ -242,6 +269,43 @@ test('8. Role-Based Access Control & Officer Area Authorization', (t) => {
 
   // Citizens cannot act on traffic areas
   assert.strictEqual(checkAreaAuthorization(citizenUser, 'south-bangalore', 'JNC-BLR-001'), false);
+});
+
+test('9. Jam Spreading Across Connected Graph to 1-Hop Neighbours', (t) => {
+  const silkBoardId = 'JNC-BLR-001';
+  // Trigger blockage scenario on Silk Board
+  simulatorService.triggerBlockage(silkBoardId, 'Hosur Rd (from south)', 30);
+
+  // Evaluate jam spreading
+  simulatorService.evaluateJamSpreading(Date.now());
+
+  // 1-hop neighbours of Silk Board from junctionGraph:
+  // JNC-BLR-002 (Sony World), JNC-BLR-003 (Dairy Circle), JNC-BLR-004 (Jayadeva), JNC-BLR-005 (Bellandur)
+  const sonyWorldState = simulatorService.junctionStates.get('JNC-BLR-002');
+  const bellandurState = simulatorService.junctionStates.get('JNC-BLR-005');
+
+  assert.ok(sonyWorldState.spreadPressure > 0, '1-hop neighbour Sony World should receive spread pressure');
+  assert.ok(bellandurState.spreadPressure > 0, '1-hop neighbour Bellandur should receive spread pressure');
+
+  // Bellandur is in east-bangalore, Silk Board is in south-bangalore
+  assert.strictEqual(bellandurState.zoneId, 'east-bangalore');
+  assert.strictEqual(simulatorService.junctionStates.get(silkBoardId).zoneId, 'south-bangalore');
+
+  // Clear scenarios and verify recovery
+  simulatorService.clearScenarios();
+  const silkState = simulatorService.junctionStates.get(silkBoardId);
+  assert.strictEqual(silkState.activeScenario, null);
+});
+
+test('10. Citizen Incident Reports: Nearest Proximity Matching & Distance Bounds', (t) => {
+  // Silk Board coordinates: 12.9172, 77.6228
+  const nearPoint = findNearestJunction(12.9180, 77.6235);
+  assert.strictEqual(nearPoint.nearestJunctionId, 'JNC-BLR-001');
+  assert.ok(nearPoint.distanceKm < 0.5, 'Point should be within 0.5km of Silk Board');
+
+  // Point in Mysuru (~130km away): should fail the 2.0km proximity threshold
+  const farPoint = findNearestJunction(12.2958, 76.6394);
+  assert.ok(farPoint.distanceKm > 50, 'Faraway coordinate must exceed 2km limit');
 });
 
 test.after(() => {

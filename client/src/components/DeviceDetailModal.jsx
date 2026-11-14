@@ -20,30 +20,39 @@ import {
   Radio,
   Car,
   AlertTriangle,
+  Siren,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useSocket } from '../context/SocketContext';
 
 export function DeviceDetailModal({ device, onClose }) {
-  const { latestByDevice, subscribeDevice, unsubscribeDevice } = useSocket();
+  const { latestByDevice, subscribeDevice, unsubscribeDevice, isConnected } = useSocket();
   const [historicalData, setHistoricalData] = useState([]);
   const [mergedTimeline, setMergedTimeline] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [copied, setCopied] = useState(false);
-  const seenEventIdsRef = useRef(new Set());
 
-  // 1. Fetch historical data from MongoDB on mount
+  const seenEventIdsRef = useRef(new Set());
+  const liveBufferRef = useRef([]);
+  const isHistoryLoadedRef = useRef(false);
+  const prevConnectedRef = useRef(isConnected);
+
+  // 1. Subscribe to junction room FIRST, then fetch history (Section 5.9)
   useEffect(() => {
     if (!device) return;
 
+    // Step A: Subscribe to junction room before requesting history to avoid lost events
     subscribeDevice(device.deviceId);
     setIsLoadingHistory(true);
+    isHistoryLoadedRef.current = false;
+    liveBufferRef.current = [];
 
+    // Step B: Fetch historical data from MongoDB
     api.getHistory({ deviceId: device.deviceId, limit: 40 })
       .then((res) => {
         if (res.records) {
           const formattedHistory = res.records.map((r) => {
-            seenEventIdsRef.current.add(r.eventId);
+            if (r.eventId) seenEventIdsRef.current.add(r.eventId);
             return {
               ...r,
               sourceType: 'HISTORICAL_MONGODB',
@@ -54,8 +63,35 @@ export function DeviceDetailModal({ device, onClose }) {
               }),
             };
           });
+
+          // Step C: Reconcile buffered live events that arrived while history was in flight
+          const bufferedLive = [];
+          for (const liveEvt of liveBufferRef.current) {
+            if (!seenEventIdsRef.current.has(liveEvt.eventId)) {
+              seenEventIdsRef.current.add(liveEvt.eventId);
+              bufferedLive.push({
+                ...liveEvt,
+                sourceType: 'LIVE_SOCKET_IO',
+                formattedTime: new Date(liveEvt.timestamp).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                }),
+              });
+            }
+          }
+          liveBufferRef.current = [];
+          isHistoryLoadedRef.current = true;
+
+          // Merge, sort by timestamp with sequence as tie-breaker
+          const combined = [...formattedHistory, ...bufferedLive].sort((a, b) => {
+            const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+            if (timeDiff !== 0) return timeDiff;
+            return (a.sequence || 0) - (b.sequence || 0);
+          });
+
           setHistoricalData(formattedHistory);
-          setMergedTimeline(formattedHistory);
+          setMergedTimeline(combined.slice(-60));
         }
       })
       .catch((err) => console.error('Error fetching history:', err))
@@ -64,14 +100,21 @@ export function DeviceDetailModal({ device, onClose }) {
     return () => {
       unsubscribeDevice(device.deviceId);
       seenEventIdsRef.current.clear();
+      liveBufferRef.current = [];
+      isHistoryLoadedRef.current = false;
     };
   }, [device, subscribeDevice, unsubscribeDevice]);
 
-  // 2. Seamlessly reconcile incoming live Socket.IO events into the timeline
+  // 2. Seamlessly reconcile incoming live Socket.IO events into the timeline (Section 5.9)
   useEffect(() => {
     if (!device) return;
     const liveEvt = latestByDevice[device.deviceId];
     if (!liveEvt || !liveEvt.eventId) return;
+
+    if (!isHistoryLoadedRef.current) {
+      liveBufferRef.current.push(liveEvt);
+      return;
+    }
 
     if (seenEventIdsRef.current.has(liveEvt.eventId)) return;
     seenEventIdsRef.current.add(liveEvt.eventId);
@@ -87,10 +130,57 @@ export function DeviceDetailModal({ device, onClose }) {
     };
 
     setMergedTimeline((prev) => {
-      const updated = [...prev, liveRecord];
-      return updated.slice(-60);
+      const updated = [...prev, liveRecord].sort((a, b) => {
+        const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+        if (timeDiff !== 0) return timeDiff;
+        return (a.sequence || 0) - (b.sequence || 0);
+      });
+      return updated.slice(-60); // Cap window at 60 points to bound memory
     });
   }, [latestByDevice, device]);
+
+  // 3. Gap-filling on reconnect (Section 5.9)
+  useEffect(() => {
+    if (!prevConnectedRef.current && isConnected && device && isHistoryLoadedRef.current) {
+      subscribeDevice(device.deviceId);
+
+      if (mergedTimeline.length > 0) {
+        const lastRec = mergedTimeline[mergedTimeline.length - 1];
+        api.getHistory({ deviceId: device.deviceId, from: lastRec.timestamp, limit: 50 })
+          .then((res) => {
+            if (res.records && res.records.length > 0) {
+              const gapRecords = [];
+              for (const r of res.records) {
+                if (r.eventId && !seenEventIdsRef.current.has(r.eventId)) {
+                  seenEventIdsRef.current.add(r.eventId);
+                  gapRecords.push({
+                    ...r,
+                    sourceType: 'HISTORICAL_MONGODB',
+                    formattedTime: new Date(r.timestamp).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    }),
+                  });
+                }
+              }
+              if (gapRecords.length > 0) {
+                setMergedTimeline((prev) => {
+                  const updated = [...prev, ...gapRecords].sort((a, b) => {
+                    const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+                    if (timeDiff !== 0) return timeDiff;
+                    return (a.sequence || 0) - (b.sequence || 0);
+                  });
+                  return updated.slice(-60);
+                });
+              }
+            }
+          })
+          .catch((err) => console.error('Error filling gap on reconnect:', err));
+      }
+    }
+    prevConnectedRef.current = isConnected;
+  }, [isConnected, device, mergedTimeline, subscribeDevice]);
 
   if (!device) return null;
 
@@ -99,8 +189,8 @@ export function DeviceDetailModal({ device, onClose }) {
   const data = currentLive?.data || device.lastData || {};
   const approaches = data.approaches || device.approaches || [];
   const vehicleMix = data.vehicleMix || device.vehicleMix || { twoWheeler: 0.55, car: 0.3, bus: 0.05, truck: 0.1 };
-  const stalled = Boolean(data.stalledVehicleDetected || metrics.stalledVehicleDetected || device.stalledVehicleDetected);
-  const ambulance = Boolean(data.ambulanceDetected || metrics.ambulanceDetected || device.ambulanceDetected);
+  const inCorridor = data.inCorridor || data.adaptiveSignalMode === 'emergency-corridor' || metrics.adaptiveSignalMode === 'emergency-corridor';
+  const isCongested = metrics.congestionScore > 70 || (metrics.maxQueueLengthM && metrics.maxQueueLengthM > 140);
 
   const copyJsonPayload = () => {
     navigator.clipboard.writeText(JSON.stringify(currentLive || device, null, 2));
@@ -114,8 +204,8 @@ export function DeviceDetailModal({ device, onClose }) {
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-              <CameraIcon className="w-5 h-5" />
+            <div className={`p-2.5 rounded-xl border ${inCorridor ? 'bg-blue-500/10 border-blue-500/40 text-blue-400 animate-pulse' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'}`}>
+              {inCorridor ? <Siren className="w-5 h-5 text-blue-400" /> : <CameraIcon className="w-5 h-5" />}
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -126,6 +216,11 @@ export function DeviceDetailModal({ device, onClose }) {
                 <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
                   {device.zoneName || device.zoneId}
                 </span>
+                {inCorridor && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 animate-pulse">
+                    🚑 CORRIDOR PREEMPTION ACTIVE
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
                 Centralized Vision Processing Telemetry & Optical Approach Queues
@@ -164,34 +259,33 @@ export function DeviceDetailModal({ device, onClose }) {
             </div>
 
             {/* Video Viewport Mock */}
-            <div className="mt-3 relative h-40 bg-gradient-to-b from-slate-900 to-[#0A0F1D] rounded-lg border border-slate-800 flex items-center justify-center overflow-hidden">
-              {/* Scanlines effect */}
+            <div className="mt-3 relative h-36 bg-gradient-to-b from-slate-900 to-[#0A0F1D] rounded-lg border border-slate-800 flex items-center justify-center overflow-hidden">
               <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_4px] pointer-events-none opacity-40" />
 
               {/* HUD Bounding Boxes */}
               <div className="absolute top-3 left-4 text-[10px] font-mono text-emerald-400 bg-slate-950/80 p-2 rounded border border-emerald-500/30">
                 <div>YOLO-v9 ANPR: OPTICAL FLOW ACTIVE</div>
                 <div>DETECTIONS: {approaches.reduce((a, b) => a + (b.vehiclesPerMin || 30), 0)} objects/min</div>
-                <div>CLASSIFICATION CONFIDENCE: 98.4%</div>
+                <div>SIGNAL MODE: {data.adaptiveSignalMode || 'dynamic-ai'}</div>
               </div>
 
-              {/* Status Alert in center if stalled / ambulance */}
-              {ambulance && (
+              {/* Status Alert Banner */}
+              {inCorridor && (
                 <div className="z-10 px-4 py-2 rounded-xl bg-blue-500/20 border border-blue-500/60 text-blue-300 text-xs font-bold font-mono animate-bounce flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-blue-400 animate-ping" />
-                  AMBULANCE BEACON DETECTED • GREEN CORRIDOR RECOMMENDED
+                  🚑 AMBULANCE GREEN CORRIDOR PREEMPTION ACTIVE • ARRIVAL ROAD GREEN
                 </div>
               )}
-              {stalled && !ambulance && (
-                <div className="z-10 px-4 py-2 rounded-xl bg-rose-500/20 border border-rose-500/60 text-rose-300 text-xs font-bold font-mono animate-bounce flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-rose-400" />
-                  STALLED VEHICLE IN LANE 2 • TOW DISPATCH RECOMMENDED
+              {isCongested && !inCorridor && (
+                <div className="z-10 px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-500/60 text-amber-300 text-xs font-bold font-mono flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-amber-400 animate-pulse" />
+                  HEAVY QUEUE BACKLOG • CONGESTION SCORE {metrics.congestionScore || 75}/100
                 </div>
               )}
-              {!stalled && !ambulance && (
+              {!isCongested && !inCorridor && (
                 <div className="text-center font-mono text-slate-500 text-xs">
-                  <div className="text-emerald-400 font-bold mb-1">OPTICAL LANES CLEAR • ADAPTIVE TIMING NORMAL</div>
-                  <span>Hospital Corridor / Arterial Feeder Inflow Nominal</span>
+                  <div className="text-emerald-400 font-bold mb-1">OPTICAL FLOW NOMINAL • ADAPTIVE TIMING NORMAL</div>
+                  <span>Bengaluru Arterial Feeder Inflow Within Capacity</span>
                 </div>
               )}
             </div>
@@ -305,7 +399,7 @@ export function DeviceDetailModal({ device, onClose }) {
                   Historical MongoDB vs Sub-Second Live Socket Reconciler
                 </h4>
                 <p className="text-[11px] text-slate-400">
-                  Zero-gap unified timeline reconciling disk persistence with live WebSocket telemetry
+                  Zero-gap unified timeline: MongoDB historical partition stitched with live WebSocket stream
                 </p>
               </div>
 
@@ -329,21 +423,66 @@ export function DeviceDetailModal({ device, onClose }) {
                     queue: item.metrics?.maxQueueLengthM || item.data?.maxQueueLengthM || 45,
                     speed: item.metrics?.avgSpeedKmph || item.data?.avgSpeedKmph || 18,
                     source: item.sourceType,
+                    sequence: item.sequence || 0,
                   }))}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
                   <XAxis dataKey="time" stroke="#64748B" tick={{ fontSize: 9 }} />
                   <YAxis stroke="#64748B" tick={{ fontSize: 9 }} />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#0F172A',
-                      borderColor: '#334155',
-                      borderRadius: '8px',
-                      fontSize: '11px',
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        const dataItem = payload[0].payload;
+                        const isHistorical = dataItem.source === 'HISTORICAL_MONGODB';
+                        return (
+                          <div className="bg-slate-900 border border-slate-700 p-2.5 rounded-lg shadow-xl text-xs font-mono">
+                            <div className="flex items-center gap-2 mb-1.5 pb-1 border-b border-slate-800">
+                              <span className="text-slate-300 font-bold">{label}</span>
+                              <span
+                                className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${
+                                  isHistorical
+                                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                }`}
+                              >
+                                {dataItem.source}
+                              </span>
+                            </div>
+                            <div className="text-rose-400">Queue: {dataItem.queue}m</div>
+                            <div className="text-cyan-400">Speed: {dataItem.speed} km/h</div>
+                            {dataItem.sequence ? (
+                              <div className="text-slate-500 text-[10px] mt-1">Seq: #{dataItem.sequence}</div>
+                            ) : null}
+                          </div>
+                        );
+                      }
+                      return null;
                     }}
                   />
-                  <Line type="monotone" dataKey="queue" name="Queue (m)" stroke="#EF4444" strokeWidth={2} dot={false} isAnimationActive={false} />
-                  <Line type="monotone" dataKey="speed" name="Speed (km/h)" stroke="#06B6D4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                  <Line
+                    type="monotone"
+                    dataKey="queue"
+                    name="Queue (m)"
+                    stroke="#EF4444"
+                    strokeWidth={2}
+                    dot={({ cx, cy, payload }) => {
+                      // Show prominent join marker for live socket points vs historical
+                      if (payload.source === 'LIVE_SOCKET_IO') {
+                        return <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={2.5} fill="#10B981" stroke="#064E3B" strokeWidth={1} />;
+                      }
+                      return null;
+                    }}
+                    isAnimationActive={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="speed"
+                    name="Speed (km/h)"
+                    stroke="#06B6D4"
+                    strokeWidth={1.5}
+                    dot={false}
+                    isAnimationActive={false}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </div>

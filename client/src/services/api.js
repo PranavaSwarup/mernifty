@@ -35,32 +35,52 @@ export const api = {
   ingestBatch: (events) =>
     fetchJson('/api/telemetry/batch', { method: 'POST', body: JSON.stringify(events) }),
 
-  // Devices
+  // Devices / Junctions
   getDevices: (category) => {
     const q = category ? `?category=${category}` : '';
     return fetchJson(`/api/devices${q}`);
   },
   getDeviceById: (deviceId) => fetchJson(`/api/devices/${deviceId}`),
 
-  // Alerts
+  // Alerts & Incident Actions
   getAlerts: (params = {}) => {
     const q = new URLSearchParams(params).toString();
     return fetchJson(`/api/alerts?${q}`);
   },
-  resolveAlert: (alertId, resolvedBy = 'operator') =>
+  tagAlertCause: (alertId, cause, note) =>
+    fetchJson(`/api/alerts/${alertId}/cause`, { method: 'PATCH', body: JSON.stringify({ cause, note }) }),
+  acknowledgeAlert: (alertId) =>
+    fetchJson(`/api/alerts/${alertId}/acknowledge`, { method: 'PATCH' }),
+  applyAlertAction: (alertId, action, note) =>
+    fetchJson(`/api/alerts/${alertId}/action`, { method: 'PATCH', body: JSON.stringify({ action, note }) }),
+  overrideAlertAction: (alertId, note) =>
+    fetchJson(`/api/alerts/${alertId}/override`, { method: 'PATCH', body: JSON.stringify({ note }) }),
+  resolveAlert: (alertId, cause = null, note = '') =>
     fetchJson(`/api/alerts/${alertId}/resolve`, {
       method: 'PATCH',
-      body: JSON.stringify({ resolvedBy }),
+      body: JSON.stringify({ cause, note }),
     }),
   clearResolvedAlerts: () => fetchJson('/api/alerts/clear', { method: 'DELETE' }),
+  getActionLogs: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return fetchJson(`/api/alerts/actions/logs?${q}`);
+  },
 
-  // Simulator
+  // Simulator & Scenarios
   getSimulatorStatus: () => fetchJson('/api/simulator/status'),
-  startSimulator: (rate = 10) =>
+  startSimulator: (rate = 12) =>
     fetchJson('/api/simulator/start', { method: 'POST', body: JSON.stringify({ rate }) }),
   stopSimulator: () => fetchJson('/api/simulator/stop', { method: 'POST' }),
   setSimulatorRate: (rate) =>
     fetchJson('/api/simulator/rate', { method: 'POST', body: JSON.stringify({ rate }) }),
+  triggerBlockage: (params = {}) =>
+    fetchJson('/api/simulator/scenario/blockage', { method: 'POST', body: JSON.stringify(params) }),
+  triggerRushHour: (params = {}) =>
+    fetchJson('/api/simulator/scenario/rush-hour', { method: 'POST', body: JSON.stringify(params) }),
+  clearScenarios: (junctionId) =>
+    fetchJson('/api/simulator/scenario/clear', { method: 'POST', body: JSON.stringify({ junctionId }) }),
+  setRemediationDeadline: (seconds) =>
+    fetchJson('/api/simulator/remediation-deadline', { method: 'POST', body: JSON.stringify({ seconds }) }),
   injectChaos: (deviceId, metric, multiplier = 2.5, durationSec = 15) =>
     fetchJson('/api/simulator/chaos', {
       method: 'POST',
@@ -70,6 +90,8 @@ export const api = {
   // Auth
   login: (email, password) =>
     fetchJson('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  register: (name, email, password) =>
+    fetchJson('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password }) }),
   getMe: () => fetchJson('/api/auth/me'),
 
   // Corridor (Ambulance Emergency Green Corridor)
@@ -79,4 +101,16 @@ export const api = {
     fetchJson('/api/corridor/cancel', { method: 'POST', body: JSON.stringify({ tripId }) }),
   getActiveCorridors: () => fetchJson('/api/corridor/active'),
   getCorridorHistory: () => fetchJson('/api/corridor/history'),
+
+  // Citizen Incident Reports (Section 5.11)
+  submitReport: (report) =>
+    fetchJson('/api/reports', { method: 'POST', body: JSON.stringify(report) }),
+  getReports: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return fetchJson(`/api/reports?${q}`);
+  },
+  verifyReport: (reportId) =>
+    fetchJson(`/api/reports/${reportId}/verify`, { method: 'PATCH' }),
+  dismissReport: (reportId) =>
+    fetchJson(`/api/reports/${reportId}/dismiss`, { method: 'PATCH' }),
 };

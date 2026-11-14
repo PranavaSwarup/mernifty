@@ -80,8 +80,12 @@ export function SimulatorControls() {
   const handleSuddenBlockage = async () => {
     try {
       setScenarioMessage('Triggering Sudden Blockage on Silk Board Hosur Rd...');
-      const res = await api.injectChaos('JNC-BLR-001', 'gridlock', 2.8, 30);
-      setScenarioMessage(res.message || '⚠️ Sudden blockage active on Silk Board Hosur Rd! Speed collapsed, queue building.');
+      const res = await api.triggerBlockage({
+        junctionId: 'JNC-BLR-001',
+        road: 'Hosur Rd (from south)',
+        durationSec: 35,
+      });
+      setScenarioMessage(res.message || '⚠️ Sudden blockage active on Silk Board Hosur Rd! Velocity collapsed to 2 km/h.');
       setTimeout(() => setScenarioMessage(''), 8000);
     } catch (err) {
       setScenarioMessage(`Error: ${err.message}`);
@@ -91,11 +95,25 @@ export function SimulatorControls() {
   // 3. Scenario: Rush Hour Volume Surge (Section 5.6)
   const handleRushHourSurge = async () => {
     try {
-      setScenarioMessage('Triggering Peak Rush Hour Volume Surge across ORR IT Corridor...');
-      await api.injectChaos('JNC-BLR-005', 'volume', 2.2, 35);
-      await api.injectChaos('JNC-BLR-001', 'volume', 2.0, 35);
-      setScenarioMessage('🚗 Rush hour surge active: 2.2x volume injected across Bellandur EcoSpace and Silk Board.');
+      setScenarioMessage('Triggering Peak Rush Hour Volume Surge across South Zone...');
+      const res = await api.triggerRushHour({
+        zoneId: 'south-bangalore',
+        multiplier: 2.0,
+        durationSec: 45,
+      });
+      setScenarioMessage(res.message || '🚗 Rush hour surge active: 2.0x volume injected across South Zone junctions.');
       setTimeout(() => setScenarioMessage(''), 8000);
+    } catch (err) {
+      setScenarioMessage(`Error: ${err.message}`);
+    }
+  };
+
+  // 4. Demo Setting: Toggle 20s Auto-Remediation Countdown (Section 5.10)
+  const handleSetDemoDeadline = async (seconds) => {
+    try {
+      const res = await api.setRemediationDeadline(seconds);
+      setScenarioMessage(`⏱️ Auto-remediation deadline set to ${seconds}s (${seconds === 20 ? 'Fast Demo Mode' : 'Standard 3m Mode'})`);
+      setTimeout(() => setScenarioMessage(''), 6000);
     } catch (err) {
       setScenarioMessage(`Error: ${err.message}`);
     }
@@ -276,6 +294,28 @@ export function SimulatorControls() {
                 <span>Trigger Surge</span>
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Section 5.10 Demo Countdown Configuration */}
+        <div className="mt-4 p-3 rounded-xl border border-slate-800 bg-slate-900/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+          <div>
+            <span className="font-bold text-slate-200">Auto-Remediation Countdown Setting:</span>
+            <span className="text-slate-400 ml-2">Controls alert countdown loop before system applies automated signal fix</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleSetDemoDeadline(20)}
+              className="px-2.5 py-1 rounded bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 font-mono font-bold"
+            >
+              20s (Demo Video Mode)
+            </button>
+            <button
+              onClick={() => handleSetDemoDeadline(180)}
+              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-mono"
+            >
+              180s (Standard 3m)
+            </button>
           </div>
         </div>
       </div>

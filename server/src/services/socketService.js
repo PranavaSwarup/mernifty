@@ -236,6 +236,19 @@ class SocketService {
     metricsService.recordBroadcast(1);
   }
 
+  // Section 5.10: Broadcast alert updates (acknowledged, action_applied, overridden, cause tagged)
+  broadcastAlertUpdate(update) {
+    if (!this.io) return;
+    const juncId = update.junctionId || update.deviceId;
+    const zId = update.zoneId;
+
+    let target = this.io.to('alerts');
+    if (zId) target = target.to(`zone:${zId}`);
+    if (juncId) target = target.to(`junction:${juncId}`);
+
+    target.emit('alert:updated', update);
+  }
+
   // Broadcast 1-second slim city summary to 'city' room viewers only
   broadcastCitySummary() {
     if (!this.io) return;

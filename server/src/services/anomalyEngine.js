@@ -1,19 +1,40 @@
 import { Alert } from '../models/Alert.js';
 import { Device } from '../models/Device.js';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
+
+// Configurable deadline for automatic remediation (3 minutes = 180s default; 20s for demo)
+let autoRemediationDeadlineSec = 180;
+
+export function setAutoRemediationDeadline(seconds) {
+  autoRemediationDeadlineSec = Math.max(5, Math.min(600, parseInt(seconds, 10)));
+  console.log(`[AnomalyEngine] Auto-remediation deadline set to ${autoRemediationDeadlineSec}s`);
+  return autoRemediationDeadlineSec;
+}
+
+export function getAutoRemediationDeadline() {
+  return autoRemediationDeadlineSec;
+}
 
 class AnomalyEngine {
   constructor() {
     // Sliding window of recent values: junctionId:metric -> array of numbers
     this.history = new Map();
+    this.approachHistory = new Map(); // `${junctionId}:${road}` -> array of { speed, queue, signal }
     this.maxHistory = 30;
-    this.alertCooldowns = new Map(); // key: junctionId:metric -> timestamp
-    this.cooldownMs = 15000; // 15s cooldown per alert type to avoid alert fatigue
+    this.alertCooldowns = new Map(); // key: `${junctionId}:${alertType}` -> timestamp
+    this.cooldownMs = 25000; // 25s cooldown per alert type to avoid alert fatigue in normal running
     this.socketBroadcastCallback = null;
   }
 
   setBroadcastCallback(fn) {
     this.socketBroadcastCallback = fn;
+  }
+
+  clearHistory() {
+    this.history.clear();
+    this.approachHistory.clear();
+    this.alertCooldowns.clear();
   }
 
   evaluate(event) {
@@ -25,131 +46,126 @@ class AnomalyEngine {
     if (!metrics && !data) return null;
 
     const trafficMetrics = metrics || data || {};
-    const anomalies = [];
+    const approaches = data?.approaches || trafficMetrics.approaches || [];
+    const now = Date.now();
 
-    // Helper to evaluate a numerical metric with Z-score + threshold
-    const checkMetric = (metricName, val, warningThreshold, criticalThreshold, unit = '', higherIsBad = true) => {
-      if (typeof val !== 'number') return;
+    // 1. Update junction metrics history
+    const queueVal = typeof trafficMetrics.maxQueueLengthM === 'number' ? trafficMetrics.maxQueueLengthM : 0;
+    const speedVal = typeof trafficMetrics.avgSpeedKmph === 'number' ? trafficMetrics.avgSpeedKmph : 20;
+    const congestionVal = typeof trafficMetrics.congestionScore === 'number' ? trafficMetrics.congestionScore : 40;
 
-      const histKey = `${juncId}:${metricName}`;
-      if (!this.history.has(histKey)) {
-        this.history.set(histKey, []);
-      }
-      const values = this.history.get(histKey);
-      values.push(val);
-      if (values.length > this.maxHistory) values.shift();
+    const queueHistKey = `${juncId}:queue`;
+    if (!this.history.has(queueHistKey)) this.history.set(queueHistKey, []);
+    const queueHistory = this.history.get(queueHistKey);
+    queueHistory.push(queueVal);
+    if (queueHistory.length > this.maxHistory) queueHistory.shift();
 
-      let isStatisticalAnomaly = false;
-      let zScore = 0;
-      if (values.length >= 8) {
-        const mean = values.reduce((a, b) => a + b, 0) / values.length;
-        const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values.length;
-        const stdDev = Math.sqrt(variance);
-        if (stdDev > 0.001) {
-          zScore = (val - mean) / stdDev;
-          if (Math.abs(zScore) >= 3.0) {
-            isStatisticalAnomaly = true;
+    const speedHistKey = `${juncId}:speed`;
+    if (!this.history.has(speedHistKey)) this.history.set(speedHistKey, []);
+    const speedHistory = this.history.get(speedHistKey);
+    speedHistory.push(speedVal);
+    if (speedHistory.length > this.maxHistory) speedHistory.shift();
+
+    let detectedAnomaly = null;
+
+    // Check 1: Sudden Blockage on an Individual Road (Arterial velocity collapse)
+    if (Array.isArray(approaches) && approaches.length > 0) {
+      for (const app of approaches) {
+        if (!app.road) continue;
+        const appKey = `${juncId}:${app.road}`;
+        if (!this.approachHistory.has(appKey)) {
+          this.approachHistory.set(appKey, []);
+        }
+        const appHist = this.approachHistory.get(appKey);
+        appHist.push({ speed: app.avgSpeedKmph, queue: app.queueLengthM, signal: app.signal });
+        if (appHist.length > 15) appHist.shift();
+
+        // Check for sudden drop if previous speed was >= 12 km/h and drops to <= 4 km/h (>= 65% drop)
+        // Or if speed <= 3 km/h with queue >= 130m
+        if (appHist.length >= 3) {
+          const pastSpeeds = appHist.slice(0, -1).map((h) => h.speed);
+          const avgPastSpeed = pastSpeeds.reduce((a, b) => a + b, 0) / pastSpeeds.length;
+
+          const isSpeedCollapse = (avgPastSpeed >= 12 && app.avgSpeedKmph <= 4) || (app.avgSpeedKmph <= 3 && app.queueLengthM >= 140);
+          const isGreenOrRecentGreen = app.signal === 'green' || appHist.slice(-3).some((h) => h.signal === 'green');
+
+          if (isSpeedCollapse && isGreenOrRecentGreen) {
+            detectedAnomaly = {
+              type: 'sudden_blockage',
+              severity: 'critical',
+              affectedRoad: app.road,
+              triggerValue: app.avgSpeedKmph,
+              thresholdValue: 4,
+              unit: 'km/h',
+              title: `Sudden Blockage on ${app.road} at ${juncName}`,
+              message: `Traffic velocity on ${app.road} collapsed to ${app.avgSpeedKmph} km/h while signal active. Roadway obstruction detected.`,
+              suggestedAction: {
+                action: 'divert',
+                description: `Publish diversion notice for ${app.road} and rebalance cycle green splits.`,
+              },
+            };
+            break;
           }
         }
       }
+    }
 
-      let severity = null;
-      let threshold = null;
+    // Check 2: Severe Traffic Jam (Critical Queue & Velocity Collapse)
+    // Critical jam threshold: queueVal >= 190m AND speedVal <= 5 km/h, OR queueVal >= 210m, OR congestionVal >= 88
+    if (!detectedAnomaly) {
+      const isCriticalJam =
+        queueVal >= 210 ||
+        (queueVal >= 180 && speedVal <= 5) ||
+        congestionVal >= 88;
 
-      if (higherIsBad) {
-        if (criticalThreshold !== undefined && val >= criticalThreshold) {
-          severity = 'critical';
-          threshold = criticalThreshold;
-        } else if (warningThreshold !== undefined && val >= warningThreshold) {
-          severity = 'warning';
-          threshold = warningThreshold;
-        }
-      } else {
-        if (criticalThreshold !== undefined && val <= criticalThreshold) {
-          severity = 'critical';
-          threshold = criticalThreshold;
-        } else if (warningThreshold !== undefined && val <= warningThreshold) {
-          severity = 'warning';
-          threshold = warningThreshold;
-        }
+      if (isCriticalJam) {
+        detectedAnomaly = {
+          type: 'jam',
+          severity: 'critical',
+          affectedRoad: approaches[0]?.road || null,
+          triggerValue: queueVal,
+          thresholdValue: 190,
+          unit: 'm',
+          title: `Traffic Gridlock / Jam at ${juncName}`,
+          message: `Arterial saturation: Max queue ${queueVal}m, average speed ${speedVal} km/h (Congestion score: ${congestionVal}/100).`,
+          suggestedAction: {
+            action: 'extend_green',
+            description: `Extend green phase by +25s on saturated arterial approach to clear backlog.`,
+          },
+        };
       }
+    }
 
-      if (!severity && isStatisticalAnomaly) {
-        severity = 'warning';
-        threshold = 0;
+    // Check 3: Congestion Building (Persistent queue growth across window)
+    if (!detectedAnomaly && queueHistory.length >= 8) {
+      const firstHalfQueue = queueHistory.slice(0, 4);
+      const secondHalfQueue = queueHistory.slice(-4);
+      const avgQueueStart = firstHalfQueue.reduce((a, b) => a + b, 0) / firstHalfQueue.length;
+      const avgQueueEnd = secondHalfQueue.reduce((a, b) => a + b, 0) / secondHalfQueue.length;
+
+      const queueGrowthPct = avgQueueStart > 0 ? (avgQueueEnd - avgQueueStart) / avgQueueStart : 0;
+      if (avgQueueEnd >= 155 && queueGrowthPct >= 0.35 && speedVal <= 10) {
+        detectedAnomaly = {
+          type: 'congestion_building',
+          severity: 'warning',
+          affectedRoad: approaches[0]?.road || null,
+          triggerValue: queueVal,
+          thresholdValue: 155,
+          unit: 'm',
+          title: `Congestion Building at ${juncName}`,
+          message: `Queue has expanded by ${Math.round(queueGrowthPct * 100)}% over recent window, now ${queueVal}m with speed falling to ${speedVal} km/h.`,
+          suggestedAction: {
+            action: 'extend_green',
+            description: `Extend arterial green window by 15s to relieve building queue before gridlock occurs.`,
+          },
+        };
       }
-
-      if (severity) {
-        anomalies.push({
-          metric: metricName,
-          triggerValue: val,
-          thresholdValue: threshold,
-          severity,
-          zScore: parseFloat(zScore.toFixed(2)),
-          unit,
-        });
-      }
-    };
-
-    // 1. Stalled Vehicle Incident Detection
-    if (trafficMetrics.stalledVehicleDetected || data?.stalledVehicleDetected) {
-      anomalies.push({
-        metric: 'stalledVehicle',
-        triggerValue: 1,
-        thresholdValue: 0,
-        severity: 'critical',
-        zScore: 4.5,
-        unit: 'event',
-        customTitle: `Stalled Vehicle Obstacle at ${juncName}`,
-        customMsg: `Vision camera detected an immobilized / stalled vehicle blocking arterial lanes. Emergency towing dispatch recommended.`,
-      });
     }
 
-    // 2. Emergency Vehicle (Ambulance / Fire) Corridor Preemption
-    if (trafficMetrics.ambulanceDetected || data?.ambulanceDetected) {
-      anomalies.push({
-        metric: 'ambulancePreemption',
-        triggerValue: 1,
-        thresholdValue: 0,
-        severity: 'critical',
-        zScore: 5.0,
-        unit: 'event',
-        customTitle: `Emergency Vehicle Approaching ${juncName}`,
-        customMsg: `Ambulance transponder & camera beacon active. Automated Green Corridor Preemption recommended.`,
-      });
-    }
+    if (!detectedAnomaly) return null;
 
-    // 3. Gridlock & Saturated Queue Detection
-    if (typeof trafficMetrics.maxQueueLengthM === 'number') {
-      checkMetric('maxQueueLengthM', trafficMetrics.maxQueueLengthM, 120, 165, 'm', true);
-    }
-    if (typeof trafficMetrics.avgSpeedKmph === 'number') {
-      checkMetric('avgSpeedKmph', trafficMetrics.avgSpeedKmph, 11, 6, 'km/h', false);
-    }
-    if (typeof trafficMetrics.totalFlowVehiclesPerMin === 'number') {
-      checkMetric('totalFlowVehiclesPerMin', trafficMetrics.totalFlowVehiclesPerMin, 135, 175, 'veh/min', true);
-    }
-
-    // Support legacy server/fleet/turbine metrics if passed in tests
-    if (typeof trafficMetrics.cpuPercent === 'number') {
-      checkMetric('cpuPercent', trafficMetrics.cpuPercent, 82, 94, '%', true);
-    }
-    if (typeof trafficMetrics.vibrationMmS === 'number') {
-      checkMetric('vibrationMmS', trafficMetrics.vibrationMmS, 5.0, 7.5, 'mm/s', true);
-    }
-
-    if (anomalies.length === 0) return null;
-
-    // Pick highest severity anomaly
-    const highestAnomaly = anomalies.reduce((prev, curr) => {
-      if (curr.severity === 'critical') return curr;
-      if (prev.severity === 'critical') return prev;
-      return curr;
-    }, anomalies[0]);
-
-    // Check cooldown
-    const cooldownKey = `${juncId}:${highestAnomaly.metric}`;
-    const now = Date.now();
+    // Check cooldown for this junction and alert type
+    const cooldownKey = `${juncId}:${detectedAnomaly.type}`;
     const lastAlertTime = this.alertCooldowns.get(cooldownKey) || 0;
     if (now - lastAlertTime < this.cooldownMs) {
       return null;
@@ -157,12 +173,7 @@ class AnomalyEngine {
 
     this.alertCooldowns.set(cooldownKey, now);
 
-    const title = highestAnomaly.customTitle || `${highestAnomaly.metric} ${highestAnomaly.severity.toUpperCase()} at ${juncName}`;
-    const message =
-      highestAnomaly.customMsg ||
-      `${highestAnomaly.metric} reached ${highestAnomaly.triggerValue} ${highestAnomaly.unit} (Threshold: ${highestAnomaly.thresholdValue} ${highestAnomaly.unit}${
-        highestAnomaly.zScore ? `, Z-Score: ${highestAnomaly.zScore}` : ''
-      })`;
+    const deadlineDate = new Date(now + autoRemediationDeadlineSec * 1000);
 
     const alertDoc = {
       alertId: `ALT-${crypto.randomBytes(6).toString('hex').toUpperCase()}`,
@@ -171,14 +182,23 @@ class AnomalyEngine {
       deviceName: juncName,
       zoneId: zId,
       category: zId,
-      severity: highestAnomaly.severity,
-      title,
-      message,
-      metric: highestAnomaly.metric,
-      triggerValue: highestAnomaly.triggerValue,
-      thresholdValue: highestAnomaly.thresholdValue,
+      severity: detectedAnomaly.severity,
+      title: detectedAnomaly.title,
+      message: detectedAnomaly.message,
+      metric: detectedAnomaly.type, // 'jam' | 'sudden_blockage' | 'congestion_building'
+      triggerValue: detectedAnomaly.triggerValue,
+      thresholdValue: detectedAnomaly.thresholdValue,
       timestamp: new Date(timestamp || now),
       resolved: false,
+      cause: 'unknown',
+      causeSource: 'unknown',
+      affectedRoad: detectedAnomaly.affectedRoad || null,
+      status: 'open',
+      suggestedAction: {
+        action: detectedAnomaly.suggestedAction.action,
+        description: detectedAnomaly.suggestedAction.description,
+        deadline: deadlineDate,
+      },
     };
 
     this.persistAndBroadcastAlert(alertDoc);
@@ -188,16 +208,18 @@ class AnomalyEngine {
 
   async persistAndBroadcastAlert(alertDoc) {
     try {
-      await Alert.create(alertDoc);
+      if (mongoose.connection?.readyState === 1) {
+        await Alert.create(alertDoc);
 
-      const penalty = alertDoc.severity === 'critical' ? 25 : 10;
-      await Device.updateOne(
-        { deviceId: alertDoc.deviceId },
-        {
-          $inc: { healthScore: -penalty },
-          $set: { status: alertDoc.severity === 'critical' ? 'critical' : 'warning' },
-        }
-      );
+        const penalty = alertDoc.severity === 'critical' ? 25 : 10;
+        await Device.updateOne(
+          { deviceId: alertDoc.deviceId },
+          {
+            $inc: { healthScore: -penalty },
+            $set: { status: alertDoc.severity === 'critical' ? 'critical' : 'warning' },
+          }
+        );
+      }
 
       if (this.socketBroadcastCallback) {
         this.socketBroadcastCallback(alertDoc);

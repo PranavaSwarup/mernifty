@@ -16,6 +16,8 @@ import simulatorRoutes from './routes/simulatorRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import copilotRoutes from './routes/copilotRoutes.js';
 import corridorRoutes from './routes/corridorRoutes.js';
+import reportRoutes from './routes/reportRoutes.js';
+import { remediationService } from './services/remediationService.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -44,7 +46,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    service: 'HyperPulse Telemetry Server',
+    service: 'MetroPulse BLR Smart Traffic Telemetry Server',
     environment: config.nodeEnv,
   });
 });
@@ -56,6 +58,7 @@ app.use('/api/junctions', deviceRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/simulator', simulatorRoutes);
 app.use('/api/corridor', corridorRoutes);
+app.use('/api/reports', reportRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/copilot', copilotRoutes);
 
@@ -66,7 +69,7 @@ app.get('*', (req, res) => {
   }
   res.sendFile(path.join(clientDistPath, 'index.html'), (err) => {
     if (err) {
-      res.status(200).send('HyperPulse Telemetry API Server running. Open Vite frontend on port 5173.');
+      res.status(200).send('MetroPulse BLR Telemetry API Server running. Open Vite frontend on port 5173.');
     }
   });
 });
@@ -96,7 +99,7 @@ async function startServer() {
     // 4. Start HTTP Server
     server.listen(config.port, () => {
       console.log(`====================================================`);
-      console.log(`🚀 HyperPulse Telemetry Engine running on port ${config.port}`);
+      console.log(`🚀 MetroPulse BLR Traffic Telemetry Engine running on port ${config.port}`);
       console.log(`📡 WebSocket server live with Room selective distribution`);
       console.log(`📊 Health check: http://localhost:${config.port}/api/health`);
       console.log(`====================================================`);
@@ -105,6 +108,9 @@ async function startServer() {
       if (config.simulatorEnabled) {
         simulatorService.start(15); // 15 events/sec default
       }
+
+      // 6. Start 1-second auto-remediation scanner loop (Section 5.10)
+      remediationService.start();
     });
   } catch (err) {
     console.error('Fatal startup error:', err);
@@ -116,6 +122,7 @@ async function startServer() {
 process.on('SIGINT', async () => {
   console.log('\nGracefully shutting down...');
   simulatorService.stop();
+  remediationService.stop();
   server.close(() => {
     console.log('HTTP & Socket.IO server closed.');
     process.exit(0);
