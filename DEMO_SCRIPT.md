@@ -1,4 +1,4 @@
-# HyperPulse Telemetry Platform — Demo Video Script (3–5 Minutes)
+# MetroPulse BLR Telemetry Platform — Demo Video Script (3–5 Minutes)
 
 > **Official Walkthrough & Presentation Guide for Hackathon Evaluators**  
 > **Topic**: High-Throughput Streams & Telemetry Monitoring (MERN + Socket.IO)
@@ -22,10 +22,10 @@
 ## 🎙️ Step-by-Step Script & Narration
 
 ### Segment 1: Introduction (0:00 – 0:45)
-- **On Screen**: Show the HyperPulse Operations Dashboard at `http://localhost:5173` with live indicators ticking.
+- **On Screen**: Show the MetroPulse BLR Operations Dashboard at `http://localhost:5173` with live indicators ticking.
 - **Narrator**:
-  > *"Hello judges! Welcome to HyperPulse, an enterprise real-time telemetry and observability platform engineered for the MERNIFY Hackathon. In modern distributed systems, whether it is high-density cloud data centers, autonomous transport logistics, or renewable energy grids, telemetry data arrives at frequencies exceeding thousands of events per second. Direct database writes lock up storage, while broadcasting full states saturates network links.*  
-  > *HyperPulse solves this using a write-behind buffering pipeline in Node.js, selective Socket.IO room distribution, in-memory deduplication, and an online statistical anomaly detection engine."*
+  > *"Hello judges! Welcome to MetroPulse BLR, an enterprise real-time telemetry and observability platform engineered for the MERNIFY Hackathon. In modern distributed systems, whether it is high-density cloud data centers, autonomous transport logistics, or renewable energy grids, telemetry data arrives at frequencies exceeding thousands of events per second. Direct database writes lock up storage, while broadcasting full states saturates network links.*  
+  > *MetroPulse BLR solves this using a write-behind buffering pipeline in Node.js, selective Socket.IO room distribution, in-memory deduplication, and an online statistical anomaly detection engine."*
 
 ---
 
@@ -59,7 +59,7 @@
 ### Segment 5: Historical Retrieval & Gapless Reconciliation (3:00 – 3:45)
 - **Action**: Return to the **"Live Operations"** tab, scroll down to the Device Grid, and click **"Inspect Stream"** on any device to open the Deep-Dive Modal.
 - **Narrator**:
-  > *"A common pitfall in real-time dashboards is data duplication when switching from historical storage to live streaming. When opening our Deep-Dive Waveform modal, HyperPulse fetches the last 50 records from MongoDB, and immediately hooks into the live Socket.IO stream.*  
+  > *"A common pitfall in real-time dashboards is data duplication when switching from historical storage to live streaming. When opening our Deep-Dive Waveform modal, MetroPulse BLR fetches the last 50 records from MongoDB, and immediately hooks into the live Socket.IO stream.*  
   > *Notice the badges: our client-side reconciliation engine uses eventId deduplication to blend `[HISTORICAL_MONGODB]` records with `[LIVE_SOCKET_IO]` packets into one continuous, gapless waveform.*  
   > *Furthermore, under the **Historical Analytics** tab, operators can aggregate millions of data points into 5-second or 1-minute time buckets and export audit reports directly as CSV or JSON."*
 
@@ -79,5 +79,5 @@
 - **Action**: Switch to the **"Engine Telemetry"** tab. Click **"2,000 Burst Test"**.
 - **Narrator**:
   > *"Finally, let's verify system throughput under load. We fire a 2,000-event burst through our HTTP batch endpoint. Our write-behind buffer flushes via MongoDB bulkWrite, achieving **over 7,000 events per second** with **zero packet drops**, while the client maintains a locked **60 FPS**.*  
-  > *HyperPulse provides a full automated test suite with `npm test`, Docker containerization with `docker-compose`, and full architectural documentation.*  
-  > *Thank you for reviewing HyperPulse!"*
+  > *MetroPulse BLR provides a full automated test suite with `npm test`, Docker containerization with `docker-compose`, and full architectural documentation.*  
+  > *Thank you for reviewing MetroPulse BLR!"*

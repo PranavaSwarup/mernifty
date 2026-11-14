@@ -1,4 +1,4 @@
-name: HyperPulse CI
+name: MetroPulse BLR CI
 
 on:
   push:

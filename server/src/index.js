@@ -3,8 +3,8 @@ import http from 'http';
 import cors from 'cors';
 import compression from 'compression';
 import morgan from 'morgan';
-import { config } from './config/config.js';
-import { connectDB } from './config/db.js';
+import { config, findProductionConfigProblems } from './config/config.js';
+import { connectDB, getDatabaseInfo } from './config/db.js';
 import { socketService } from './services/socketService.js';
 import { simulatorService } from './services/simulatorService.js';
 import { seedInitialData } from './utils/seedData.js';
@@ -15,6 +15,11 @@ import alertRoutes from './routes/alertRoutes.js';
 import simulatorRoutes from './routes/simulatorRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import copilotRoutes from './routes/copilotRoutes.js';
+import simRoutes from './routes/simRoutes.js';
+import actionRoutes from './routes/actionRoutes.js';
+import observabilityRoutes from './routes/observabilityRoutes.js';
+import benchmarkRoutes from './routes/benchmarkRoutes.js';
+import corridorRoutes from './routes/corridorRoutes.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -27,8 +32,8 @@ const server = http.createServer(app);
 // Middleware
 app.use(cors({ origin: '*' }));
 app.use(compression());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 if (config.nodeEnv !== 'test') {
   app.use(morgan('short'));
@@ -43,8 +48,10 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    service: 'HyperPulse Telemetry Server',
+    service: 'MetroPulse BLR Telemetry Server',
     environment: config.nodeEnv,
+    database: getDatabaseInfo(),
+    demoPersonas: config.demoPersonas,
   });
 });
 
@@ -55,6 +62,11 @@ app.use('/api/alerts', alertRoutes);
 app.use('/api/simulator', simulatorRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/copilot', copilotRoutes);
+app.use('/api/sim', simRoutes);
+app.use('/api/actions', actionRoutes);
+app.use('/api/observability', observabilityRoutes);
+app.use('/api/benchmarks', benchmarkRoutes);
+app.use('/api/corridor', corridorRoutes);
 
 // Fallback to client index.html for SPA routing
 app.get('*', (req, res) => {
@@ -63,17 +75,20 @@ app.get('*', (req, res) => {
   }
   res.sendFile(path.join(clientDistPath, 'index.html'), (err) => {
     if (err) {
-      res.status(200).send('HyperPulse Telemetry API Server running. Open Vite frontend on port 5173.');
+      res.status(200).send('MetroPulse BLR Telemetry API Server running. Open Vite frontend on port 5173.');
     }
   });
 });
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('[ServerError]', err.stack || err.message);
-  res.status(500).json({
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) {
+    console.error('[ServerError]', err.stack || err.message);
+  }
+  res.status(status).json({
     success: false,
-    error: 'Internal server error',
+    error: status === 413 ? 'Payload too large (max 1mb)' : err.message || 'Internal server error',
     message: err.message,
   });
 });
@@ -82,6 +97,12 @@ app.use((err, req, res, next) => {
 async function startServer() {
   try {
     // 1. Connect to Database
+    const configProblems = findProductionConfigProblems();
+    if (configProblems.length > 0) {
+      for (const problem of configProblems) console.error(`[Config] FATAL: ${problem}`);
+      throw new Error('Refusing to start in production with unsafe configuration.');
+    }
+
     await connectDB();
 
     // 2. Seed Initial Devices & Admin User
@@ -93,14 +114,14 @@ async function startServer() {
     // 4. Start HTTP Server
     server.listen(config.port, () => {
       console.log(`====================================================`);
-      console.log(`🚀 HyperPulse Telemetry Engine running on port ${config.port}`);
+      console.log(`🚀 MetroPulse BLR Telemetry Engine running on port ${config.port}`);
       console.log(`📡 WebSocket server live with Room selective distribution`);
       console.log(`📊 Health check: http://localhost:${config.port}/api/health`);
       console.log(`====================================================`);
 
-      // 5. Start background virtual device simulator
+      // 5. Start background virtual device simulator (default SIM_EMIT_HZ=2 Hz => 24 events/sec)
       if (config.simulatorEnabled) {
-        simulatorService.start(15); // 15 events/sec default
+        simulatorService.start();
       }
     });
   } catch (err) {
@@ -119,4 +140,9 @@ process.on('SIGINT', async () => {
   });
 });
 
-startServer();
+const isMain = Boolean(process.argv[1] && path.resolve(process.argv[1]) === __filename);
+if (isMain) {
+  startServer();
+}
+
+export { app, server, startServer };

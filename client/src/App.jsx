@@ -1,165 +1,228 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy, useCallback } from 'react';
 import { SocketProvider, useSocket } from './context/SocketContext';
 import { AuthProvider } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
-import { KpiOverview } from './components/KpiOverview';
-import { TelemetryCharts } from './components/TelemetryCharts';
-import { AlertsFeed } from './components/AlertsFeed';
-import { DeviceGrid } from './components/DeviceGrid';
-import { DeviceDetailModal } from './components/DeviceDetailModal';
-import { FleetMapView } from './components/FleetMapView';
-import { HistoricalAnalytics } from './components/HistoricalAnalytics';
-import { SimulatorControls } from './components/SimulatorControls';
-import { PerformanceBenchmark } from './components/PerformanceBenchmark';
-import { ArchitectureView } from './components/ArchitectureView';
-import { MultiClientSyncView } from './components/MultiClientSyncView';
-import { TerminalStreamInspector } from './components/TerminalStreamInspector';
-import { NetworkTopologyView } from './components/NetworkTopologyView';
-import { CopilotModal } from './components/CopilotModal';
 import { api } from './services/api';
+import { ThemeProvider, ZONE_LIST } from './utils/semantics';
 
-function MainApp() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+const NetworkWorkspace = lazy(() =>
+  import('./workspaces/NetworkWorkspace').then((m) => ({ default: m.NetworkWorkspace }))
+);
+const JunctionWorkspace = lazy(() =>
+  import('./workspaces/JunctionWorkspace').then((m) => ({ default: m.JunctionWorkspace }))
+);
+const DesksWorkspace = lazy(() =>
+  import('./workspaces/DesksWorkspace').then((m) => ({ default: m.DesksWorkspace }))
+);
+const EngineeringWorkspace = lazy(() =>
+  import('./workspaces/EngineeringWorkspace').then((m) => ({ default: m.EngineeringWorkspace }))
+);
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('[ErrorBoundary caught]', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="max-w-2xl mx-auto my-12 p-6 rounded-xl border border-rose-500/30 bg-rose-950/20 text-rose-200">
+          <h2 className="text-sm font-bold text-rose-400 mb-2">Workspace Encountered an Error</h2>
+          <p className="text-xs text-rose-300/80 mb-4 font-mono">{this.state.error?.message || 'Unknown runtime error'}</p>
+          <button
+            type="button"
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
+            className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-semibold border border-rose-500/40"
+          >
+            Reload Workspace
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function WorkspaceFallback() {
+  return (
+    <div className="max-w-[1680px] mx-auto px-4 py-12 text-center text-xs text-ink-muted">
+      Loading workspace module...
+    </div>
+  );
+}
+
+function ControlConsole() {
+  const [activeWorkspace, setActiveWorkspace] = useState('network');
   const [devices, setDevices] = useState([]);
-  const [selectedDevice, setSelectedDevice] = useState(null);
-  const [copilotDevice, setCopilotDevice] = useState(null);
-  const [alertsList, setAlertsList] = useState([]);
-  const { alerts } = useSocket();
+  const [zoneFilter, setZoneFilter] = useState('all');
+  const [drawerJunctionId, setDrawerJunctionId] = useState(null);
+  const [activeJunctionId, setActiveJunctionId] = useState('JNC-BLR-001');
+  const { setAlerts, setViewSubscription, subscribeDevice, unsubscribeDevice } = useSocket();
 
-  // Load devices on mount
-  const loadDevices = async () => {
-    try {
-      const res = await api.getDevices();
-      if (res.devices) setDevices(res.devices);
-    } catch (err) {
-      console.error('Failed to load devices:', err);
-    }
-  };
-
-  // Load alerts on mount
-  const loadAlerts = async () => {
-    try {
-      const res = await api.getAlerts({ limit: 40 });
-      if (res.alerts) setAlertsList(res.alerts);
-    } catch (err) {
-      console.error('Failed to load alerts:', err);
-    }
-  };
-
+  // Fetch initial device directory & alert feed cleanly on mount
   useEffect(() => {
-    loadDevices();
-    loadAlerts();
-  }, []);
+    let active = true;
+    api
+      .getDevices()
+      .then((res) => {
+        if (!active || !Array.isArray(res?.devices)) return;
+        setDevices(res.devices);
+        if (res.devices.length > 0) {
+          const firstId = res.devices[0].junctionId || res.devices[0].deviceId;
+          if (firstId) setActiveJunctionId((prev) => prev || firstId);
+        }
+      })
+      .catch(() => {});
 
-  // Sync incoming socket alerts into local alert list
+    api
+      .getAlerts({ limit: 40 })
+      .then((res) => {
+        if (active && Array.isArray(res?.alerts)) {
+          setAlerts(res.alerts);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [setAlerts]);
+
+  // Synchronize selective Socket.IO rooms cleanly per open workspace & target junction
   useEffect(() => {
-    if (alerts.length > 0) {
-      setAlertsList((prev) => {
-        const ids = new Set(prev.map((a) => a.alertId));
-        const newOnes = alerts.filter((a) => !ids.has(a.alertId));
-        return [...newOnes, ...prev].slice(0, 50);
+    const activeZones = zoneFilter === 'all' ? ZONE_LIST : [zoneFilter];
+    const alertsScope = zoneFilter === 'all' ? ['all'] : [zoneFilter];
+
+    if (activeWorkspace === 'network') {
+      setViewSubscription({
+        city: true,
+        engineering: false,
+        zones: activeZones,
+        junctions: drawerJunctionId ? [drawerJunctionId] : [],
+        alerts: alertsScope,
+      });
+      return;
+    }
+
+    if (activeWorkspace === 'junction') {
+      setViewSubscription({
+        city: true,
+        engineering: false,
+        zones: [],
+        junctions: activeJunctionId ? [activeJunctionId] : [],
+        alerts: ['all'],
+      });
+      return;
+    }
+
+    if (activeWorkspace === 'desks') {
+      setViewSubscription({
+        city: true,
+        engineering: false,
+        zones: [],
+        junctions: [],
+        alerts: ['all'],
+      });
+      return;
+    }
+
+    if (activeWorkspace === 'engineering') {
+      setViewSubscription({
+        city: true,
+        engineering: true,
+        zones: ZONE_LIST,
+        junctions: [],
+        alerts: ['all'],
       });
     }
-  }, [alerts]);
+  }, [activeWorkspace, zoneFilter, drawerJunctionId, activeJunctionId, setViewSubscription]);
 
-  const unresolvedCount = alertsList.filter((a) => !a.resolved).length;
+  const handleOpenDrawer = useCallback(
+    (junctionId) => {
+      if (drawerJunctionId && drawerJunctionId !== junctionId) {
+        unsubscribeDevice(drawerJunctionId);
+      }
+      setDrawerJunctionId(junctionId);
+      setActiveJunctionId(junctionId);
+      subscribeDevice(junctionId);
+    },
+    [drawerJunctionId, subscribeDevice, unsubscribeDevice]
+  );
+
+  const handleCloseDrawer = useCallback(() => {
+    if (drawerJunctionId) {
+      unsubscribeDevice(drawerJunctionId);
+    }
+    setDrawerJunctionId(null);
+  }, [drawerJunctionId, unsubscribeDevice]);
+
+  const handleWorkspaceChange = useCallback(
+    (nextWs) => {
+      if (drawerJunctionId) {
+        unsubscribeDevice(drawerJunctionId);
+        setDrawerJunctionId(null);
+      }
+      setActiveWorkspace(nextWs);
+    },
+    [drawerJunctionId, unsubscribeDevice]
+  );
 
   return (
-    <div className="min-h-screen bg-[#080C14] text-slate-100 flex flex-col">
-      {/* Top Navbar */}
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+    <div className="min-h-screen bg-ground text-ink-primary flex flex-col">
+      <Navbar
+        activeWorkspace={activeWorkspace}
+        onChangeWorkspace={handleWorkspaceChange}
+      />
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
-        {activeTab === 'dashboard' && (
-          <>
-            {/* KPI Overview Cards */}
-            <KpiOverview
-              unresolvedAlertsCount={unresolvedCount}
-              totalDevicesCount={devices.length}
-            />
+      <main className="flex-1">
+        <ErrorBoundary>
+          <Suspense fallback={<WorkspaceFallback />}>
+            {activeWorkspace === 'network' && (
+              <NetworkWorkspace
+                devices={devices}
+                selectedZone={zoneFilter}
+                onZoneChange={setZoneFilter}
+                selectedJunctionId={drawerJunctionId}
+                onOpenJunction={handleOpenDrawer}
+                onCloseJunction={handleCloseDrawer}
+              />
+            )}
 
-            {/* Split Section: Real-time Telemetry Charts & Live Alerts Feed */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-              <div className="lg:col-span-2">
-                <TelemetryCharts devices={devices} />
-              </div>
-              <div className="lg:col-span-1">
-                <AlertsFeed alerts={alertsList} onAlertsChange={loadAlerts} />
-              </div>
-            </div>
+            {activeWorkspace === 'junction' && (
+              <JunctionWorkspace
+                devices={devices}
+                selectedJunctionId={activeJunctionId}
+                onSelectJunction={setActiveJunctionId}
+              />
+            )}
 
-            {/* Monitored Nodes Matrix with 1-Click AI Copilot */}
-            <DeviceGrid
-              devices={devices}
-              onSelectDevice={(dev) => setSelectedDevice(dev)}
-              onOpenCopilot={(dev) => setCopilotDevice(dev)}
-            />
-          </>
-        )}
+            {activeWorkspace === 'desks' && <DesksWorkspace />}
 
-        {activeTab === 'map' && <FleetMapView devices={devices} />}
-
-        {activeTab === 'topology' && <NetworkTopologyView devices={devices} />}
-
-        {activeTab === 'multiclient' && <MultiClientSyncView />}
-
-        {activeTab === 'inspector' && <TerminalStreamInspector />}
-
-        {activeTab === 'historical' && <HistoricalAnalytics devices={devices} />}
-
-        {activeTab === 'simulator' && <SimulatorControls />}
-
-        {activeTab === 'benchmarks' && <PerformanceBenchmark />}
-
-        {activeTab === 'architecture' && <ArchitectureView />}
+            {activeWorkspace === 'engineering' && <EngineeringWorkspace devices={devices} />}
+          </Suspense>
+        </ErrorBoundary>
       </main>
-
-      {/* Deep-Dive Waveform Modal */}
-      {selectedDevice && (
-        <DeviceDetailModal
-          device={selectedDevice}
-          onClose={() => setSelectedDevice(null)}
-        />
-      )}
-
-      {/* AI Telemetry Copilot & Root-Cause Remediation Modal */}
-      {copilotDevice && (
-        <CopilotModal
-          device={copilotDevice}
-          onClose={() => setCopilotDevice(null)}
-          onRemediated={() => {
-            loadDevices();
-            loadAlerts();
-          }}
-        />
-      )}
-
-      {/* Footer */}
-      <footer className="border-t border-slate-800/80 bg-[#0B101D] px-6 py-4 mt-8">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
-          <span>MetroPulse BLR Smart City Traffic Platform • Bengaluru Central Command Center</span>
-          <div className="flex items-center gap-4 text-slate-400">
-            <span>Node.js + Express.js</span>
-            <span>•</span>
-            <span>MongoDB Write-Behind Ingestion</span>
-            <span>•</span>
-            <span>React.js + Leaflet Map</span>
-            <span>•</span>
-            <span>Socket.IO Zonal Partitioning</span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <SocketProvider>
-        <MainApp />
-      </SocketProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <SocketProvider>
+          <ControlConsole />
+        </SocketProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

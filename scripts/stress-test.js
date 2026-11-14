@@ -23,6 +23,17 @@ function getArg(flag, defaultValue) {
 const totalEvents = parseInt(getArg('--count', '3000'), 10);
 const batchSize = parseInt(getArg('--batchSize', '200'), 10);
 const targetUrl = new URL(getArg('--url', 'http://localhost:5000/api/telemetry/batch'));
+const apiKey = process.env.METROPULSE_API_KEY;
+
+if (!apiKey) {
+  console.error(
+    '[Stress Test] Error: METROPULSE_API_KEY environment variable is required.\n' +
+      'Set it from your provisioned DeviceKey (e.g. stored in server/.env.local-keys):\n' +
+      '  PowerShell: $env:METROPULSE_API_KEY="mpk_..." ; node scripts/stress-test.js\n' +
+      '  Or:         node --env-file=server/.env.local-keys scripts/stress-test.js'
+  );
+  process.exit(1);
+}
 
 console.log('====================================================');
 console.log('🚦 MetroPulse BLR: Smart City Traffic Stress Test Harness');
@@ -78,7 +89,7 @@ async function sendBatch(batch, batchIndex) {
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(data),
-          'X-API-Key': 'blr_traffic_key_live_command_center_2026',
+          'X-API-Key': apiKey,
         },
       },
       (res) => {

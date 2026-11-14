@@ -2,19 +2,37 @@ import mongoose from 'mongoose';
 import { config } from './config.js';
 
 let mongodInstance = null;
+// 'external' | 'in-memory' | 'disconnected' (reported by /api/health)
+let databaseType = 'disconnected';
+
+export function getDatabaseInfo() {
+  return {
+    type: databaseType,
+    connected: mongoose.connection.readyState === 1,
+    persistent: databaseType === 'external',
+  };
+}
 
 export async function connectDB() {
   // Option 1: Try connecting to configured MONGODB_URI
   try {
-    console.log(`[DB] Attempting connection to MongoDB at: ${config.mongoUri}...`);
+    const safeUri = config.mongoUri.replace(/:\/\/([^:@]+):([^@]+)@/, '://$1:***@');
+    console.log(`[DB] Attempting connection to MongoDB at: ${safeUri}...`);
     await mongoose.connect(config.mongoUri, {
       serverSelectionTimeoutMS: 3000,
       connectTimeoutMS: 3000,
       socketTimeoutMS: 45000,
     });
+    databaseType = 'external';
     console.log('[DB] Successfully connected to MongoDB server.');
     return;
   } catch (err) {
+    // In production an in-memory database would silently lose all history on restart,
+    // so a failed connection stops the server instead of falling back.
+    if (config.nodeEnv === 'production') {
+      console.error(`[DB] FATAL: could not connect to MongoDB in production (${err.message}).`);
+      throw err;
+    }
     console.warn(`[DB] Could not connect to local/external MongoDB (${err.message}).`);
     console.log('[DB] Launching in-memory MongoDB instance for seamless standalone operation...');
   }
@@ -24,7 +42,7 @@ export async function connectDB() {
     const { MongoMemoryServer } = await import('mongodb-memory-server');
     mongodInstance = await MongoMemoryServer.create({
       instance: {
-        dbName: 'hyperpulse',
+        dbName: 'metropulse',
       },
     });
     const uri = mongodInstance.getUri();
@@ -33,7 +51,8 @@ export async function connectDB() {
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 60000,
     });
-    console.log('[DB] Connected to in-memory MongoDB database.');
+    databaseType = 'in-memory';
+    console.log('[DB] Connected to in-memory MongoDB database (development only; data is lost on restart).');
   } catch (memErr) {
     console.error('[DB] MongoMemoryServer initialization error:', memErr.message);
     console.warn('[DB] Continuing with memory store fallback if needed.');

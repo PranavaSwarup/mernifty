@@ -1,53 +1,154 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 
 const AuthContext = createContext(null);
 
+const DEFAULT_ADMIN = {
+  id: 'admin-default',
+  name: 'Bengaluru Traffic Operations Commander',
+  email: 'admin@metropulse.io',
+  role: 'admin',
+  zones: ['south-bangalore', 'east-bangalore', 'north-bangalore', 'central-bangalore'],
+  persona: 'admin',
+};
+
+const ANONYMOUS_VIEWER = {
+  id: 'anonymous-viewer',
+  name: 'Anonymous Viewer',
+  email: 'viewer@metropulse.io',
+  role: 'viewer',
+  zones: [],
+  anonymous: true,
+  persona: 'anonymous',
+};
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState({
-    id: 'guest-operator-01',
-    name: 'Mission Flight Controller',
-    email: 'operator@hyperpulse.io',
-    role: 'operator',
-    apiKey: 'hp_key_demo_public_operator',
-  });
+  const [token, setToken] = useState(() => localStorage.getItem('hp_token') || null);
+  const [user, setUser] = useState(DEFAULT_ADMIN);
   const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
-    // Check if authenticated
-    api.getMe()
-      .then((res) => {
-        if (res.user) setUser(res.user);
-      })
-      .catch(() => {
-        // Fallback to default operator
-      });
-  }, []);
+    let cancelled = false;
+    const stored = localStorage.getItem('hp_token');
+    const storedPersona = localStorage.getItem('hp_persona');
+    if (!stored) {
+      // Auto-boot as Admin persona for hackathon demo convenience
+      api
+        .demoLogin('admin')
+        .then((res) => {
+          if (!cancelled && res?.token && res?.user) {
+            localStorage.setItem('hp_token', res.token);
+            localStorage.setItem('hp_persona', 'admin');
+            setToken(res.token);
+            setUser({ ...res.user, persona: 'admin' });
+          }
+        })
+        .catch(() => {});
+      return;
+    }
 
-  const login = async (email, password) => {
+    api
+      .getMe()
+      .then((res) => {
+        if (!cancelled && res.user) {
+          const isAnon = Boolean(res.user.anonymous) || storedPersona === 'anonymous' || storedPersona === 'anon';
+          setUser({
+            ...res.user,
+            anonymous: isAnon,
+            persona: isAnon
+              ? 'anonymous'
+              : res.user.persona === 'supervisor' || storedPersona === 'supervisor'
+                ? 'supervisor'
+                : res.user.role === 'admin'
+                  ? 'admin'
+                : res.user.role === 'operator'
+                  ? res.user.zones?.includes('east-bangalore')
+                    ? 'east-operator'
+                    : 'south-operator'
+                  : 'viewer',
+          });
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          if (err.status === 401) {
+            localStorage.removeItem('hp_token');
+            localStorage.removeItem('hp_persona');
+            setToken(null);
+            setUser(DEFAULT_ADMIN);
+          }
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const login = useCallback(async (email, password) => {
     setIsLoading(true);
+    setAuthError(null);
     try {
       const data = await api.login(email, password);
       localStorage.setItem('hp_token', data.token);
+      localStorage.setItem('hp_persona', data.user?.persona || data.user?.role || 'admin');
+      setToken(data.token);
       setUser(data.user);
       return data;
+    } catch (err) {
+      setAuthError(err.message);
+      throw err;
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const logout = () => {
-    localStorage.removeItem('hp_token');
-    setUser({
-      id: 'guest-viewer',
-      name: 'Guest Viewer',
-      email: 'viewer@hyperpulse.io',
-      role: 'viewer',
-    });
-  };
+  const switchPersona = useCallback(async (persona) => {
+    setAuthError(null);
+    setIsLoading(true);
+    const targetPersona = persona || 'anonymous';
+    try {
+      const data = await api.demoLogin(targetPersona);
+      localStorage.setItem('hp_token', data.token);
+      localStorage.setItem('hp_persona', targetPersona);
+      setToken(data.token);
+      const isAnon = targetPersona === 'anonymous' || targetPersona === 'anon' || Boolean(data.user?.anonymous);
+      const nextUser = {
+        ...data.user,
+        persona: targetPersona,
+        anonymous: isAnon,
+        name: isAnon ? 'Anonymous Viewer' : data.user?.name,
+      };
+      setUser(nextUser);
+      return { success: true, user: nextUser };
+    } catch (err) {
+      setAuthError(err.message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const logout = useCallback(() => {
+    switchPersona('anonymous');
+  }, [switchPersona]);
+
+  const clearAuthError = useCallback(() => setAuthError(null), []);
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        login,
+        switchPersona,
+        logout,
+        isLoading,
+        authError,
+        clearAuthError,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -1,5 +1,15 @@
 const BASE_URL = '';
 
+export class ApiError extends Error {
+  constructor(message, { status = 500, code = null, details = null } = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
 export async function fetchJson(endpoint, options = {}) {
   const url = `${BASE_URL}${endpoint}`;
   const headers = {
@@ -15,7 +25,20 @@ export async function fetchJson(endpoint, options = {}) {
   const response = await fetch(url, { ...options, headers });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+    const rawMsg = errorData.error || errorData.message || `${response.status} ${response.statusText}`;
+
+    let friendlyMsg = rawMsg;
+    if (response.status === 401) {
+      friendlyMsg = `401 Unauthorized: ${rawMsg}`;
+    } else if (response.status === 403) {
+      friendlyMsg = `403 Forbidden: ${rawMsg}`;
+    }
+
+    throw new ApiError(friendlyMsg, {
+      status: response.status,
+      code: errorData.code || null,
+      details: errorData.details || null,
+    });
   }
   return response.json();
 }
@@ -24,6 +47,7 @@ export const api = {
   fetchJson,
   // Telemetry
   getStats: () => fetchJson('/api/telemetry/stats'),
+  getIntegrity: () => fetchJson('/api/telemetry/integrity'),
   getHistory: (params = {}) => {
     const q = new URLSearchParams(params).toString();
     return fetchJson(`/api/telemetry/history?${q}`);
@@ -54,21 +78,55 @@ export const api = {
     }),
   clearResolvedAlerts: () => fetchJson('/api/alerts/clear', { method: 'DELETE' }),
 
-  // Simulator
+  // Simulator & Twin Control
   getSimulatorStatus: () => fetchJson('/api/simulator/status'),
-  startSimulator: (rate = 10) =>
+  getSimState: () => fetchJson('/api/sim/state'),
+  getScenarios: () => fetchJson('/api/sim/scenarios'),
+  applyScenario: (scenarioId) =>
+    fetchJson('/api/sim/scenario', { method: 'POST', body: JSON.stringify({ scenarioId }) }),
+  setSimSpeed: (speed) =>
+    fetchJson('/api/simulator/speed', { method: 'POST', body: JSON.stringify({ speed }) }),
+  getCounterfactual: () => fetchJson('/api/sim/counterfactual'),
+  startSimulator: (rate = 24) =>
     fetchJson('/api/simulator/start', { method: 'POST', body: JSON.stringify({ rate }) }),
   stopSimulator: () => fetchJson('/api/simulator/stop', { method: 'POST' }),
   setSimulatorRate: (rate) =>
     fetchJson('/api/simulator/rate', { method: 'POST', body: JSON.stringify({ rate }) }),
-  injectChaos: (deviceId, metric, multiplier = 2.5, durationSec = 15) =>
+  setController: (junctionId, controller) =>
+    fetchJson('/api/sim/controller', {
+      method: 'POST',
+      body: JSON.stringify({ junctionId, controller }),
+    }),
+  injectChaos: (junctionId, metric, multiplier = 2.5, durationSec = 15, flags = {}) =>
     fetchJson('/api/simulator/chaos', {
       method: 'POST',
-      body: JSON.stringify({ deviceId, metric, multiplier, durationSec }),
+      body: JSON.stringify({ junctionId, deviceId: junctionId, metric, multiplier, durationSec, flags }),
     }),
+
+  // Copilot & Actions
+  diagnose: (deviceId) => fetchJson(`/api/copilot/diagnose/${deviceId}`),
+  remediate: (payload) =>
+    fetchJson('/api/copilot/remediate', { method: 'POST', body: JSON.stringify(payload) }),
+  getActions: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return fetchJson(`/api/actions${q ? `?${q}` : ''}`);
+  },
+
+  // Observability & Benchmarks
+  getTraces: (limit = 50, { span = '', priority = 'informative' } = {}) => {
+    const params = new URLSearchParams({ limit: String(limit), priority });
+    if (span) params.set('span', span);
+    return fetchJson(`/api/observability/traces?${params.toString()}`);
+  },
+  getObservabilityMetrics: () => fetchJson('/api/observability/metrics'),
+  getBenchmarks: () => fetchJson('/api/benchmarks'),
+  runLiveBenchmark: (payload = { durationSec: 10 }) =>
+    fetchJson('/api/benchmarks/live', { method: 'POST', body: JSON.stringify(payload) }),
 
   // Auth
   login: (email, password) =>
     fetchJson('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  demoLogin: (persona) =>
+    fetchJson('/api/auth/demo-login', { method: 'POST', body: JSON.stringify({ persona }) }),
   getMe: () => fetchJson('/api/auth/me'),
 };
