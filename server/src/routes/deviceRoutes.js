@@ -2,11 +2,17 @@ import express from 'express';
 import { Device } from '../models/Device.js';
 import { Telemetry } from '../models/Telemetry.js';
 import { INITIAL_DEVICES } from '../services/simulatorService.js';
+import {
+  authenticate,
+  publicReadOrAuth,
+  requireRole,
+  requireJunctionZoneAccess,
+} from '../middleware/auth.js';
 
 const router = express.Router();
 
 // 1. Get all registered traffic junctions
-router.get('/', async (req, res) => {
+router.get('/', publicReadOrAuth, async (req, res) => {
   try {
     const { category, zoneId, status } = req.query;
     const filter = { junctionId: { $exists: true } };
@@ -20,7 +26,6 @@ router.get('/', async (req, res) => {
 
     let devices = await Device.find(filter).sort({ zoneId: 1, name: 1 }).lean();
 
-    // If database is brand new and has no devices yet, return initial seed devices
     if (devices.length === 0 && (!targetZone || targetZone === 'all') && (!status || status === 'all')) {
       devices = INITIAL_DEVICES.map((d) => ({
         junctionId: d.junctionId,
@@ -51,7 +56,7 @@ router.get('/', async (req, res) => {
 });
 
 // 2. Get junction by ID with recent telemetry
-router.get('/:deviceId', async (req, res) => {
+router.get('/:deviceId', publicReadOrAuth, async (req, res) => {
   try {
     const { deviceId } = req.params;
     let device = await Device.findOne({
@@ -81,7 +86,6 @@ router.get('/:deviceId', async (req, res) => {
       }
     }
 
-    // Fetch recent 50 telemetry points for this junction
     const recentTelemetry = await Telemetry.find({
       $or: [{ deviceId }, { junctionId: deviceId }],
     })
@@ -99,8 +103,8 @@ router.get('/:deviceId', async (req, res) => {
   }
 });
 
-// 3. Register a new traffic junction
-router.post('/', async (req, res) => {
+// 3. Register a new traffic junction (admin only)
+router.post('/', authenticate, requireRole(['admin']), async (req, res) => {
   try {
     const { junctionId, deviceId, name, zoneId, category, region, metadata, location } = req.body;
     const juncId = junctionId || deviceId;
@@ -141,29 +145,35 @@ router.post('/', async (req, res) => {
   }
 });
 
-// 4. Update junction metadata / configuration
-router.patch('/:deviceId', async (req, res) => {
-  try {
-    const { deviceId } = req.params;
-    const updates = req.body;
+// 4. Update junction metadata / configuration (requires operator+ & zone scope)
+router.patch(
+  '/:deviceId',
+  authenticate,
+  requireRole(['admin', 'operator']),
+  requireJunctionZoneAccess,
+  async (req, res) => {
+    try {
+      const { deviceId } = req.params;
+      const updates = req.body;
 
-    const device = await Device.findOneAndUpdate(
-      { $or: [{ deviceId }, { junctionId: deviceId }] },
-      { $set: updates },
-      { new: true }
-    );
+      const device = await Device.findOneAndUpdate(
+        { $or: [{ deviceId }, { junctionId: deviceId }] },
+        { $set: updates },
+        { new: true }
+      );
 
-    if (!device) {
-      return res.status(404).json({ success: false, error: 'Traffic junction not found' });
+      if (!device) {
+        return res.status(404).json({ success: false, error: 'Traffic junction not found' });
+      }
+
+      res.json({
+        success: true,
+        device,
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
     }
-
-    res.json({
-      success: true,
-      device,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
   }
-});
+);
 
 export default router;

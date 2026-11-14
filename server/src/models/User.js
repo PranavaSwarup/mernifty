@@ -23,12 +23,11 @@ const userSchema = new mongoose.Schema(
     role: {
       type: String,
       enum: ['admin', 'operator', 'viewer'],
-      default: 'operator',
+      default: 'viewer',
     },
-    apiKey: {
-      type: String,
-      unique: true,
-      sparse: true,
+    zones: {
+      type: [String],
+      default: [],
     },
   },
   {

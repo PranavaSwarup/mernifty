@@ -89,8 +89,19 @@ const deviceSchema = new mongoose.Schema(
     },
     adaptiveSignalMode: {
       type: String,
-      enum: ['dynamic-ai', 'fixed-timer', 'emergency-corridor', 'manual-override'],
-      default: 'dynamic-ai',
+      enum: [
+        'dynamic-ai',
+        'fixed-timer',
+        'emergency-corridor',
+        'manual-override',
+        'auto',
+        'fixed-tod',
+        'fixed-naive',
+        'webster',
+        'max-pressure',
+        'max-pressure-ca',
+      ],
+      default: 'auto',
     },
     tags: [String],
     metadata: {

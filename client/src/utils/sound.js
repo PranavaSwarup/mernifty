@@ -1,4 +1,4 @@
-// Sound alerts disabled
-export function playAlertSound() {
-  // No-op: audio notifications disabled
+// Web Audio API synthesizer - disabled to eliminate annoying audio chimes
+export function playAlertSound(severity = 'warning') {
+  // Silent no-op per user request - audio alarms disabled
 }

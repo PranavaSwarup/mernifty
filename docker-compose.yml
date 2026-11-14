@@ -3,30 +3,46 @@ version: '3.8'
 services:
   mongodb:
     image: mongo:7.0
-    container_name: hyperpulse-mongo
+    container_name: metropulse-mongo
     restart: always
     ports:
       - "27017:27017"
     environment:
-      MONGO_INITDB_DATABASE: hyperpulse
+      MONGO_INITDB_DATABASE: metropulse
     volumes:
       - mongo-data:/data/db
 
-  hyperpulse:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: metropulse-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+  metropulse:
     build: .
-    container_name: hyperpulse-app
+    container_name: metropulse-app
     restart: always
     ports:
       - "5000:5000"
     environment:
       PORT: 5000
-      MONGODB_URI: mongodb://mongodb:27017/hyperpulse
+      MONGODB_URI: mongodb://mongodb:27017/metropulse
       NODE_ENV: production
+      # Required in production: put JWT_SECRET=<long random string> in a .env file next to this file.
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (24+ characters) in a .env file before running docker compose}
+      DEMO_PERSONAS: ${DEMO_PERSONAS:-true}
       SIMULATOR_ENABLED: "true"
       BATCH_INTERVAL_MS: 500
       BATCH_SIZE: 200
+      OTEL_SAMPLE_RATIO: 0.05
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     depends_on:
       - mongodb
+      - jaeger
 
 volumes:
   mongo-data:

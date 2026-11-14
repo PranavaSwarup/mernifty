@@ -22,6 +22,17 @@ const rate = parseInt(getArg('--rate', '12'), 10);
 const junctionId = getArg('--junction', 'JNC-BLR-001');
 const zoneId = getArg('--zone', 'south-bangalore');
 const serverUrl = getArg('--url', 'http://localhost:5000/api/telemetry/ingest');
+const apiKey = process.env.METROPULSE_API_KEY;
+
+if (!apiKey) {
+  console.error(
+    '[Producer BLR] Error: METROPULSE_API_KEY environment variable is required.\n' +
+      'Set it from your provisioned DeviceKey (e.g. printed on first server seed or stored in server/.env.local-keys):\n' +
+      '  PowerShell: $env:METROPULSE_API_KEY="mpk_..." ; node scripts/standalone-producer.js\n' +
+      '  Or:         node --env-file=server/.env.local-keys scripts/standalone-producer.js'
+  );
+  process.exit(1);
+}
 
 console.log('====================================================');
 console.log('🚦 MetroPulse BLR: Smart City Traffic Producer');
@@ -102,7 +113,7 @@ function sendEvent() {
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(data),
-        'X-API-Key': 'blr_traffic_key_live_command_center_2026',
+        'X-API-Key': apiKey,
       },
     },
     (res) => {

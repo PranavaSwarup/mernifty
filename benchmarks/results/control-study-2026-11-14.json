@@ -1,0 +1,5844 @@
+{
+  "study": "controlled-signal-evaluation",
+  "date": "2026-11-14",
+  "generatedAt": "2026-11-14T18:15:26.118Z",
+  "runtimeSec": 169.89,
+  "networkSummary": {
+    "junctions": 12,
+    "links": 35
+  },
+  "config": {
+    "demandScales": [
+      0.15,
+      0.2,
+      0.25,
+      0.3,
+      0.35
+    ],
+    "timeWindows": [
+      {
+        "id": "am-peak",
+        "label": "AM Peak (09:00 IST)",
+        "startTimeIso": "2026-11-14T03:30:00.000Z"
+      },
+      {
+        "id": "midday",
+        "label": "Midday (13:30 IST)",
+        "startTimeIso": "2026-11-14T08:00:00.000Z"
+      },
+      {
+        "id": "pm-peak",
+        "label": "PM Peak (18:30 IST)",
+        "startTimeIso": "2026-11-14T13:00:00.000Z"
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "normal",
+        "label": "Normal TOD Demand (Poisson stationary within 30-min window)"
+      },
+      {
+        "id": "surge_incident",
+        "label": "Unplanned Asymmetric Surge (2.6x) + Stalled-Vehicle Incident (0.35 cap)"
+      }
+    ],
+    "controllers": [
+      {
+        "id": "fixed-tod",
+        "label": "Fixed-TOD (Webster-tuned)"
+      },
+      {
+        "id": "webster",
+        "label": "Webster EWMA"
+      },
+      {
+        "id": "max-pressure",
+        "label": "Max-Pressure (Raw)"
+      },
+      {
+        "id": "max-pressure-ca",
+        "label": "Max-Pressure-CA (Normalized + Loss-Adaptive)"
+      }
+    ],
+    "seeds": [
+      101,
+      202,
+      303,
+      404,
+      505,
+      606,
+      707,
+      808,
+      909,
+      1010
+    ],
+    "durationSec": 1800,
+    "dtSec": 1
+  },
+  "summary": {
+    "totalCells": 30,
+    "totalEpisodes": 1200
+  },
+  "cells": [
+    {
+      "scenarioId": "normal",
+      "windowId": "am-peak",
+      "windowLabel": "AM Peak (09:00 IST)",
+      "startTimeIso": "2026-11-14T03:30:00.000Z",
+      "demandScale": 0.15,
+      "criticalFlowProfile": {
+        "periodId": "am-peak",
+        "maxRawY": 0.326,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 22.246,
+            "sd": 0.139,
+            "ci95Low": 22.146,
+            "ci95High": 22.346,
+            "ci95HalfWidth": 0.1
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 9668.364,
+            "sd": 128.953,
+            "ci95Low": 9576.115,
+            "ci95High": 9760.613,
+            "ci95HalfWidth": 92.249
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 26.342,
+            "sd": 1.504,
+            "ci95Low": 25.266,
+            "ci95High": 27.417,
+            "ci95HalfWidth": 1.076
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 22.737,
+            "sd": 0.356,
+            "ci95Low": 22.482,
+            "ci95High": 22.992,
+            "ci95HalfWidth": 0.255
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 9674.718,
+            "sd": 135.597,
+            "ci95Low": 9577.716,
+            "ci95High": 9771.72,
+            "ci95HalfWidth": 97.002
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 26.233,
+            "sd": 1.762,
+            "ci95Low": 24.973,
+            "ci95High": 27.494,
+            "ci95HalfWidth": 1.261
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 19.733,
+            "sd": 0.255,
+            "ci95Low": 19.551,
+            "ci95High": 19.915,
+            "ci95HalfWidth": 0.182
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 9704.728,
+            "sd": 129.46,
+            "ci95Low": 9612.116,
+            "ci95High": 9797.34,
+            "ci95HalfWidth": 92.612
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 29.267,
+            "sd": 2.397,
+            "ci95Low": 27.552,
+            "ci95High": 30.982,
+            "ci95HalfWidth": 1.715
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 19.998,
+            "sd": 0.279,
+            "ci95Low": 19.799,
+            "ci95High": 20.197,
+            "ci95HalfWidth": 0.199
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 9697.863,
+            "sd": 128.828,
+            "ci95Low": 9605.703,
+            "ci95High": 9790.023,
+            "ci95HalfWidth": 92.16
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 28.142,
+            "sd": 1.97,
+            "ci95Low": 26.733,
+            "ci95High": 29.551,
+            "ci95HalfWidth": 1.409
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 0.491,
+            "sd": 0.307,
+            "ci95Low": 0.271,
+            "ci95High": 0.711,
+            "ci95HalfWidth": 0.22,
+            "pctVsBaseline": 2.21,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 6.354,
+            "sd": 12.445,
+            "ci95Low": -2.549,
+            "ci95High": 15.257,
+            "ci95HalfWidth": 8.903,
+            "pctVsBaseline": 0.07,
+            "winsOutOfN": 7,
+            "significant": "indistinguishable"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.513,
+            "sd": 0.277,
+            "ci95Low": -2.711,
+            "ci95High": -2.315,
+            "ci95HalfWidth": 0.198,
+            "pctVsBaseline": -11.3,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 36.364,
+            "sd": 13.994,
+            "ci95Low": 26.353,
+            "ci95High": 46.375,
+            "ci95HalfWidth": 10.011,
+            "pctVsBaseline": 0.38,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.248,
+            "sd": 0.341,
+            "ci95Low": -2.492,
+            "ci95High": -2.004,
+            "ci95HalfWidth": 0.244,
+            "pctVsBaseline": -10.11,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 29.499,
+            "sd": 9.369,
+            "ci95Low": 22.796,
+            "ci95High": 36.202,
+            "ci95HalfWidth": 6.703,
+            "pctVsBaseline": 0.31,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "am-peak",
+      "windowLabel": "AM Peak (09:00 IST)",
+      "startTimeIso": "2026-11-14T03:30:00.000Z",
+      "demandScale": 0.15,
+      "criticalFlowProfile": {
+        "periodId": "am-peak",
+        "maxRawY": 0.326,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 32.005,
+            "sd": 4.733,
+            "ci95Low": 28.619,
+            "ci95High": 35.391,
+            "ci95HalfWidth": 3.386
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 9930.749,
+            "sd": 147.47,
+            "ci95Low": 9825.253,
+            "ci95High": 10036.245,
+            "ci95HalfWidth": 105.496
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 27.017,
+            "sd": 1.692,
+            "ci95Low": 25.806,
+            "ci95High": 28.227,
+            "ci95HalfWidth": 1.211
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 25.071,
+            "sd": 1.511,
+            "ci95Low": 23.99,
+            "ci95High": 26.152,
+            "ci95HalfWidth": 1.081
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 9985.979,
+            "sd": 178.043,
+            "ci95Low": 9858.612,
+            "ci95High": 10113.346,
+            "ci95HalfWidth": 127.367
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 26.35,
+            "sd": 1.719,
+            "ci95Low": 25.121,
+            "ci95High": 27.579,
+            "ci95HalfWidth": 1.229
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 20.257,
+            "sd": 0.474,
+            "ci95Low": 19.918,
+            "ci95High": 20.596,
+            "ci95HalfWidth": 0.339
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 10028.242,
+            "sd": 189.215,
+            "ci95Low": 9892.883,
+            "ci95High": 10163.601,
+            "ci95HalfWidth": 135.359
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 28.758,
+            "sd": 1.997,
+            "ci95Low": 27.33,
+            "ci95High": 30.187,
+            "ci95HalfWidth": 1.429
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 20.612,
+            "sd": 0.514,
+            "ci95Low": 20.245,
+            "ci95High": 20.979,
+            "ci95HalfWidth": 0.367
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 10019.773,
+            "sd": 186.354,
+            "ci95Low": 9886.461,
+            "ci95High": 10153.085,
+            "ci95HalfWidth": 133.312
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 28.35,
+            "sd": 1.611,
+            "ci95Low": 27.198,
+            "ci95High": 29.502,
+            "ci95HalfWidth": 1.152
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -6.934,
+            "sd": 4.364,
+            "ci95Low": -10.056,
+            "ci95High": -3.812,
+            "ci95HalfWidth": 3.122,
+            "pctVsBaseline": -21.67,
+            "winsOutOfN": 9,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 55.23,
+            "sd": 46.653,
+            "ci95Low": 21.856,
+            "ci95High": 88.604,
+            "ci95HalfWidth": 33.374,
+            "pctVsBaseline": 0.56,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -11.748,
+            "sd": 4.58,
+            "ci95Low": -15.024,
+            "ci95High": -8.472,
+            "ci95HalfWidth": 3.276,
+            "pctVsBaseline": -36.71,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 97.493,
+            "sd": 60.447,
+            "ci95Low": 54.251,
+            "ci95High": 140.735,
+            "ci95HalfWidth": 43.242,
+            "pctVsBaseline": 0.98,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -11.393,
+            "sd": 4.592,
+            "ci95Low": -14.678,
+            "ci95High": -8.108,
+            "ci95HalfWidth": 3.285,
+            "pctVsBaseline": -35.6,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 89.024,
+            "sd": 61.029,
+            "ci95Low": 45.366,
+            "ci95High": 132.682,
+            "ci95HalfWidth": 43.658,
+            "pctVsBaseline": 0.9,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "normal",
+      "windowId": "midday",
+      "windowLabel": "Midday (13:30 IST)",
+      "startTimeIso": "2026-11-14T08:00:00.000Z",
+      "demandScale": 0.15,
+      "criticalFlowProfile": {
+        "periodId": "midday",
+        "maxRawY": 0.242,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 21.262,
+            "sd": 0.174,
+            "ci95Low": 21.138,
+            "ci95High": 21.386,
+            "ci95HalfWidth": 0.124
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 5608.514,
+            "sd": 83.505,
+            "ci95Low": 5548.777,
+            "ci95High": 5668.251,
+            "ci95HalfWidth": 59.737
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 15.717,
+            "sd": 1.596,
+            "ci95Low": 14.575,
+            "ci95High": 16.859,
+            "ci95HalfWidth": 1.142
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 21.739,
+            "sd": 0.341,
+            "ci95Low": 21.495,
+            "ci95High": 21.983,
+            "ci95HalfWidth": 0.244
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 5612.548,
+            "sd": 80.371,
+            "ci95Low": 5555.053,
+            "ci95High": 5670.043,
+            "ci95HalfWidth": 57.495
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 16.217,
+            "sd": 2.331,
+            "ci95Low": 14.549,
+            "ci95High": 17.884,
+            "ci95HalfWidth": 1.668
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 19.148,
+            "sd": 0.148,
+            "ci95Low": 19.042,
+            "ci95High": 19.254,
+            "ci95HalfWidth": 0.106
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 5621.509,
+            "sd": 83.919,
+            "ci95Low": 5561.476,
+            "ci95High": 5681.542,
+            "ci95HalfWidth": 60.033
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 18.733,
+            "sd": 3.203,
+            "ci95Low": 16.442,
+            "ci95High": 21.024,
+            "ci95HalfWidth": 2.291
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 19.244,
+            "sd": 0.144,
+            "ci95Low": 19.141,
+            "ci95High": 19.347,
+            "ci95HalfWidth": 0.103
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 5623.689,
+            "sd": 82.594,
+            "ci95Low": 5564.604,
+            "ci95High": 5682.774,
+            "ci95HalfWidth": 59.085
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 18.117,
+            "sd": 1.719,
+            "ci95Low": 16.887,
+            "ci95High": 19.346,
+            "ci95HalfWidth": 1.23
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 0.477,
+            "sd": 0.454,
+            "ci95Low": 0.152,
+            "ci95High": 0.802,
+            "ci95HalfWidth": 0.325,
+            "pctVsBaseline": 2.24,
+            "winsOutOfN": 1,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 4.034,
+            "sd": 7.975,
+            "ci95Low": -1.671,
+            "ci95High": 9.739,
+            "ci95HalfWidth": 5.705,
+            "pctVsBaseline": 0.07,
+            "winsOutOfN": 7,
+            "significant": "indistinguishable"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.114,
+            "sd": 0.206,
+            "ci95Low": -2.261,
+            "ci95High": -1.967,
+            "ci95HalfWidth": 0.147,
+            "pctVsBaseline": -9.94,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 12.995,
+            "sd": 6.883,
+            "ci95Low": 8.071,
+            "ci95High": 17.919,
+            "ci95HalfWidth": 4.924,
+            "pctVsBaseline": 0.23,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.018,
+            "sd": 0.244,
+            "ci95Low": -2.193,
+            "ci95High": -1.843,
+            "ci95HalfWidth": 0.175,
+            "pctVsBaseline": -9.49,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 15.175,
+            "sd": 6.858,
+            "ci95Low": 10.269,
+            "ci95High": 20.081,
+            "ci95HalfWidth": 4.906,
+            "pctVsBaseline": 0.27,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "midday",
+      "windowLabel": "Midday (13:30 IST)",
+      "startTimeIso": "2026-11-14T08:00:00.000Z",
+      "demandScale": 0.15,
+      "criticalFlowProfile": {
+        "periodId": "midday",
+        "maxRawY": 0.242,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 21.674,
+            "sd": 0.598,
+            "ci95Low": 21.246,
+            "ci95High": 22.102,
+            "ci95HalfWidth": 0.428
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 5808.573,
+            "sd": 131.326,
+            "ci95Low": 5714.626,
+            "ci95High": 5902.52,
+            "ci95HalfWidth": 93.947
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 16.192,
+            "sd": 1.515,
+            "ci95Low": 15.108,
+            "ci95High": 17.276,
+            "ci95HalfWidth": 1.084
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 22.224,
+            "sd": 0.464,
+            "ci95Low": 21.892,
+            "ci95High": 22.556,
+            "ci95HalfWidth": 0.332
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 5809.259,
+            "sd": 129.772,
+            "ci95Low": 5716.424,
+            "ci95High": 5902.094,
+            "ci95HalfWidth": 92.835
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 16.658,
+            "sd": 2.098,
+            "ci95Low": 15.157,
+            "ci95High": 18.159,
+            "ci95HalfWidth": 1.501
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 19.207,
+            "sd": 0.187,
+            "ci95Low": 19.073,
+            "ci95High": 19.341,
+            "ci95HalfWidth": 0.134
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 5826.663,
+            "sd": 130.841,
+            "ci95Low": 5733.063,
+            "ci95High": 5920.263,
+            "ci95HalfWidth": 93.6
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 19,
+            "sd": 2.075,
+            "ci95Low": 17.515,
+            "ci95High": 20.485,
+            "ci95HalfWidth": 1.485
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 19.211,
+            "sd": 0.247,
+            "ci95Low": 19.034,
+            "ci95High": 19.388,
+            "ci95HalfWidth": 0.177
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 5823.656,
+            "sd": 131.233,
+            "ci95Low": 5729.776,
+            "ci95High": 5917.536,
+            "ci95HalfWidth": 93.88
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 18.925,
+            "sd": 2.288,
+            "ci95Low": 17.288,
+            "ci95High": 20.562,
+            "ci95HalfWidth": 1.637
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 0.55,
+            "sd": 0.574,
+            "ci95Low": 0.139,
+            "ci95High": 0.961,
+            "ci95HalfWidth": 0.411,
+            "pctVsBaseline": 2.54,
+            "winsOutOfN": 2,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 0.686,
+            "sd": 5.336,
+            "ci95Low": -3.131,
+            "ci95High": 4.503,
+            "ci95HalfWidth": 3.817,
+            "pctVsBaseline": 0.01,
+            "winsOutOfN": 5,
+            "significant": "indistinguishable"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.467,
+            "sd": 0.649,
+            "ci95Low": -2.931,
+            "ci95High": -2.003,
+            "ci95HalfWidth": 0.464,
+            "pctVsBaseline": -11.38,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 18.09,
+            "sd": 6.16,
+            "ci95Low": 13.683,
+            "ci95High": 22.497,
+            "ci95HalfWidth": 4.407,
+            "pctVsBaseline": 0.31,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.463,
+            "sd": 0.529,
+            "ci95Low": -2.841,
+            "ci95High": -2.085,
+            "ci95HalfWidth": 0.378,
+            "pctVsBaseline": -11.36,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 15.083,
+            "sd": 7.22,
+            "ci95Low": 9.918,
+            "ci95High": 20.248,
+            "ci95HalfWidth": 5.165,
+            "pctVsBaseline": 0.26,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "normal",
+      "windowId": "pm-peak",
+      "windowLabel": "PM Peak (18:30 IST)",
+      "startTimeIso": "2026-11-14T13:00:00.000Z",
+      "demandScale": 0.15,
+      "criticalFlowProfile": {
+        "periodId": "pm-peak",
+        "maxRawY": 0.391,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 22.378,
+            "sd": 0.141,
+            "ci95Low": 22.277,
+            "ci95High": 22.479,
+            "ci95HalfWidth": 0.101
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 10263.185,
+            "sd": 120.262,
+            "ci95Low": 10177.153,
+            "ci95High": 10349.217,
+            "ci95HalfWidth": 86.032
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 27.783,
+            "sd": 2.137,
+            "ci95Low": 26.254,
+            "ci95High": 29.312,
+            "ci95HalfWidth": 1.529
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 23.083,
+            "sd": 0.209,
+            "ci95Low": 22.933,
+            "ci95High": 23.233,
+            "ci95HalfWidth": 0.15
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 10264.296,
+            "sd": 122.641,
+            "ci95Low": 10176.562,
+            "ci95High": 10352.03,
+            "ci95HalfWidth": 87.734
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 27.758,
+            "sd": 2.592,
+            "ci95Low": 25.904,
+            "ci95High": 29.613,
+            "ci95HalfWidth": 1.854
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 19.954,
+            "sd": 0.244,
+            "ci95Low": 19.779,
+            "ci95High": 20.129,
+            "ci95HalfWidth": 0.175
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 10298.403,
+            "sd": 124.552,
+            "ci95Low": 10209.302,
+            "ci95High": 10387.504,
+            "ci95HalfWidth": 89.101
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 31.1,
+            "sd": 2.665,
+            "ci95Low": 29.194,
+            "ci95High": 33.006,
+            "ci95HalfWidth": 1.906
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 20.355,
+            "sd": 0.21,
+            "ci95Low": 20.205,
+            "ci95High": 20.505,
+            "ci95HalfWidth": 0.15
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 10290.118,
+            "sd": 115.4,
+            "ci95Low": 10207.564,
+            "ci95High": 10372.672,
+            "ci95HalfWidth": 82.554
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 31.658,
+            "sd": 4.155,
+            "ci95Low": 28.686,
+            "ci95High": 34.631,
+            "ci95HalfWidth": 2.973
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 0.705,
+            "sd": 0.284,
+            "ci95Low": 0.501,
+            "ci95High": 0.909,
+            "ci95HalfWidth": 0.204,
+            "pctVsBaseline": 3.15,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 1.111,
+            "sd": 15.033,
+            "ci95Low": -9.643,
+            "ci95High": 11.865,
+            "ci95HalfWidth": 10.754,
+            "pctVsBaseline": 0.01,
+            "winsOutOfN": 6,
+            "significant": "indistinguishable"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.424,
+            "sd": 0.333,
+            "ci95Low": -2.662,
+            "ci95High": -2.186,
+            "ci95HalfWidth": 0.238,
+            "pctVsBaseline": -10.83,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 35.218,
+            "sd": 11.338,
+            "ci95Low": 27.107,
+            "ci95High": 43.329,
+            "ci95HalfWidth": 8.111,
+            "pctVsBaseline": 0.34,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.023,
+            "sd": 0.297,
+            "ci95Low": -2.236,
+            "ci95High": -1.81,
+            "ci95HalfWidth": 0.213,
+            "pctVsBaseline": -9.04,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 26.933,
+            "sd": 11.069,
+            "ci95Low": 19.015,
+            "ci95High": 34.851,
+            "ci95HalfWidth": 7.918,
+            "pctVsBaseline": 0.26,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "pm-peak",
+      "windowLabel": "PM Peak (18:30 IST)",
+      "startTimeIso": "2026-11-14T13:00:00.000Z",
+      "demandScale": 0.15,
+      "criticalFlowProfile": {
+        "periodId": "pm-peak",
+        "maxRawY": 0.391,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 34.256,
+            "sd": 5.604,
+            "ci95Low": 30.247,
+            "ci95High": 38.265,
+            "ci95HalfWidth": 4.009
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 10511.552,
+            "sd": 135.528,
+            "ci95Low": 10414.599,
+            "ci95High": 10608.505,
+            "ci95HalfWidth": 96.953
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 29.15,
+            "sd": 2.416,
+            "ci95Low": 27.421,
+            "ci95High": 30.879,
+            "ci95HalfWidth": 1.729
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 25.644,
+            "sd": 1.777,
+            "ci95Low": 24.373,
+            "ci95High": 26.915,
+            "ci95HalfWidth": 1.271
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 10594.964,
+            "sd": 190.394,
+            "ci95Low": 10458.762,
+            "ci95High": 10731.166,
+            "ci95HalfWidth": 136.202
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 28,
+            "sd": 2.553,
+            "ci95Low": 26.174,
+            "ci95High": 29.826,
+            "ci95HalfWidth": 1.826
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 20.488,
+            "sd": 0.579,
+            "ci95Low": 20.074,
+            "ci95High": 20.902,
+            "ci95HalfWidth": 0.414
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 10640.574,
+            "sd": 199.655,
+            "ci95Low": 10497.747,
+            "ci95High": 10783.401,
+            "ci95HalfWidth": 142.827
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 31.358,
+            "sd": 2.826,
+            "ci95Low": 29.337,
+            "ci95High": 33.38,
+            "ci95HalfWidth": 2.022
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 20.974,
+            "sd": 0.497,
+            "ci95Low": 20.618,
+            "ci95High": 21.33,
+            "ci95HalfWidth": 0.356
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 10638.08,
+            "sd": 196.602,
+            "ci95Low": 10497.437,
+            "ci95High": 10778.723,
+            "ci95HalfWidth": 140.643
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 31.125,
+            "sd": 2.659,
+            "ci95Low": 29.223,
+            "ci95High": 33.027,
+            "ci95HalfWidth": 1.902
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -8.612,
+            "sd": 5.065,
+            "ci95Low": -12.235,
+            "ci95High": -4.989,
+            "ci95HalfWidth": 3.623,
+            "pctVsBaseline": -25.14,
+            "winsOutOfN": 9,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 83.412,
+            "sd": 78.713,
+            "ci95Low": 27.103,
+            "ci95High": 139.721,
+            "ci95HalfWidth": 56.309,
+            "pctVsBaseline": 0.79,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -13.768,
+            "sd": 5.38,
+            "ci95Low": -17.617,
+            "ci95High": -9.919,
+            "ci95HalfWidth": 3.849,
+            "pctVsBaseline": -40.19,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 129.022,
+            "sd": 86.294,
+            "ci95Low": 67.29,
+            "ci95High": 190.754,
+            "ci95HalfWidth": 61.732,
+            "pctVsBaseline": 1.23,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -13.282,
+            "sd": 5.489,
+            "ci95Low": -17.208,
+            "ci95High": -9.356,
+            "ci95HalfWidth": 3.926,
+            "pctVsBaseline": -38.77,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 126.528,
+            "sd": 84.381,
+            "ci95Low": 66.164,
+            "ci95High": 186.892,
+            "ci95HalfWidth": 60.364,
+            "pctVsBaseline": 1.2,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "normal",
+      "windowId": "am-peak",
+      "windowLabel": "AM Peak (09:00 IST)",
+      "startTimeIso": "2026-11-14T03:30:00.000Z",
+      "demandScale": 0.2,
+      "criticalFlowProfile": {
+        "periodId": "am-peak",
+        "maxRawY": 0.434,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 23.573,
+            "sd": 0.173,
+            "ci95Low": 23.449,
+            "ci95High": 23.697,
+            "ci95HalfWidth": 0.124
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 12903.219,
+            "sd": 118.205,
+            "ci95Low": 12818.659,
+            "ci95High": 12987.779,
+            "ci95HalfWidth": 84.56
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 33.583,
+            "sd": 1.531,
+            "ci95Low": 32.488,
+            "ci95High": 34.678,
+            "ci95HalfWidth": 1.095
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 24.608,
+            "sd": 0.335,
+            "ci95Low": 24.368,
+            "ci95High": 24.848,
+            "ci95HalfWidth": 0.24
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 12899.052,
+            "sd": 111.312,
+            "ci95Low": 12819.423,
+            "ci95High": 12978.681,
+            "ci95HalfWidth": 79.629
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 33.758,
+            "sd": 1.365,
+            "ci95Low": 32.782,
+            "ci95High": 34.735,
+            "ci95HalfWidth": 0.977
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 21.69,
+            "sd": 0.219,
+            "ci95Low": 21.533,
+            "ci95High": 21.847,
+            "ci95HalfWidth": 0.157
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 12940.332,
+            "sd": 115.189,
+            "ci95Low": 12857.929,
+            "ci95High": 13022.735,
+            "ci95HalfWidth": 82.403
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 36.033,
+            "sd": 1.417,
+            "ci95Low": 35.02,
+            "ci95High": 37.047,
+            "ci95HalfWidth": 1.014
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 22.162,
+            "sd": 0.216,
+            "ci95Low": 22.008,
+            "ci95High": 22.316,
+            "ci95HalfWidth": 0.154
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 12932.565,
+            "sd": 117.187,
+            "ci95Low": 12848.733,
+            "ci95High": 13016.397,
+            "ci95HalfWidth": 83.832
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 36.567,
+            "sd": 2.014,
+            "ci95Low": 35.126,
+            "ci95High": 38.008,
+            "ci95HalfWidth": 1.441
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 1.035,
+            "sd": 0.342,
+            "ci95Low": 0.79,
+            "ci95High": 1.28,
+            "ci95HalfWidth": 0.245,
+            "pctVsBaseline": 4.39,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -4.167,
+            "sd": 16.733,
+            "ci95Low": -16.137,
+            "ci95High": 7.803,
+            "ci95HalfWidth": 11.97,
+            "pctVsBaseline": -0.03,
+            "winsOutOfN": 4,
+            "significant": "indistinguishable"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -1.883,
+            "sd": 0.193,
+            "ci95Low": -2.021,
+            "ci95High": -1.745,
+            "ci95HalfWidth": 0.138,
+            "pctVsBaseline": -7.99,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 37.113,
+            "sd": 16.155,
+            "ci95Low": 25.556,
+            "ci95High": 48.67,
+            "ci95HalfWidth": 11.557,
+            "pctVsBaseline": 0.29,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -1.411,
+            "sd": 0.211,
+            "ci95Low": -1.562,
+            "ci95High": -1.26,
+            "ci95HalfWidth": 0.151,
+            "pctVsBaseline": -5.99,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 29.346,
+            "sd": 10.629,
+            "ci95Low": 21.742,
+            "ci95High": 36.95,
+            "ci95HalfWidth": 7.604,
+            "pctVsBaseline": 0.23,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "am-peak",
+      "windowLabel": "AM Peak (09:00 IST)",
+      "startTimeIso": "2026-11-14T03:30:00.000Z",
+      "demandScale": 0.2,
+      "criticalFlowProfile": {
+        "periodId": "am-peak",
+        "maxRawY": 0.434,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 44.603,
+            "sd": 8.425,
+            "ci95Low": 38.576,
+            "ci95High": 50.63,
+            "ci95HalfWidth": 6.027
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13035.593,
+            "sd": 77.882,
+            "ci95Low": 12979.879,
+            "ci95High": 13091.307,
+            "ci95HalfWidth": 55.714
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 38.392,
+            "sd": 2.55,
+            "ci95Low": 36.567,
+            "ci95High": 40.216,
+            "ci95HalfWidth": 1.825
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 29.761,
+            "sd": 2.896,
+            "ci95Low": 27.69,
+            "ci95High": 31.832,
+            "ci95HalfWidth": 2.071
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13278.616,
+            "sd": 181.183,
+            "ci95Low": 13149.003,
+            "ci95High": 13408.229,
+            "ci95HalfWidth": 129.613
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 35.367,
+            "sd": 1.474,
+            "ci95Low": 34.312,
+            "ci95High": 36.421,
+            "ci95HalfWidth": 1.055
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 23.873,
+            "sd": 1.778,
+            "ci95Low": 22.601,
+            "ci95High": 25.145,
+            "ci95HalfWidth": 1.272
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13367.895,
+            "sd": 195.356,
+            "ci95Low": 13228.143,
+            "ci95High": 13507.647,
+            "ci95HalfWidth": 139.752
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 36.342,
+            "sd": 2.176,
+            "ci95Low": 34.785,
+            "ci95High": 37.899,
+            "ci95HalfWidth": 1.557
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 24.259,
+            "sd": 1.192,
+            "ci95Low": 23.406,
+            "ci95High": 25.112,
+            "ci95HalfWidth": 0.853
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13356.2,
+            "sd": 203.609,
+            "ci95Low": 13210.544,
+            "ci95High": 13501.856,
+            "ci95HalfWidth": 145.656
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 36.342,
+            "sd": 2.184,
+            "ci95Low": 34.779,
+            "ci95High": 37.904,
+            "ci95HalfWidth": 1.563
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -14.842,
+            "sd": 7.049,
+            "ci95Low": -19.885,
+            "ci95High": -9.799,
+            "ci95HalfWidth": 5.043,
+            "pctVsBaseline": -33.28,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 243.023,
+            "sd": 180.514,
+            "ci95Low": 113.889,
+            "ci95High": 372.157,
+            "ci95HalfWidth": 129.134,
+            "pctVsBaseline": 1.86,
+            "winsOutOfN": 9,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -20.73,
+            "sd": 7.383,
+            "ci95Low": -26.012,
+            "ci95High": -15.448,
+            "ci95HalfWidth": 5.282,
+            "pctVsBaseline": -46.48,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 332.302,
+            "sd": 185.455,
+            "ci95Low": 199.633,
+            "ci95High": 464.971,
+            "ci95HalfWidth": 132.669,
+            "pctVsBaseline": 2.55,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -20.344,
+            "sd": 7.728,
+            "ci95Low": -25.872,
+            "ci95High": -14.816,
+            "ci95HalfWidth": 5.528,
+            "pctVsBaseline": -45.61,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 320.607,
+            "sd": 189.512,
+            "ci95Low": 185.035,
+            "ci95High": 456.179,
+            "ci95HalfWidth": 135.572,
+            "pctVsBaseline": 2.46,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "normal",
+      "windowId": "midday",
+      "windowLabel": "Midday (13:30 IST)",
+      "startTimeIso": "2026-11-14T08:00:00.000Z",
+      "demandScale": 0.2,
+      "criticalFlowProfile": {
+        "periodId": "midday",
+        "maxRawY": 0.323,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 21.692,
+            "sd": 0.142,
+            "ci95Low": 21.59,
+            "ci95High": 21.794,
+            "ci95HalfWidth": 0.102
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 7474.779,
+            "sd": 98.232,
+            "ci95Low": 7404.507,
+            "ci95High": 7545.051,
+            "ci95HalfWidth": 70.272
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 20.317,
+            "sd": 1.034,
+            "ci95Low": 19.577,
+            "ci95High": 21.056,
+            "ci95HalfWidth": 0.74
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 22.076,
+            "sd": 0.379,
+            "ci95Low": 21.805,
+            "ci95High": 22.347,
+            "ci95HalfWidth": 0.271
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 7481.402,
+            "sd": 96.537,
+            "ci95Low": 7412.342,
+            "ci95High": 7550.462,
+            "ci95HalfWidth": 69.06
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 20.108,
+            "sd": 1.55,
+            "ci95Low": 18.999,
+            "ci95High": 21.217,
+            "ci95HalfWidth": 1.109
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 19.18,
+            "sd": 0.161,
+            "ci95Low": 19.065,
+            "ci95High": 19.295,
+            "ci95HalfWidth": 0.115
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 7494.998,
+            "sd": 100.14,
+            "ci95Low": 7423.361,
+            "ci95High": 7566.635,
+            "ci95HalfWidth": 71.637
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 22.3,
+            "sd": 1.54,
+            "ci95Low": 21.198,
+            "ci95High": 23.402,
+            "ci95HalfWidth": 1.102
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 19.279,
+            "sd": 0.118,
+            "ci95Low": 19.195,
+            "ci95High": 19.363,
+            "ci95HalfWidth": 0.084
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 7495.737,
+            "sd": 101.371,
+            "ci95Low": 7423.219,
+            "ci95High": 7568.255,
+            "ci95HalfWidth": 72.518
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 22.592,
+            "sd": 1.989,
+            "ci95Low": 21.169,
+            "ci95High": 24.015,
+            "ci95HalfWidth": 1.423
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 0.384,
+            "sd": 0.409,
+            "ci95Low": 0.092,
+            "ci95High": 0.676,
+            "ci95HalfWidth": 0.292,
+            "pctVsBaseline": 1.77,
+            "winsOutOfN": 2,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 6.623,
+            "sd": 7.061,
+            "ci95Low": 1.572,
+            "ci95High": 11.674,
+            "ci95HalfWidth": 5.051,
+            "pctVsBaseline": 0.09,
+            "winsOutOfN": 9,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.512,
+            "sd": 0.221,
+            "ci95Low": -2.67,
+            "ci95High": -2.354,
+            "ci95HalfWidth": 0.158,
+            "pctVsBaseline": -11.58,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 20.219,
+            "sd": 9.478,
+            "ci95Low": 13.439,
+            "ci95High": 26.999,
+            "ci95HalfWidth": 6.78,
+            "pctVsBaseline": 0.27,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.413,
+            "sd": 0.157,
+            "ci95Low": -2.526,
+            "ci95High": -2.3,
+            "ci95HalfWidth": 0.113,
+            "pctVsBaseline": -11.12,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 20.958,
+            "sd": 6.867,
+            "ci95Low": 16.045,
+            "ci95High": 25.871,
+            "ci95HalfWidth": 4.913,
+            "pctVsBaseline": 0.28,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "midday",
+      "windowLabel": "Midday (13:30 IST)",
+      "startTimeIso": "2026-11-14T08:00:00.000Z",
+      "demandScale": 0.2,
+      "criticalFlowProfile": {
+        "periodId": "midday",
+        "maxRawY": 0.323,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 24.385,
+            "sd": 1.907,
+            "ci95Low": 23.021,
+            "ci95High": 25.749,
+            "ci95HalfWidth": 1.364
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 7721.71,
+            "sd": 150.528,
+            "ci95Low": 7614.027,
+            "ci95High": 7829.393,
+            "ci95HalfWidth": 107.683
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 20.6,
+            "sd": 1.246,
+            "ci95Low": 19.709,
+            "ci95High": 21.491,
+            "ci95HalfWidth": 0.891
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 23.216,
+            "sd": 1.01,
+            "ci95Low": 22.494,
+            "ci95High": 23.938,
+            "ci95HalfWidth": 0.722
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 7730.031,
+            "sd": 157.497,
+            "ci95Low": 7617.363,
+            "ci95High": 7842.699,
+            "ci95HalfWidth": 112.668
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 20.242,
+            "sd": 1.259,
+            "ci95Low": 19.341,
+            "ci95High": 21.142,
+            "ci95HalfWidth": 0.9
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 19.285,
+            "sd": 0.244,
+            "ci95Low": 19.111,
+            "ci95High": 19.459,
+            "ci95HalfWidth": 0.174
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 7754.869,
+            "sd": 163.415,
+            "ci95Low": 7637.967,
+            "ci95High": 7871.771,
+            "ci95HalfWidth": 116.902
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 22.417,
+            "sd": 1.009,
+            "ci95Low": 21.695,
+            "ci95High": 23.139,
+            "ci95HalfWidth": 0.722
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 19.453,
+            "sd": 0.339,
+            "ci95Low": 19.211,
+            "ci95High": 19.695,
+            "ci95HalfWidth": 0.242
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 7752.039,
+            "sd": 158.147,
+            "ci95Low": 7638.905,
+            "ci95High": 7865.173,
+            "ci95HalfWidth": 113.134
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 22.75,
+            "sd": 1.953,
+            "ci95Low": 21.353,
+            "ci95High": 24.147,
+            "ci95HalfWidth": 1.397
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -1.169,
+            "sd": 1.9,
+            "ci95Low": -2.528,
+            "ci95High": 0.19,
+            "ci95HalfWidth": 1.359,
+            "pctVsBaseline": -4.79,
+            "winsOutOfN": 7,
+            "significant": "indistinguishable"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 8.321,
+            "sd": 12.864,
+            "ci95Low": -0.881,
+            "ci95High": 17.523,
+            "ci95HalfWidth": 9.202,
+            "pctVsBaseline": 0.11,
+            "winsOutOfN": 7,
+            "significant": "indistinguishable"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -5.1,
+            "sd": 1.889,
+            "ci95Low": -6.451,
+            "ci95High": -3.749,
+            "ci95HalfWidth": 1.351,
+            "pctVsBaseline": -20.91,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 33.159,
+            "sd": 15.112,
+            "ci95Low": 22.349,
+            "ci95High": 43.969,
+            "ci95HalfWidth": 10.81,
+            "pctVsBaseline": 0.43,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -4.932,
+            "sd": 1.839,
+            "ci95Low": -6.248,
+            "ci95High": -3.616,
+            "ci95HalfWidth": 1.316,
+            "pctVsBaseline": -20.23,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 30.329,
+            "sd": 11.933,
+            "ci95Low": 21.792,
+            "ci95High": 38.866,
+            "ci95HalfWidth": 8.537,
+            "pctVsBaseline": 0.39,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "normal",
+      "windowId": "pm-peak",
+      "windowLabel": "PM Peak (18:30 IST)",
+      "startTimeIso": "2026-11-14T13:00:00.000Z",
+      "demandScale": 0.2,
+      "criticalFlowProfile": {
+        "periodId": "pm-peak",
+        "maxRawY": 0.521,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 24.39,
+            "sd": 0.188,
+            "ci95Low": 24.255,
+            "ci95High": 24.525,
+            "ci95HalfWidth": 0.135
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13688.58,
+            "sd": 106.299,
+            "ci95Low": 13612.537,
+            "ci95High": 13764.623,
+            "ci95HalfWidth": 76.043
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 35.108,
+            "sd": 2.246,
+            "ci95Low": 33.502,
+            "ci95High": 36.715,
+            "ci95HalfWidth": 1.607
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 25.281,
+            "sd": 0.422,
+            "ci95Low": 24.979,
+            "ci95High": 25.583,
+            "ci95HalfWidth": 0.302
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13681.216,
+            "sd": 103.742,
+            "ci95Low": 13607.002,
+            "ci95High": 13755.43,
+            "ci95HalfWidth": 74.214
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 35.042,
+            "sd": 2.831,
+            "ci95Low": 33.016,
+            "ci95High": 37.067,
+            "ci95HalfWidth": 2.025
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 22.557,
+            "sd": 0.241,
+            "ci95Low": 22.384,
+            "ci95High": 22.73,
+            "ci95HalfWidth": 0.173
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13727.448,
+            "sd": 101.313,
+            "ci95Low": 13654.972,
+            "ci95High": 13799.924,
+            "ci95HalfWidth": 72.476
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 37.9,
+            "sd": 2.083,
+            "ci95Low": 36.41,
+            "ci95High": 39.39,
+            "ci95HalfWidth": 1.49
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 22.996,
+            "sd": 0.265,
+            "ci95Low": 22.806,
+            "ci95High": 23.186,
+            "ci95HalfWidth": 0.19
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13721.032,
+            "sd": 100.896,
+            "ci95Low": 13648.854,
+            "ci95High": 13793.21,
+            "ci95HalfWidth": 72.178
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 38,
+            "sd": 1.187,
+            "ci95Low": 37.151,
+            "ci95High": 38.849,
+            "ci95HalfWidth": 0.849
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 0.891,
+            "sd": 0.386,
+            "ci95Low": 0.615,
+            "ci95High": 1.167,
+            "ci95HalfWidth": 0.276,
+            "pctVsBaseline": 3.65,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -7.364,
+            "sd": 16.625,
+            "ci95Low": -19.257,
+            "ci95High": 4.529,
+            "ci95HalfWidth": 11.893,
+            "pctVsBaseline": -0.05,
+            "winsOutOfN": 2,
+            "significant": "indistinguishable"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -1.833,
+            "sd": 0.38,
+            "ci95Low": -2.105,
+            "ci95High": -1.561,
+            "ci95HalfWidth": 0.272,
+            "pctVsBaseline": -7.52,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 38.868,
+            "sd": 14.125,
+            "ci95Low": 28.763,
+            "ci95High": 48.973,
+            "ci95HalfWidth": 10.105,
+            "pctVsBaseline": 0.28,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -1.394,
+            "sd": 0.287,
+            "ci95Low": -1.599,
+            "ci95High": -1.189,
+            "ci95HalfWidth": 0.205,
+            "pctVsBaseline": -5.72,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 32.452,
+            "sd": 14.958,
+            "ci95Low": 21.751,
+            "ci95High": 43.153,
+            "ci95HalfWidth": 10.701,
+            "pctVsBaseline": 0.24,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "pm-peak",
+      "windowLabel": "PM Peak (18:30 IST)",
+      "startTimeIso": "2026-11-14T13:00:00.000Z",
+      "demandScale": 0.2,
+      "criticalFlowProfile": {
+        "periodId": "pm-peak",
+        "maxRawY": 0.521,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 46.981,
+            "sd": 7.865,
+            "ci95Low": 41.355,
+            "ci95High": 52.607,
+            "ci95HalfWidth": 5.626
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13788.016,
+            "sd": 68.951,
+            "ci95Low": 13738.69,
+            "ci95High": 13837.342,
+            "ci95HalfWidth": 49.326
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 40.058,
+            "sd": 1.939,
+            "ci95Low": 38.671,
+            "ci95High": 41.446,
+            "ci95HalfWidth": 1.387
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 31.24,
+            "sd": 2.945,
+            "ci95Low": 29.133,
+            "ci95High": 33.347,
+            "ci95HalfWidth": 2.107
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 14070.831,
+            "sd": 194.613,
+            "ci95Low": 13931.611,
+            "ci95High": 14210.051,
+            "ci95HalfWidth": 139.22
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 37.425,
+            "sd": 2.743,
+            "ci95Low": 35.463,
+            "ci95High": 39.387,
+            "ci95HalfWidth": 1.962
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 26.316,
+            "sd": 2.968,
+            "ci95Low": 24.192,
+            "ci95High": 28.44,
+            "ci95HalfWidth": 2.124
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 14150.888,
+            "sd": 191.502,
+            "ci95Low": 14013.893,
+            "ci95High": 14287.883,
+            "ci95HalfWidth": 136.995
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 38.717,
+            "sd": 2.188,
+            "ci95Low": 37.151,
+            "ci95High": 40.282,
+            "ci95HalfWidth": 1.565
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 26.137,
+            "sd": 2.234,
+            "ci95Low": 24.539,
+            "ci95High": 27.735,
+            "ci95HalfWidth": 1.598
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 14156.725,
+            "sd": 203.646,
+            "ci95Low": 14011.042,
+            "ci95High": 14302.408,
+            "ci95HalfWidth": 145.683
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 37.675,
+            "sd": 2.882,
+            "ci95Low": 35.613,
+            "ci95High": 39.737,
+            "ci95HalfWidth": 2.062
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -15.741,
+            "sd": 6.627,
+            "ci95Low": -20.482,
+            "ci95High": -11,
+            "ci95HalfWidth": 4.741,
+            "pctVsBaseline": -33.51,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 282.815,
+            "sd": 197.728,
+            "ci95Low": 141.366,
+            "ci95High": 424.264,
+            "ci95HalfWidth": 141.449,
+            "pctVsBaseline": 2.05,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -20.665,
+            "sd": 5.5,
+            "ci95Low": -24.6,
+            "ci95High": -16.73,
+            "ci95HalfWidth": 3.935,
+            "pctVsBaseline": -43.99,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 362.872,
+            "sd": 189.906,
+            "ci95Low": 227.019,
+            "ci95High": 498.725,
+            "ci95HalfWidth": 135.853,
+            "pctVsBaseline": 2.63,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -20.844,
+            "sd": 6.109,
+            "ci95Low": -25.214,
+            "ci95High": -16.474,
+            "ci95HalfWidth": 4.37,
+            "pctVsBaseline": -44.37,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 368.709,
+            "sd": 201.21,
+            "ci95Low": 224.769,
+            "ci95High": 512.649,
+            "ci95HalfWidth": 143.94,
+            "pctVsBaseline": 2.67,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "normal",
+      "windowId": "am-peak",
+      "windowLabel": "AM Peak (09:00 IST)",
+      "startTimeIso": "2026-11-14T03:30:00.000Z",
+      "demandScale": 0.25,
+      "criticalFlowProfile": {
+        "periodId": "am-peak",
+        "maxRawY": 0.542,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 30.623,
+            "sd": 0.774,
+            "ci95Low": 30.069,
+            "ci95High": 31.177,
+            "ci95HalfWidth": 0.554
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 16031.382,
+            "sd": 84.15,
+            "ci95Low": 15971.183,
+            "ci95High": 16091.581,
+            "ci95HalfWidth": 60.199
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 41.442,
+            "sd": 0.85,
+            "ci95Low": 40.834,
+            "ci95High": 42.05,
+            "ci95HalfWidth": 0.608
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 30.657,
+            "sd": 0.742,
+            "ci95Low": 30.126,
+            "ci95High": 31.188,
+            "ci95HalfWidth": 0.531
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 16044.877,
+            "sd": 85.261,
+            "ci95Low": 15983.884,
+            "ci95High": 16105.87,
+            "ci95HalfWidth": 60.993
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 40.567,
+            "sd": 1.032,
+            "ci95Low": 39.829,
+            "ci95High": 41.305,
+            "ci95HalfWidth": 0.738
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 27.075,
+            "sd": 0.481,
+            "ci95Low": 26.731,
+            "ci95High": 27.419,
+            "ci95HalfWidth": 0.344
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 16096.329,
+            "sd": 72.902,
+            "ci95Low": 16044.177,
+            "ci95High": 16148.481,
+            "ci95HalfWidth": 52.152
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 43.325,
+            "sd": 1.923,
+            "ci95Low": 41.949,
+            "ci95High": 44.701,
+            "ci95HalfWidth": 1.376
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 27.216,
+            "sd": 0.296,
+            "ci95Low": 27.004,
+            "ci95High": 27.428,
+            "ci95HalfWidth": 0.212
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 16085.859,
+            "sd": 76.549,
+            "ci95Low": 16031.098,
+            "ci95High": 16140.62,
+            "ci95HalfWidth": 54.761
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 42.6,
+            "sd": 1.596,
+            "ci95Low": 41.459,
+            "ci95High": 43.741,
+            "ci95HalfWidth": 1.141
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 0.034,
+            "sd": 0.995,
+            "ci95Low": -0.678,
+            "ci95High": 0.746,
+            "ci95HalfWidth": 0.712,
+            "pctVsBaseline": 0.11,
+            "winsOutOfN": 6,
+            "significant": "indistinguishable"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13.495,
+            "sd": 19.539,
+            "ci95Low": -0.483,
+            "ci95High": 27.473,
+            "ci95HalfWidth": 13.978,
+            "pctVsBaseline": 0.08,
+            "winsOutOfN": 8,
+            "significant": "indistinguishable"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -3.548,
+            "sd": 0.562,
+            "ci95Low": -3.95,
+            "ci95High": -3.146,
+            "ci95HalfWidth": 0.402,
+            "pctVsBaseline": -11.59,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 64.947,
+            "sd": 24.372,
+            "ci95Low": 47.512,
+            "ci95High": 82.382,
+            "ci95HalfWidth": 17.435,
+            "pctVsBaseline": 0.41,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -3.407,
+            "sd": 0.8,
+            "ci95Low": -3.979,
+            "ci95High": -2.835,
+            "ci95HalfWidth": 0.572,
+            "pctVsBaseline": -11.13,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 54.477,
+            "sd": 19.578,
+            "ci95Low": 40.471,
+            "ci95High": 68.483,
+            "ci95HalfWidth": 14.006,
+            "pctVsBaseline": 0.34,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "am-peak",
+      "windowLabel": "AM Peak (09:00 IST)",
+      "startTimeIso": "2026-11-14T03:30:00.000Z",
+      "demandScale": 0.25,
+      "criticalFlowProfile": {
+        "periodId": "am-peak",
+        "maxRawY": 0.542,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 58.583,
+            "sd": 8.947,
+            "ci95Low": 52.183,
+            "ci95High": 64.983,
+            "ci95HalfWidth": 6.4
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 16004.904,
+            "sd": 76.669,
+            "ci95Low": 15950.057,
+            "ci95High": 16059.751,
+            "ci95HalfWidth": 54.847
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 47.175,
+            "sd": 2.001,
+            "ci95Low": 45.744,
+            "ci95High": 48.606,
+            "ci95HalfWidth": 1.431
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 40.635,
+            "sd": 3.985,
+            "ci95Low": 37.784,
+            "ci95High": 43.486,
+            "ci95HalfWidth": 2.851
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 16420.822,
+            "sd": 246.245,
+            "ci95Low": 16244.666,
+            "ci95High": 16596.978,
+            "ci95HalfWidth": 176.156
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 43.767,
+            "sd": 2.66,
+            "ci95Low": 41.864,
+            "ci95High": 45.67,
+            "ci95HalfWidth": 1.903
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 42.795,
+            "sd": 11.726,
+            "ci95Low": 34.407,
+            "ci95High": 51.183,
+            "ci95HalfWidth": 8.388
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 16427.378,
+            "sd": 214.753,
+            "ci95Low": 16273.75,
+            "ci95High": 16581.006,
+            "ci95HalfWidth": 153.628
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 44.592,
+            "sd": 2.276,
+            "ci95Low": 42.964,
+            "ci95High": 46.22,
+            "ci95HalfWidth": 1.628
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 40.36,
+            "sd": 8.859,
+            "ci95Low": 34.022,
+            "ci95High": 46.698,
+            "ci95HalfWidth": 6.338
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 16487.282,
+            "sd": 218.279,
+            "ci95Low": 16331.131,
+            "ci95High": 16643.433,
+            "ci95HalfWidth": 156.151
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 43.142,
+            "sd": 2.553,
+            "ci95Low": 41.315,
+            "ci95High": 44.968,
+            "ci95HalfWidth": 1.826
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -17.948,
+            "sd": 6.697,
+            "ci95Low": -22.739,
+            "ci95High": -13.157,
+            "ci95HalfWidth": 4.791,
+            "pctVsBaseline": -30.64,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 415.918,
+            "sd": 214.125,
+            "ci95Low": 262.739,
+            "ci95High": 569.097,
+            "ci95HalfWidth": 153.179,
+            "pctVsBaseline": 2.6,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -15.788,
+            "sd": 5.199,
+            "ci95Low": -19.507,
+            "ci95High": -12.069,
+            "ci95HalfWidth": 3.719,
+            "pctVsBaseline": -26.95,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 422.474,
+            "sd": 171.056,
+            "ci95Low": 300.106,
+            "ci95High": 544.842,
+            "ci95HalfWidth": 122.368,
+            "pctVsBaseline": 2.64,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -18.223,
+            "sd": 3.043,
+            "ci95Low": -20.4,
+            "ci95High": -16.046,
+            "ci95HalfWidth": 2.177,
+            "pctVsBaseline": -31.11,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 482.378,
+            "sd": 186.547,
+            "ci95Low": 348.928,
+            "ci95High": 615.828,
+            "ci95HalfWidth": 133.45,
+            "pctVsBaseline": 3.01,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "normal",
+      "windowId": "midday",
+      "windowLabel": "Midday (13:30 IST)",
+      "startTimeIso": "2026-11-14T08:00:00.000Z",
+      "demandScale": 0.25,
+      "criticalFlowProfile": {
+        "periodId": "midday",
+        "maxRawY": 0.403,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 22.216,
+            "sd": 0.166,
+            "ci95Low": 22.097,
+            "ci95High": 22.335,
+            "ci95HalfWidth": 0.119
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 9342.097,
+            "sd": 118.43,
+            "ci95Low": 9257.376,
+            "ci95High": 9426.818,
+            "ci95HalfWidth": 84.721
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 24.892,
+            "sd": 1.627,
+            "ci95Low": 23.728,
+            "ci95High": 26.056,
+            "ci95HalfWidth": 1.164
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 22.661,
+            "sd": 0.317,
+            "ci95Low": 22.434,
+            "ci95High": 22.888,
+            "ci95HalfWidth": 0.227
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 9346.525,
+            "sd": 121.622,
+            "ci95Low": 9259.52,
+            "ci95High": 9433.53,
+            "ci95HalfWidth": 87.005
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 24.625,
+            "sd": 1.347,
+            "ci95Low": 23.661,
+            "ci95High": 25.589,
+            "ci95HalfWidth": 0.964
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 19.636,
+            "sd": 0.156,
+            "ci95Low": 19.525,
+            "ci95High": 19.747,
+            "ci95HalfWidth": 0.111
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 9367.586,
+            "sd": 115.69,
+            "ci95Low": 9284.825,
+            "ci95High": 9450.347,
+            "ci95HalfWidth": 82.761
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 27.85,
+            "sd": 1.765,
+            "ci95Low": 26.587,
+            "ci95High": 29.113,
+            "ci95HalfWidth": 1.263
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 20.058,
+            "sd": 0.273,
+            "ci95Low": 19.863,
+            "ci95High": 20.253,
+            "ci95HalfWidth": 0.195
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 9366.823,
+            "sd": 118.78,
+            "ci95Low": 9281.851,
+            "ci95High": 9451.795,
+            "ci95HalfWidth": 84.972
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 27.75,
+            "sd": 1.851,
+            "ci95Low": 26.426,
+            "ci95High": 29.074,
+            "ci95HalfWidth": 1.324
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 0.445,
+            "sd": 0.434,
+            "ci95Low": 0.135,
+            "ci95High": 0.755,
+            "ci95HalfWidth": 0.31,
+            "pctVsBaseline": 2,
+            "winsOutOfN": 1,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 4.428,
+            "sd": 13.135,
+            "ci95Low": -4.968,
+            "ci95High": 13.824,
+            "ci95HalfWidth": 9.396,
+            "pctVsBaseline": 0.05,
+            "winsOutOfN": 6,
+            "significant": "indistinguishable"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.58,
+            "sd": 0.239,
+            "ci95Low": -2.751,
+            "ci95High": -2.409,
+            "ci95HalfWidth": 0.171,
+            "pctVsBaseline": -11.61,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 25.489,
+            "sd": 11.769,
+            "ci95Low": 17.07,
+            "ci95High": 33.908,
+            "ci95HalfWidth": 8.419,
+            "pctVsBaseline": 0.27,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.158,
+            "sd": 0.384,
+            "ci95Low": -2.433,
+            "ci95High": -1.883,
+            "ci95HalfWidth": 0.275,
+            "pctVsBaseline": -9.71,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 24.726,
+            "sd": 19.449,
+            "ci95Low": 10.813,
+            "ci95High": 38.639,
+            "ci95HalfWidth": 13.913,
+            "pctVsBaseline": 0.26,
+            "winsOutOfN": 9,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "midday",
+      "windowLabel": "Midday (13:30 IST)",
+      "startTimeIso": "2026-11-14T08:00:00.000Z",
+      "demandScale": 0.25,
+      "criticalFlowProfile": {
+        "periodId": "midday",
+        "maxRawY": 0.403,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 30.506,
+            "sd": 4.183,
+            "ci95Low": 27.514,
+            "ci95High": 33.498,
+            "ci95HalfWidth": 2.992
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 9611.067,
+            "sd": 145.623,
+            "ci95Low": 9506.893,
+            "ci95High": 9715.241,
+            "ci95HalfWidth": 104.174
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 25.375,
+            "sd": 1.663,
+            "ci95Low": 24.185,
+            "ci95High": 26.565,
+            "ci95HalfWidth": 1.19
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 24.807,
+            "sd": 1.779,
+            "ci95Low": 23.534,
+            "ci95High": 26.08,
+            "ci95HalfWidth": 1.273
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 9650.663,
+            "sd": 172.205,
+            "ci95Low": 9527.472,
+            "ci95High": 9773.854,
+            "ci95HalfWidth": 123.191
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 24.767,
+            "sd": 1.443,
+            "ci95Low": 23.734,
+            "ci95High": 25.799,
+            "ci95HalfWidth": 1.032
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 19.938,
+            "sd": 0.503,
+            "ci95Low": 19.578,
+            "ci95High": 20.298,
+            "ci95HalfWidth": 0.36
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 9680.149,
+            "sd": 179.284,
+            "ci95Low": 9551.895,
+            "ci95High": 9808.403,
+            "ci95HalfWidth": 128.254
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 28.158,
+            "sd": 2.119,
+            "ci95Low": 26.642,
+            "ci95High": 29.674,
+            "ci95HalfWidth": 1.516
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 20.422,
+            "sd": 0.563,
+            "ci95Low": 20.019,
+            "ci95High": 20.825,
+            "ci95HalfWidth": 0.403
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 9677.692,
+            "sd": 176.655,
+            "ci95Low": 9551.318,
+            "ci95High": 9804.066,
+            "ci95HalfWidth": 126.374
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 27.275,
+            "sd": 2.153,
+            "ci95Low": 25.735,
+            "ci95High": 28.815,
+            "ci95HalfWidth": 1.54
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -5.699,
+            "sd": 3.974,
+            "ci95Low": -8.542,
+            "ci95High": -2.856,
+            "ci95HalfWidth": 2.843,
+            "pctVsBaseline": -18.68,
+            "winsOutOfN": 8,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 39.596,
+            "sd": 42.251,
+            "ci95Low": 9.371,
+            "ci95High": 69.821,
+            "ci95HalfWidth": 30.225,
+            "pctVsBaseline": 0.41,
+            "winsOutOfN": 9,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -10.568,
+            "sd": 4.109,
+            "ci95Low": -13.507,
+            "ci95High": -7.629,
+            "ci95HalfWidth": 2.939,
+            "pctVsBaseline": -34.64,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 69.082,
+            "sd": 44.222,
+            "ci95Low": 37.447,
+            "ci95High": 100.717,
+            "ci95HalfWidth": 31.635,
+            "pctVsBaseline": 0.72,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -10.084,
+            "sd": 3.848,
+            "ci95Low": -12.837,
+            "ci95High": -7.331,
+            "ci95HalfWidth": 2.753,
+            "pctVsBaseline": -33.06,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 66.625,
+            "sd": 45.611,
+            "ci95Low": 33.997,
+            "ci95High": 99.253,
+            "ci95HalfWidth": 32.628,
+            "pctVsBaseline": 0.69,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "normal",
+      "windowId": "pm-peak",
+      "windowLabel": "PM Peak (18:30 IST)",
+      "startTimeIso": "2026-11-14T13:00:00.000Z",
+      "demandScale": 0.25,
+      "criticalFlowProfile": {
+        "periodId": "pm-peak",
+        "maxRawY": 0.652,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 31.332,
+            "sd": 0.637,
+            "ci95Low": 30.876,
+            "ci95High": 31.788,
+            "ci95HalfWidth": 0.456
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 16984.72,
+            "sd": 75.447,
+            "ci95Low": 16930.747,
+            "ci95High": 17038.693,
+            "ci95HalfWidth": 53.973
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 41.808,
+            "sd": 1.396,
+            "ci95Low": 40.81,
+            "ci95High": 42.807,
+            "ci95HalfWidth": 0.999
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 34.167,
+            "sd": 0.849,
+            "ci95Low": 33.56,
+            "ci95High": 34.774,
+            "ci95HalfWidth": 0.607
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 16944.332,
+            "sd": 81.036,
+            "ci95Low": 16886.361,
+            "ci95High": 17002.303,
+            "ci95HalfWidth": 57.971
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 43.433,
+            "sd": 1.427,
+            "ci95Low": 42.413,
+            "ci95High": 44.454,
+            "ci95HalfWidth": 1.021
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 31.107,
+            "sd": 0.96,
+            "ci95Low": 30.42,
+            "ci95High": 31.794,
+            "ci95HalfWidth": 0.687
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 17004.138,
+            "sd": 68.556,
+            "ci95Low": 16955.095,
+            "ci95High": 17053.181,
+            "ci95HalfWidth": 49.043
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 45.933,
+            "sd": 1.827,
+            "ci95Low": 44.626,
+            "ci95High": 47.24,
+            "ci95HalfWidth": 1.307
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 30.311,
+            "sd": 0.466,
+            "ci95Low": 29.978,
+            "ci95High": 30.644,
+            "ci95HalfWidth": 0.333
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 17003.335,
+            "sd": 90.475,
+            "ci95Low": 16938.612,
+            "ci95High": 17068.058,
+            "ci95HalfWidth": 64.723
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 44.892,
+            "sd": 1.479,
+            "ci95Low": 43.834,
+            "ci95High": 45.95,
+            "ci95HalfWidth": 1.058
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 2.835,
+            "sd": 0.851,
+            "ci95Low": 2.226,
+            "ci95High": 3.444,
+            "ci95HalfWidth": 0.609,
+            "pctVsBaseline": 9.05,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -40.388,
+            "sd": 21.971,
+            "ci95Low": -56.105,
+            "ci95High": -24.671,
+            "ci95HalfWidth": 15.717,
+            "pctVsBaseline": -0.24,
+            "winsOutOfN": 1,
+            "significant": "worse"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -0.225,
+            "sd": 0.811,
+            "ci95Low": -0.805,
+            "ci95High": 0.355,
+            "ci95HalfWidth": 0.58,
+            "pctVsBaseline": -0.72,
+            "winsOutOfN": 6,
+            "significant": "indistinguishable"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 19.418,
+            "sd": 31.295,
+            "ci95Low": -2.97,
+            "ci95High": 41.806,
+            "ci95HalfWidth": 22.388,
+            "pctVsBaseline": 0.11,
+            "winsOutOfN": 9,
+            "significant": "indistinguishable"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -1.021,
+            "sd": 0.485,
+            "ci95Low": -1.368,
+            "ci95High": -0.674,
+            "ci95HalfWidth": 0.347,
+            "pctVsBaseline": -3.26,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 18.615,
+            "sd": 27.476,
+            "ci95Low": -1.04,
+            "ci95High": 38.27,
+            "ci95HalfWidth": 19.655,
+            "pctVsBaseline": 0.11,
+            "winsOutOfN": 7,
+            "significant": "indistinguishable"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "pm-peak",
+      "windowLabel": "PM Peak (18:30 IST)",
+      "startTimeIso": "2026-11-14T13:00:00.000Z",
+      "demandScale": 0.25,
+      "criticalFlowProfile": {
+        "periodId": "pm-peak",
+        "maxRawY": 0.652,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 59.353,
+            "sd": 8.641,
+            "ci95Low": 53.172,
+            "ci95High": 65.534,
+            "ci95HalfWidth": 6.181
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 16951.239,
+            "sd": 72.414,
+            "ci95Low": 16899.436,
+            "ci95High": 17003.042,
+            "ci95HalfWidth": 51.803
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 47.792,
+            "sd": 2.556,
+            "ci95Low": 45.963,
+            "ci95High": 49.62,
+            "ci95HalfWidth": 1.828
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 45.96,
+            "sd": 4.328,
+            "ci95Low": 42.864,
+            "ci95High": 49.056,
+            "ci95HalfWidth": 3.096
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 17303.488,
+            "sd": 245.746,
+            "ci95Low": 17127.688,
+            "ci95High": 17479.288,
+            "ci95HalfWidth": 175.8
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 47.533,
+            "sd": 2.917,
+            "ci95Low": 45.447,
+            "ci95High": 49.62,
+            "ci95HalfWidth": 2.086
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 54.048,
+            "sd": 17.237,
+            "ci95Low": 41.717,
+            "ci95High": 66.379,
+            "ci95HalfWidth": 12.331
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 17172.694,
+            "sd": 254.406,
+            "ci95Low": 16990.699,
+            "ci95High": 17354.689,
+            "ci95HalfWidth": 181.995
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 47.817,
+            "sd": 4.478,
+            "ci95Low": 44.613,
+            "ci95High": 51.02,
+            "ci95HalfWidth": 3.204
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 49.727,
+            "sd": 13.176,
+            "ci95Low": 40.301,
+            "ci95High": 59.153,
+            "ci95HalfWidth": 9.426
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 17289.025,
+            "sd": 184.817,
+            "ci95Low": 17156.812,
+            "ci95High": 17421.238,
+            "ci95HalfWidth": 132.213
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 46.317,
+            "sd": 2.219,
+            "ci95Low": 44.729,
+            "ci95High": 47.904,
+            "ci95HalfWidth": 1.587
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -13.393,
+            "sd": 6.213,
+            "ci95Low": -17.838,
+            "ci95High": -8.948,
+            "ci95HalfWidth": 4.445,
+            "pctVsBaseline": -22.56,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 352.249,
+            "sd": 212.426,
+            "ci95Low": 200.286,
+            "ci95High": 504.212,
+            "ci95HalfWidth": 151.963,
+            "pctVsBaseline": 2.08,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -5.305,
+            "sd": 10.254,
+            "ci95Low": -12.641,
+            "ci95High": 2.031,
+            "ci95HalfWidth": 7.336,
+            "pctVsBaseline": -8.94,
+            "winsOutOfN": 8,
+            "significant": "indistinguishable"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 221.455,
+            "sd": 206.915,
+            "ci95Low": 73.434,
+            "ci95High": 369.476,
+            "ci95HalfWidth": 148.021,
+            "pctVsBaseline": 1.31,
+            "winsOutOfN": 9,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -9.626,
+            "sd": 5.937,
+            "ci95Low": -13.873,
+            "ci95High": -5.379,
+            "ci95HalfWidth": 4.247,
+            "pctVsBaseline": -16.22,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 337.786,
+            "sd": 138.61,
+            "ci95Low": 238.628,
+            "ci95High": 436.944,
+            "ci95HalfWidth": 99.158,
+            "pctVsBaseline": 1.99,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "normal",
+      "windowId": "am-peak",
+      "windowLabel": "AM Peak (09:00 IST)",
+      "startTimeIso": "2026-11-14T03:30:00.000Z",
+      "demandScale": 0.3,
+      "criticalFlowProfile": {
+        "periodId": "am-peak",
+        "maxRawY": 0.651,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 46.186,
+            "sd": 2.365,
+            "ci95Low": 44.494,
+            "ci95High": 47.878,
+            "ci95HalfWidth": 1.692
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 18852.089,
+            "sd": 58.147,
+            "ci95Low": 18810.493,
+            "ci95High": 18893.685,
+            "ci95HalfWidth": 41.596
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 49.483,
+            "sd": 1.523,
+            "ci95Low": 48.394,
+            "ci95High": 50.573,
+            "ci95HalfWidth": 1.09
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 44.195,
+            "sd": 0.635,
+            "ci95Low": 43.74,
+            "ci95High": 44.65,
+            "ci95HalfWidth": 0.455
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 18939.835,
+            "sd": 72.893,
+            "ci95Low": 18887.69,
+            "ci95High": 18991.98,
+            "ci95HalfWidth": 52.145
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 48.217,
+            "sd": 1.587,
+            "ci95Low": 47.082,
+            "ci95High": 49.352,
+            "ci95HalfWidth": 1.135
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 57.362,
+            "sd": 3.176,
+            "ci95Low": 55.09,
+            "ci95High": 59.634,
+            "ci95HalfWidth": 2.272
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 18570.189,
+            "sd": 74.758,
+            "ci95Low": 18516.709,
+            "ci95High": 18623.669,
+            "ci95HalfWidth": 53.48
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 54.05,
+            "sd": 1.561,
+            "ci95Low": 52.933,
+            "ci95High": 55.167,
+            "ci95HalfWidth": 1.117
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 45.889,
+            "sd": 2.258,
+            "ci95Low": 44.274,
+            "ci95High": 47.504,
+            "ci95HalfWidth": 1.615
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 18894.96,
+            "sd": 66.239,
+            "ci95Low": 18847.575,
+            "ci95High": 18942.345,
+            "ci95HalfWidth": 47.385
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 49.642,
+            "sd": 2.222,
+            "ci95Low": 48.052,
+            "ci95High": 51.231,
+            "ci95HalfWidth": 1.59
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -1.991,
+            "sd": 1.975,
+            "ci95Low": -3.404,
+            "ci95High": -0.578,
+            "ci95HalfWidth": 1.413,
+            "pctVsBaseline": -4.31,
+            "winsOutOfN": 9,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 87.746,
+            "sd": 37.618,
+            "ci95Low": 60.836,
+            "ci95High": 114.656,
+            "ci95HalfWidth": 26.91,
+            "pctVsBaseline": 0.47,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 11.176,
+            "sd": 2.158,
+            "ci95Low": 9.632,
+            "ci95High": 12.72,
+            "ci95HalfWidth": 1.544,
+            "pctVsBaseline": 24.2,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -281.9,
+            "sd": 51.321,
+            "ci95Low": -318.614,
+            "ci95High": -245.186,
+            "ci95HalfWidth": 36.714,
+            "pctVsBaseline": -1.5,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -0.297,
+            "sd": 1.977,
+            "ci95Low": -1.711,
+            "ci95High": 1.117,
+            "ci95HalfWidth": 1.414,
+            "pctVsBaseline": -0.64,
+            "winsOutOfN": 7,
+            "significant": "indistinguishable"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 42.871,
+            "sd": 43.466,
+            "ci95Low": 11.777,
+            "ci95High": 73.965,
+            "ci95HalfWidth": 31.094,
+            "pctVsBaseline": 0.23,
+            "winsOutOfN": 9,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "am-peak",
+      "windowLabel": "AM Peak (09:00 IST)",
+      "startTimeIso": "2026-11-14T03:30:00.000Z",
+      "demandScale": 0.3,
+      "criticalFlowProfile": {
+        "periodId": "am-peak",
+        "maxRawY": 0.651,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 76.698,
+            "sd": 9.934,
+            "ci95Low": 69.592,
+            "ci95High": 83.804,
+            "ci95HalfWidth": 7.106
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 18736.136,
+            "sd": 69.281,
+            "ci95Low": 18686.574,
+            "ci95High": 18785.698,
+            "ci95HalfWidth": 49.562
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 55.208,
+            "sd": 1.815,
+            "ci95Low": 53.91,
+            "ci95High": 56.507,
+            "ci95HalfWidth": 1.299
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 61.491,
+            "sd": 7.595,
+            "ci95Low": 56.058,
+            "ci95High": 66.924,
+            "ci95HalfWidth": 5.433
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 19196.509,
+            "sd": 206.533,
+            "ci95Low": 19048.761,
+            "ci95High": 19344.257,
+            "ci95HalfWidth": 147.748
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 53.65,
+            "sd": 2.65,
+            "ci95Low": 51.754,
+            "ci95High": 55.546,
+            "ci95HalfWidth": 1.896
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 89.362,
+            "sd": 21.33,
+            "ci95Low": 74.103,
+            "ci95High": 104.621,
+            "ci95HalfWidth": 15.259
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 18465.877,
+            "sd": 406.615,
+            "ci95Low": 18174.996,
+            "ci95High": 18756.758,
+            "ci95HalfWidth": 290.881
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 59.65,
+            "sd": 6.743,
+            "ci95Low": 54.826,
+            "ci95High": 64.474,
+            "ci95HalfWidth": 4.824
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 76.656,
+            "sd": 19.214,
+            "ci95Low": 62.911,
+            "ci95High": 90.401,
+            "ci95HalfWidth": 13.745
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 18827.729,
+            "sd": 225.25,
+            "ci95Low": 18666.592,
+            "ci95High": 18988.866,
+            "ci95HalfWidth": 161.137
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 55.7,
+            "sd": 4.797,
+            "ci95Low": 52.268,
+            "ci95High": 59.132,
+            "ci95HalfWidth": 3.432
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -15.207,
+            "sd": 5.49,
+            "ci95Low": -19.134,
+            "ci95High": -11.28,
+            "ci95HalfWidth": 3.927,
+            "pctVsBaseline": -19.83,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 460.373,
+            "sd": 198.642,
+            "ci95Low": 318.271,
+            "ci95High": 602.475,
+            "ci95HalfWidth": 142.102,
+            "pctVsBaseline": 2.46,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 12.664,
+            "sd": 13.547,
+            "ci95Low": 2.973,
+            "ci95High": 22.355,
+            "ci95HalfWidth": 9.691,
+            "pctVsBaseline": 16.51,
+            "winsOutOfN": 1,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -270.259,
+            "sd": 372.516,
+            "ci95Low": -536.746,
+            "ci95High": -3.772,
+            "ci95HalfWidth": 266.487,
+            "pctVsBaseline": -1.44,
+            "winsOutOfN": 1,
+            "significant": "worse"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -0.042,
+            "sd": 10.722,
+            "ci95Low": -7.712,
+            "ci95High": 7.628,
+            "ci95HalfWidth": 7.67,
+            "pctVsBaseline": -0.05,
+            "winsOutOfN": 6,
+            "significant": "indistinguishable"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 91.593,
+            "sd": 197.694,
+            "ci95Low": -49.832,
+            "ci95High": 233.018,
+            "ci95HalfWidth": 141.425,
+            "pctVsBaseline": 0.49,
+            "winsOutOfN": 6,
+            "significant": "indistinguishable"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "normal",
+      "windowId": "midday",
+      "windowLabel": "Midday (13:30 IST)",
+      "startTimeIso": "2026-11-14T08:00:00.000Z",
+      "demandScale": 0.3,
+      "criticalFlowProfile": {
+        "periodId": "midday",
+        "maxRawY": 0.484,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 22.754,
+            "sd": 0.125,
+            "ci95Low": 22.665,
+            "ci95High": 22.843,
+            "ci95HalfWidth": 0.089
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 11216.398,
+            "sd": 115.105,
+            "ci95Low": 11134.055,
+            "ci95High": 11298.741,
+            "ci95HalfWidth": 82.343
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 29.825,
+            "sd": 2.015,
+            "ci95Low": 28.384,
+            "ci95High": 31.266,
+            "ci95HalfWidth": 1.441
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 23.517,
+            "sd": 0.177,
+            "ci95Low": 23.39,
+            "ci95High": 23.644,
+            "ci95HalfWidth": 0.127
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 11219.14,
+            "sd": 112.37,
+            "ci95Low": 11138.753,
+            "ci95High": 11299.527,
+            "ci95HalfWidth": 80.387
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 29.725,
+            "sd": 2.444,
+            "ci95Low": 27.977,
+            "ci95High": 31.473,
+            "ci95HalfWidth": 1.748
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 20.406,
+            "sd": 0.224,
+            "ci95Low": 20.246,
+            "ci95High": 20.566,
+            "ci95HalfWidth": 0.16
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 11263.341,
+            "sd": 114.213,
+            "ci95Low": 11181.636,
+            "ci95High": 11345.046,
+            "ci95HalfWidth": 81.705
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 32.75,
+            "sd": 2.934,
+            "ci95Low": 30.651,
+            "ci95High": 34.849,
+            "ci95HalfWidth": 2.099
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 20.997,
+            "sd": 0.344,
+            "ci95Low": 20.751,
+            "ci95High": 21.243,
+            "ci95HalfWidth": 0.246
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 11248.809,
+            "sd": 122.447,
+            "ci95Low": 11161.214,
+            "ci95High": 11336.404,
+            "ci95HalfWidth": 87.595
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 32.808,
+            "sd": 1.668,
+            "ci95Low": 31.615,
+            "ci95High": 34.001,
+            "ci95HalfWidth": 1.193
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 0.763,
+            "sd": 0.233,
+            "ci95Low": 0.596,
+            "ci95High": 0.93,
+            "ci95HalfWidth": 0.167,
+            "pctVsBaseline": 3.35,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 2.742,
+            "sd": 11.539,
+            "ci95Low": -5.513,
+            "ci95High": 10.997,
+            "ci95HalfWidth": 8.255,
+            "pctVsBaseline": 0.02,
+            "winsOutOfN": 7,
+            "significant": "indistinguishable"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.348,
+            "sd": 0.301,
+            "ci95Low": -2.563,
+            "ci95High": -2.133,
+            "ci95HalfWidth": 0.215,
+            "pctVsBaseline": -10.32,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 46.943,
+            "sd": 11.755,
+            "ci95Low": 38.534,
+            "ci95High": 55.352,
+            "ci95HalfWidth": 8.409,
+            "pctVsBaseline": 0.42,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -1.757,
+            "sd": 0.384,
+            "ci95Low": -2.032,
+            "ci95High": -1.482,
+            "ci95HalfWidth": 0.275,
+            "pctVsBaseline": -7.72,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 32.411,
+            "sd": 11.233,
+            "ci95Low": 24.375,
+            "ci95High": 40.447,
+            "ci95HalfWidth": 8.036,
+            "pctVsBaseline": 0.29,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "midday",
+      "windowLabel": "Midday (13:30 IST)",
+      "startTimeIso": "2026-11-14T08:00:00.000Z",
+      "demandScale": 0.3,
+      "criticalFlowProfile": {
+        "periodId": "midday",
+        "maxRawY": 0.484,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 38.35,
+            "sd": 6.824,
+            "ci95Low": 33.468,
+            "ci95High": 43.232,
+            "ci95HalfWidth": 4.882
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 11432.936,
+            "sd": 97.422,
+            "ci95Low": 11363.243,
+            "ci95High": 11502.629,
+            "ci95HalfWidth": 69.693
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 32.433,
+            "sd": 2.396,
+            "ci95Low": 30.719,
+            "ci95High": 34.148,
+            "ci95HalfWidth": 1.714
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 26.707,
+            "sd": 2.048,
+            "ci95Low": 25.242,
+            "ci95High": 28.172,
+            "ci95HalfWidth": 1.465
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 11579.116,
+            "sd": 181.553,
+            "ci95Low": 11449.238,
+            "ci95High": 11708.994,
+            "ci95HalfWidth": 129.878
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 30.142,
+            "sd": 2.934,
+            "ci95Low": 28.043,
+            "ci95High": 32.24,
+            "ci95HalfWidth": 2.099
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 21.236,
+            "sd": 0.684,
+            "ci95Low": 20.747,
+            "ci95High": 21.725,
+            "ci95HalfWidth": 0.489
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 11637.311,
+            "sd": 207.922,
+            "ci95Low": 11488.57,
+            "ci95High": 11786.052,
+            "ci95HalfWidth": 148.741
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 32.842,
+            "sd": 3.316,
+            "ci95Low": 30.47,
+            "ci95High": 35.214,
+            "ci95HalfWidth": 2.372
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 21.922,
+            "sd": 0.702,
+            "ci95Low": 21.42,
+            "ci95High": 22.424,
+            "ci95HalfWidth": 0.502
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 11619.366,
+            "sd": 203.925,
+            "ci95Low": 11473.484,
+            "ci95High": 11765.248,
+            "ci95HalfWidth": 145.882
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 32.017,
+            "sd": 2.484,
+            "ci95Low": 30.24,
+            "ci95High": 33.793,
+            "ci95HalfWidth": 1.777
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -11.643,
+            "sd": 6.44,
+            "ci95Low": -16.25,
+            "ci95High": -7.036,
+            "ci95HalfWidth": 4.607,
+            "pctVsBaseline": -30.36,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 146.18,
+            "sd": 120.839,
+            "ci95Low": 59.735,
+            "ci95High": 232.625,
+            "ci95HalfWidth": 86.445,
+            "pctVsBaseline": 1.28,
+            "winsOutOfN": 9,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -17.114,
+            "sd": 6.7,
+            "ci95Low": -21.907,
+            "ci95High": -12.321,
+            "ci95HalfWidth": 4.793,
+            "pctVsBaseline": -44.63,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 204.375,
+            "sd": 137.609,
+            "ci95Low": 105.934,
+            "ci95High": 302.816,
+            "ci95HalfWidth": 98.441,
+            "pctVsBaseline": 1.79,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -16.428,
+            "sd": 6.609,
+            "ci95Low": -21.156,
+            "ci95High": -11.7,
+            "ci95HalfWidth": 4.728,
+            "pctVsBaseline": -42.84,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 186.43,
+            "sd": 134.499,
+            "ci95Low": 90.213,
+            "ci95High": 282.647,
+            "ci95HalfWidth": 96.217,
+            "pctVsBaseline": 1.63,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "normal",
+      "windowId": "pm-peak",
+      "windowLabel": "PM Peak (18:30 IST)",
+      "startTimeIso": "2026-11-14T13:00:00.000Z",
+      "demandScale": 0.3,
+      "criticalFlowProfile": {
+        "periodId": "pm-peak",
+        "maxRawY": 0.782,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 47.371,
+            "sd": 1.025,
+            "ci95Low": 46.637,
+            "ci95High": 48.105,
+            "ci95HalfWidth": 0.734
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 20053.616,
+            "sd": 84.72,
+            "ci95Low": 19993.01,
+            "ci95High": 20114.222,
+            "ci95HalfWidth": 60.606
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 48.267,
+            "sd": 2.11,
+            "ci95Low": 46.758,
+            "ci95High": 49.776,
+            "ci95HalfWidth": 1.509
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 50.692,
+            "sd": 1.237,
+            "ci95Low": 49.807,
+            "ci95High": 51.577,
+            "ci95HalfWidth": 0.885
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 19924.932,
+            "sd": 108.002,
+            "ci95Low": 19847.671,
+            "ci95High": 20002.193,
+            "ci95HalfWidth": 77.261
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 51.075,
+            "sd": 3.054,
+            "ci95Low": 48.89,
+            "ci95High": 53.26,
+            "ci95HalfWidth": 2.185
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 76.978,
+            "sd": 4.055,
+            "ci95Low": 74.077,
+            "ci95High": 79.879,
+            "ci95HalfWidth": 2.901
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 19109.865,
+            "sd": 68.395,
+            "ci95Low": 19060.937,
+            "ci95High": 19158.793,
+            "ci95HalfWidth": 48.928
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 59.708,
+            "sd": 2.948,
+            "ci95Low": 57.599,
+            "ci95High": 61.817,
+            "ci95HalfWidth": 2.109
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 60.534,
+            "sd": 2.676,
+            "ci95Low": 58.62,
+            "ci95High": 62.448,
+            "ci95HalfWidth": 1.914
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 19601.061,
+            "sd": 35.9,
+            "ci95Low": 19575.379,
+            "ci95High": 19626.743,
+            "ci95HalfWidth": 25.682
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 54.183,
+            "sd": 2.664,
+            "ci95Low": 52.278,
+            "ci95High": 56.089,
+            "ci95HalfWidth": 1.906
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 3.321,
+            "sd": 0.945,
+            "ci95Low": 2.645,
+            "ci95High": 3.997,
+            "ci95HalfWidth": 0.676,
+            "pctVsBaseline": 7.01,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -128.684,
+            "sd": 71.615,
+            "ci95Low": -179.915,
+            "ci95High": -77.453,
+            "ci95HalfWidth": 51.231,
+            "pctVsBaseline": -0.64,
+            "winsOutOfN": 1,
+            "significant": "worse"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 29.607,
+            "sd": 3.352,
+            "ci95Low": 27.209,
+            "ci95High": 32.005,
+            "ci95HalfWidth": 2.398,
+            "pctVsBaseline": 62.5,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -943.751,
+            "sd": 122.623,
+            "ci95Low": -1031.472,
+            "ci95High": -856.03,
+            "ci95HalfWidth": 87.721,
+            "pctVsBaseline": -4.71,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 13.163,
+            "sd": 1.853,
+            "ci95Low": 11.837,
+            "ci95High": 14.489,
+            "ci95HalfWidth": 1.326,
+            "pctVsBaseline": 27.79,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -452.555,
+            "sd": 59.657,
+            "ci95Low": -495.232,
+            "ci95High": -409.878,
+            "ci95HalfWidth": 42.677,
+            "pctVsBaseline": -2.26,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "pm-peak",
+      "windowLabel": "PM Peak (18:30 IST)",
+      "startTimeIso": "2026-11-14T13:00:00.000Z",
+      "demandScale": 0.3,
+      "criticalFlowProfile": {
+        "periodId": "pm-peak",
+        "maxRawY": 0.782,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 77.067,
+            "sd": 9.371,
+            "ci95Low": 70.363,
+            "ci95High": 83.771,
+            "ci95HalfWidth": 6.704
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 19963.861,
+            "sd": 95.576,
+            "ci95Low": 19895.489,
+            "ci95High": 20032.233,
+            "ci95HalfWidth": 68.372
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 54.917,
+            "sd": 2.659,
+            "ci95Low": 53.015,
+            "ci95High": 56.819,
+            "ci95HalfWidth": 1.902
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 70.969,
+            "sd": 8.509,
+            "ci95Low": 64.882,
+            "ci95High": 77.056,
+            "ci95HalfWidth": 6.087
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 20120.305,
+            "sd": 236.964,
+            "ci95Low": 19950.788,
+            "ci95High": 20289.822,
+            "ci95HalfWidth": 169.517
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 56.617,
+            "sd": 3.063,
+            "ci95Low": 54.426,
+            "ci95High": 58.808,
+            "ci95HalfWidth": 2.191
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 110.7,
+            "sd": 21.911,
+            "ci95Low": 95.025,
+            "ci95High": 126.375,
+            "ci95HalfWidth": 15.675
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 18941.218,
+            "sd": 427.314,
+            "ci95Low": 18635.53,
+            "ci95High": 19246.906,
+            "ci95HalfWidth": 305.688
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 67.175,
+            "sd": 6.271,
+            "ci95Low": 62.689,
+            "ci95High": 71.661,
+            "ci95HalfWidth": 4.486
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 92.148,
+            "sd": 18.693,
+            "ci95Low": 78.775,
+            "ci95High": 105.521,
+            "ci95HalfWidth": 13.373
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 19488.424,
+            "sd": 230.186,
+            "ci95Low": 19323.756,
+            "ci95High": 19653.092,
+            "ci95HalfWidth": 164.668
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 62.1,
+            "sd": 4.707,
+            "ci95Low": 58.733,
+            "ci95High": 65.467,
+            "ci95HalfWidth": 3.367
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -6.098,
+            "sd": 4.661,
+            "ci95Low": -9.433,
+            "ci95High": -2.763,
+            "ci95HalfWidth": 3.335,
+            "pctVsBaseline": -7.91,
+            "winsOutOfN": 9,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 156.444,
+            "sd": 183.333,
+            "ci95Low": 25.293,
+            "ci95High": 287.595,
+            "ci95HalfWidth": 131.151,
+            "pctVsBaseline": 0.78,
+            "winsOutOfN": 9,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 33.633,
+            "sd": 13.934,
+            "ci95Low": 23.665,
+            "ci95High": 43.601,
+            "ci95HalfWidth": 9.968,
+            "pctVsBaseline": 43.64,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -1022.643,
+            "sd": 397.115,
+            "ci95Low": -1306.727,
+            "ci95High": -738.559,
+            "ci95HalfWidth": 284.084,
+            "pctVsBaseline": -5.12,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 15.081,
+            "sd": 10.578,
+            "ci95Low": 7.514,
+            "ci95High": 22.648,
+            "ci95HalfWidth": 7.567,
+            "pctVsBaseline": 19.57,
+            "winsOutOfN": 1,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -475.437,
+            "sd": 238.106,
+            "ci95Low": -645.771,
+            "ci95High": -305.103,
+            "ci95HalfWidth": 170.334,
+            "pctVsBaseline": -2.38,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "normal",
+      "windowId": "am-peak",
+      "windowLabel": "AM Peak (09:00 IST)",
+      "startTimeIso": "2026-11-14T03:30:00.000Z",
+      "demandScale": 0.35,
+      "criticalFlowProfile": {
+        "periodId": "am-peak",
+        "maxRawY": 0.759,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 71.595,
+            "sd": 2.852,
+            "ci95Low": 69.555,
+            "ci95High": 73.635,
+            "ci95HalfWidth": 2.04
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 21099.247,
+            "sd": 29.856,
+            "ci95Low": 21077.889,
+            "ci95High": 21120.605,
+            "ci95HalfWidth": 21.358
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 58.3,
+            "sd": 1.248,
+            "ci95Low": 57.407,
+            "ci95High": 59.193,
+            "ci95HalfWidth": 0.893
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 65.894,
+            "sd": 2.159,
+            "ci95Low": 64.349,
+            "ci95High": 67.439,
+            "ci95HalfWidth": 1.545
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 21267.593,
+            "sd": 67.386,
+            "ci95Low": 21219.387,
+            "ci95High": 21315.799,
+            "ci95HalfWidth": 48.206
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 58.658,
+            "sd": 3.623,
+            "ci95Low": 56.067,
+            "ci95High": 61.25,
+            "ci95HalfWidth": 2.592
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 113.175,
+            "sd": 3.852,
+            "ci95Low": 110.419,
+            "ci95High": 115.931,
+            "ci95HalfWidth": 2.756
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 19753.372,
+            "sd": 68.229,
+            "ci95Low": 19704.563,
+            "ci95High": 19802.181,
+            "ci95HalfWidth": 48.809
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 72.983,
+            "sd": 1.297,
+            "ci95Low": 72.056,
+            "ci95High": 73.911,
+            "ci95HalfWidth": 0.928
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 88.599,
+            "sd": 2.621,
+            "ci95Low": 86.724,
+            "ci95High": 90.474,
+            "ci95HalfWidth": 1.875
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 20550.439,
+            "sd": 69.357,
+            "ci95Low": 20500.823,
+            "ci95High": 20600.055,
+            "ci95HalfWidth": 49.616
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 64.625,
+            "sd": 1.883,
+            "ci95Low": 63.278,
+            "ci95High": 65.972,
+            "ci95HalfWidth": 1.347
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -5.701,
+            "sd": 1.533,
+            "ci95Low": -6.798,
+            "ci95High": -4.604,
+            "ci95HalfWidth": 1.097,
+            "pctVsBaseline": -7.96,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 168.346,
+            "sd": 67.611,
+            "ci95Low": 119.979,
+            "ci95High": 216.713,
+            "ci95HalfWidth": 48.367,
+            "pctVsBaseline": 0.8,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 41.58,
+            "sd": 2.286,
+            "ci95Low": 39.944,
+            "ci95High": 43.216,
+            "ci95HalfWidth": 1.636,
+            "pctVsBaseline": 58.08,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -1345.875,
+            "sd": 68.33,
+            "ci95Low": -1394.756,
+            "ci95High": -1296.994,
+            "ci95HalfWidth": 48.881,
+            "pctVsBaseline": -6.38,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 17.004,
+            "sd": 1.208,
+            "ci95Low": 16.14,
+            "ci95High": 17.868,
+            "ci95HalfWidth": 0.864,
+            "pctVsBaseline": 23.75,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -548.808,
+            "sd": 80.631,
+            "ci95Low": -606.489,
+            "ci95High": -491.127,
+            "ci95HalfWidth": 57.681,
+            "pctVsBaseline": -2.6,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "am-peak",
+      "windowLabel": "AM Peak (09:00 IST)",
+      "startTimeIso": "2026-11-14T03:30:00.000Z",
+      "demandScale": 0.35,
+      "criticalFlowProfile": {
+        "periodId": "am-peak",
+        "maxRawY": 0.759,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 103.052,
+            "sd": 10.247,
+            "ci95Low": 95.722,
+            "ci95High": 110.382,
+            "ci95HalfWidth": 7.33
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 20938.216,
+            "sd": 74.856,
+            "ci95Low": 20884.666,
+            "ci95High": 20991.766,
+            "ci95HalfWidth": 53.55
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 63.6,
+            "sd": 1.872,
+            "ci95Low": 62.261,
+            "ci95High": 64.939,
+            "ci95HalfWidth": 1.339
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 89.622,
+            "sd": 9.559,
+            "ci95Low": 82.784,
+            "ci95High": 96.46,
+            "ci95HalfWidth": 6.838
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 21380.335,
+            "sd": 203.174,
+            "ci95Low": 21234.99,
+            "ci95High": 21525.68,
+            "ci95HalfWidth": 145.345
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 62.917,
+            "sd": 2.744,
+            "ci95Low": 60.954,
+            "ci95High": 64.88,
+            "ci95HalfWidth": 1.963
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 158.494,
+            "sd": 34.242,
+            "ci95Low": 133.998,
+            "ci95High": 182.99,
+            "ci95HalfWidth": 24.496
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 18890.661,
+            "sd": 1162.208,
+            "ci95Low": 18059.252,
+            "ci95High": 19722.07,
+            "ci95HalfWidth": 831.409
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 81.225,
+            "sd": 6.4,
+            "ci95Low": 76.647,
+            "ci95High": 85.803,
+            "ci95HalfWidth": 4.578
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 120.481,
+            "sd": 15.765,
+            "ci95Low": 109.203,
+            "ci95High": 131.759,
+            "ci95HalfWidth": 11.278
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 20417.23,
+            "sd": 182.133,
+            "ci95Low": 20286.938,
+            "ci95High": 20547.522,
+            "ci95HalfWidth": 130.292
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 70.492,
+            "sd": 5.021,
+            "ci95Low": 66.9,
+            "ci95High": 74.084,
+            "ci95HalfWidth": 3.592
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -13.43,
+            "sd": 5.014,
+            "ci95Low": -17.017,
+            "ci95High": -9.843,
+            "ci95HalfWidth": 3.587,
+            "pctVsBaseline": -13.03,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 442.119,
+            "sd": 184.909,
+            "ci95Low": 309.841,
+            "ci95High": 574.397,
+            "ci95HalfWidth": 132.278,
+            "pctVsBaseline": 2.11,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 55.442,
+            "sd": 25.456,
+            "ci95Low": 37.231,
+            "ci95High": 73.653,
+            "ci95HalfWidth": 18.211,
+            "pctVsBaseline": 53.8,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -2047.555,
+            "sd": 1142.678,
+            "ci95Low": -2864.993,
+            "ci95High": -1230.117,
+            "ci95HalfWidth": 817.438,
+            "pctVsBaseline": -9.78,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 17.429,
+            "sd": 6.784,
+            "ci95Low": 12.576,
+            "ci95High": 22.282,
+            "ci95HalfWidth": 4.853,
+            "pctVsBaseline": 16.91,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -520.986,
+            "sd": 189.353,
+            "ci95Low": -656.444,
+            "ci95High": -385.528,
+            "ci95HalfWidth": 135.458,
+            "pctVsBaseline": -2.49,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "normal",
+      "windowId": "midday",
+      "windowLabel": "Midday (13:30 IST)",
+      "startTimeIso": "2026-11-14T08:00:00.000Z",
+      "demandScale": 0.35,
+      "criticalFlowProfile": {
+        "periodId": "midday",
+        "maxRawY": 0.565,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 24.372,
+            "sd": 0.113,
+            "ci95Low": 24.291,
+            "ci95High": 24.453,
+            "ci95HalfWidth": 0.081
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13073.52,
+            "sd": 109.056,
+            "ci95Low": 12995.505,
+            "ci95High": 13151.535,
+            "ci95HalfWidth": 78.015
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 33.142,
+            "sd": 1.511,
+            "ci95Low": 32.061,
+            "ci95High": 34.223,
+            "ci95HalfWidth": 1.081
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 24.681,
+            "sd": 0.359,
+            "ci95Low": 24.424,
+            "ci95High": 24.938,
+            "ci95HalfWidth": 0.257
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13069.9,
+            "sd": 105.708,
+            "ci95Low": 12994.279,
+            "ci95High": 13145.521,
+            "ci95HalfWidth": 75.621
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 33.9,
+            "sd": 1.175,
+            "ci95Low": 33.059,
+            "ci95High": 34.741,
+            "ci95HalfWidth": 0.841
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 21.855,
+            "sd": 0.188,
+            "ci95Low": 21.72,
+            "ci95High": 21.99,
+            "ci95HalfWidth": 0.135
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13113.683,
+            "sd": 107.669,
+            "ci95Low": 13036.659,
+            "ci95High": 13190.707,
+            "ci95HalfWidth": 77.024
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 36.833,
+            "sd": 1.579,
+            "ci95Low": 35.704,
+            "ci95High": 37.963,
+            "ci95HalfWidth": 1.129
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 22.228,
+            "sd": 0.215,
+            "ci95Low": 22.074,
+            "ci95High": 22.382,
+            "ci95HalfWidth": 0.154
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13107.208,
+            "sd": 103.713,
+            "ci95Low": 13033.015,
+            "ci95High": 13181.401,
+            "ci95HalfWidth": 74.193
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 35.283,
+            "sd": 1.18,
+            "ci95Low": 34.439,
+            "ci95High": 36.127,
+            "ci95HalfWidth": 0.844
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 0.309,
+            "sd": 0.344,
+            "ci95Low": 0.063,
+            "ci95High": 0.555,
+            "ci95HalfWidth": 0.246,
+            "pctVsBaseline": 1.27,
+            "winsOutOfN": 2,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -3.62,
+            "sd": 13.261,
+            "ci95Low": -13.106,
+            "ci95High": 5.866,
+            "ci95HalfWidth": 9.486,
+            "pctVsBaseline": -0.03,
+            "winsOutOfN": 3,
+            "significant": "indistinguishable"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.517,
+            "sd": 0.178,
+            "ci95Low": -2.644,
+            "ci95High": -2.39,
+            "ci95HalfWidth": 0.127,
+            "pctVsBaseline": -10.33,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 40.163,
+            "sd": 10.422,
+            "ci95Low": 32.707,
+            "ci95High": 47.619,
+            "ci95HalfWidth": 7.456,
+            "pctVsBaseline": 0.31,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -2.144,
+            "sd": 0.181,
+            "ci95Low": -2.273,
+            "ci95High": -2.015,
+            "ci95HalfWidth": 0.129,
+            "pctVsBaseline": -8.8,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 33.688,
+            "sd": 9.507,
+            "ci95Low": 26.887,
+            "ci95High": 40.489,
+            "ci95HalfWidth": 6.801,
+            "pctVsBaseline": 0.26,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "midday",
+      "windowLabel": "Midday (13:30 IST)",
+      "startTimeIso": "2026-11-14T08:00:00.000Z",
+      "demandScale": 0.35,
+      "criticalFlowProfile": {
+        "periodId": "midday",
+        "maxRawY": 0.565,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 45.261,
+            "sd": 8.125,
+            "ci95Low": 39.449,
+            "ci95High": 51.073,
+            "ci95HalfWidth": 5.812
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13211.984,
+            "sd": 64.656,
+            "ci95Low": 13165.731,
+            "ci95High": 13258.237,
+            "ci95HalfWidth": 46.253
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 37.717,
+            "sd": 2.503,
+            "ci95Low": 35.926,
+            "ci95High": 39.507,
+            "ci95HalfWidth": 1.791
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 29.966,
+            "sd": 2.514,
+            "ci95Low": 28.168,
+            "ci95High": 31.764,
+            "ci95HalfWidth": 1.798
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13451.838,
+            "sd": 192.23,
+            "ci95Low": 13314.322,
+            "ci95High": 13589.354,
+            "ci95HalfWidth": 137.516
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 35.45,
+            "sd": 1.707,
+            "ci95Low": 34.229,
+            "ci95High": 36.671,
+            "ci95HalfWidth": 1.221
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 24.219,
+            "sd": 2.003,
+            "ci95Low": 22.786,
+            "ci95High": 25.652,
+            "ci95HalfWidth": 1.433
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13536.778,
+            "sd": 199.406,
+            "ci95Low": 13394.129,
+            "ci95High": 13679.427,
+            "ci95HalfWidth": 142.649
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 37.108,
+            "sd": 1.922,
+            "ci95Low": 35.733,
+            "ci95High": 38.483,
+            "ci95HalfWidth": 1.375
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 24.617,
+            "sd": 1.397,
+            "ci95Low": 23.617,
+            "ci95High": 25.617,
+            "ci95HalfWidth": 1
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 13527.356,
+            "sd": 203.507,
+            "ci95Low": 13381.773,
+            "ci95High": 13672.939,
+            "ci95HalfWidth": 145.583
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 37.083,
+            "sd": 1.907,
+            "ci95Low": 35.719,
+            "ci95High": 38.448,
+            "ci95HalfWidth": 1.364
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -15.295,
+            "sd": 7.059,
+            "ci95Low": -20.345,
+            "ci95High": -10.245,
+            "ci95HalfWidth": 5.05,
+            "pctVsBaseline": -33.79,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 239.854,
+            "sd": 191.186,
+            "ci95Low": 103.085,
+            "ci95High": 376.623,
+            "ci95HalfWidth": 136.769,
+            "pctVsBaseline": 1.82,
+            "winsOutOfN": 9,
+            "significant": "better"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -21.042,
+            "sd": 6.66,
+            "ci95Low": -25.806,
+            "ci95High": -16.278,
+            "ci95HalfWidth": 4.764,
+            "pctVsBaseline": -46.49,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 324.794,
+            "sd": 194.079,
+            "ci95Low": 185.956,
+            "ci95High": 463.632,
+            "ci95HalfWidth": 138.838,
+            "pctVsBaseline": 2.46,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": -20.644,
+            "sd": 7.249,
+            "ci95Low": -25.83,
+            "ci95High": -15.458,
+            "ci95HalfWidth": 5.186,
+            "pctVsBaseline": -45.61,
+            "winsOutOfN": 10,
+            "significant": "better"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 315.372,
+            "sd": 197.504,
+            "ci95Low": 174.083,
+            "ci95High": 456.661,
+            "ci95HalfWidth": 141.289,
+            "pctVsBaseline": 2.39,
+            "winsOutOfN": 10,
+            "significant": "better"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "normal",
+      "windowId": "pm-peak",
+      "windowLabel": "PM Peak (18:30 IST)",
+      "startTimeIso": "2026-11-14T13:00:00.000Z",
+      "demandScale": 0.35,
+      "criticalFlowProfile": {
+        "periodId": "pm-peak",
+        "maxRawY": 0.912,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 70.842,
+            "sd": 2.411,
+            "ci95Low": 69.117,
+            "ci95High": 72.567,
+            "ci95HalfWidth": 1.725
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 22349.964,
+            "sd": 65.174,
+            "ci95Low": 22303.341,
+            "ci95High": 22396.587,
+            "ci95HalfWidth": 46.623
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 56.15,
+            "sd": 1.879,
+            "ci95Low": 54.806,
+            "ci95High": 57.494,
+            "ci95HalfWidth": 1.344
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 80.337,
+            "sd": 3.203,
+            "ci95Low": 78.045,
+            "ci95High": 82.629,
+            "ci95HalfWidth": 2.292
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 21957.058,
+            "sd": 105.267,
+            "ci95Low": 21881.753,
+            "ci95High": 22032.363,
+            "ci95HalfWidth": 75.305
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 63,
+            "sd": 1.324,
+            "ci95Low": 62.053,
+            "ci95High": 63.947,
+            "ci95HalfWidth": 0.947
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 133.817,
+            "sd": 3.965,
+            "ci95Low": 130.981,
+            "ci95High": 136.653,
+            "ci95HalfWidth": 2.836
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 20103.848,
+            "sd": 67.066,
+            "ci95Low": 20055.871,
+            "ci95High": 20151.825,
+            "ci95HalfWidth": 47.977
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 80.533,
+            "sd": 1.188,
+            "ci95Low": 79.684,
+            "ci95High": 81.383,
+            "ci95HalfWidth": 0.85
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 105.859,
+            "sd": 3.476,
+            "ci95Low": 103.372,
+            "ci95High": 108.346,
+            "ci95HalfWidth": 2.487
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 21074.93,
+            "sd": 82.731,
+            "ci95Low": 21015.747,
+            "ci95High": 21134.113,
+            "ci95HalfWidth": 59.183
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 72.083,
+            "sd": 1.926,
+            "ci95Low": 70.706,
+            "ci95High": 73.461,
+            "ci95HalfWidth": 1.378
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 9.495,
+            "sd": 1.881,
+            "ci95Low": 8.149,
+            "ci95High": 10.841,
+            "ci95HalfWidth": 1.346,
+            "pctVsBaseline": 13.4,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -392.906,
+            "sd": 101.114,
+            "ci95Low": -465.24,
+            "ci95High": -320.572,
+            "ci95HalfWidth": 72.334,
+            "pctVsBaseline": -1.76,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 62.975,
+            "sd": 2.289,
+            "ci95Low": 61.337,
+            "ci95High": 64.613,
+            "ci95HalfWidth": 1.638,
+            "pctVsBaseline": 88.9,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -2246.116,
+            "sd": 58.446,
+            "ci95Low": -2287.927,
+            "ci95High": -2204.305,
+            "ci95HalfWidth": 41.811,
+            "pctVsBaseline": -10.05,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 35.017,
+            "sd": 2.222,
+            "ci95Low": 33.427,
+            "ci95High": 36.607,
+            "ci95HalfWidth": 1.59,
+            "pctVsBaseline": 49.43,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -1275.034,
+            "sd": 74.422,
+            "ci95Low": -1328.273,
+            "ci95High": -1221.795,
+            "ci95HalfWidth": 53.239,
+            "pctVsBaseline": -5.7,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          }
+        }
+      }
+    },
+    {
+      "scenarioId": "surge_incident",
+      "windowId": "pm-peak",
+      "windowLabel": "PM Peak (18:30 IST)",
+      "startTimeIso": "2026-11-14T13:00:00.000Z",
+      "demandScale": 0.35,
+      "criticalFlowProfile": {
+        "periodId": "pm-peak",
+        "maxRawY": 0.912,
+        "junctionsOverSaturated": 0
+      },
+      "controllers": {
+        "fixed-tod": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 101.592,
+            "sd": 10.055,
+            "ci95Low": 94.399,
+            "ci95High": 108.785,
+            "ci95HalfWidth": 7.193
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 22202.26,
+            "sd": 88.992,
+            "ci95Low": 22138.598,
+            "ci95High": 22265.922,
+            "ci95HalfWidth": 63.662
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 61.917,
+            "sd": 2.404,
+            "ci95Low": 60.197,
+            "ci95High": 63.637,
+            "ci95HalfWidth": 1.72
+          }
+        },
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 106.6,
+            "sd": 9.083,
+            "ci95Low": 100.102,
+            "ci95High": 113.098,
+            "ci95HalfWidth": 6.498
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 21955.938,
+            "sd": 195.144,
+            "ci95Low": 21816.338,
+            "ci95High": 22095.538,
+            "ci95HalfWidth": 139.6
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 67.792,
+            "sd": 1.761,
+            "ci95Low": 66.532,
+            "ci95High": 69.051,
+            "ci95HalfWidth": 1.26
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 184.547,
+            "sd": 39.311,
+            "ci95Low": 156.425,
+            "ci95High": 212.669,
+            "ci95HalfWidth": 28.122
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 18863.67,
+            "sd": 1608.209,
+            "ci95Low": 17713.205,
+            "ci95High": 20014.135,
+            "ci95HalfWidth": 1150.465
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 85.825,
+            "sd": 4.438,
+            "ci95Low": 82.65,
+            "ci95High": 89,
+            "ci95HalfWidth": 3.175
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 137.289,
+            "sd": 11.803,
+            "ci95Low": 128.845,
+            "ci95High": 145.733,
+            "ci95HalfWidth": 8.444
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": 20870.019,
+            "sd": 257.336,
+            "ci95Low": 20685.929,
+            "ci95High": 21054.109,
+            "ci95HalfWidth": 184.09
+          },
+          "congestionScore": {
+            "n": 10,
+            "mean": 76.825,
+            "sd": 3.83,
+            "ci95Low": 74.085,
+            "ci95High": 79.565,
+            "ci95HalfWidth": 2.74
+          }
+        }
+      },
+      "pairedVsFixedTod": {
+        "webster": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 5.008,
+            "sd": 4.496,
+            "ci95Low": 1.792,
+            "ci95High": 8.224,
+            "ci95HalfWidth": 3.216,
+            "pctVsBaseline": 4.93,
+            "winsOutOfN": 1,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -246.322,
+            "sd": 165.587,
+            "ci95Low": -364.778,
+            "ci95High": -127.866,
+            "ci95HalfWidth": 118.456,
+            "pctVsBaseline": -1.11,
+            "winsOutOfN": 1,
+            "significant": "worse"
+          }
+        },
+        "max-pressure": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 82.955,
+            "sd": 30.099,
+            "ci95Low": 61.423,
+            "ci95High": 104.487,
+            "ci95HalfWidth": 21.532,
+            "pctVsBaseline": 81.66,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -3338.59,
+            "sd": 1552.33,
+            "ci95Low": -4449.081,
+            "ci95High": -2228.099,
+            "ci95HalfWidth": 1110.491,
+            "pctVsBaseline": -15.04,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          }
+        },
+        "max-pressure-ca": {
+          "avgDelayPerVehSec": {
+            "n": 10,
+            "mean": 35.697,
+            "sd": 5.045,
+            "ci95Low": 32.088,
+            "ci95High": 39.306,
+            "ci95HalfWidth": 3.609,
+            "pctVsBaseline": 35.14,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          },
+          "throughputVeh": {
+            "n": 10,
+            "mean": -1332.241,
+            "sd": 271.167,
+            "ci95Low": -1526.226,
+            "ci95High": -1138.256,
+            "ci95HalfWidth": 193.985,
+            "pctVsBaseline": -6,
+            "winsOutOfN": 0,
+            "significant": "worse"
+          }
+        }
+      }
+    }
+  ]
+}
