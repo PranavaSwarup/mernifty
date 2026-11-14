@@ -3,10 +3,17 @@
  *
  * Common interface:
  *   controller.decide(junctionState, nowSec)
- *     -> { phaseIndex, greenRemainingSec, cycleSec, splits, inIntergreen, intergreenRemainingSec, controller }
- *   controller.name      (string identifier)
- *   controller.describe() -> plain metadata object with active parameters (for UI/telemetry)
+ *     -> {
+ *          controller, phaseIndex, greenRemainingSec, cycleSec, splits,
+ *          planned: { cycleSec, splits } | null,
+ *          realised: { windowSec, observedSec, cycleSec, splits, greenSec, greenSharePct, phaseSwitches },
+ *          inIntergreen, intergreenRemainingSec, activePeriod?
+ *        }
+ *   controller.name
+ *   controller.describe() -> metadata object with active parameters + planned/realised timing
  */
+
+import { getTodPeriod } from './demand.js';
 
 export const INTERGREEN_SEC = 4; // 3s amber + 1s all-red clearance
 export const MIN_GREEN_SEC = 10;
@@ -17,7 +24,9 @@ export const SATURATION_PER_LANE_VEH_PER_SEC = 0.5; // 1800 PCU/h/lane
 export const MAX_PRESSURE_EVAL_INTERVAL_SEC = 5;
 export const MAX_PRESSURE_ETA = 0.15;
 export const MAX_PRESSURE_THETA = 2.0;
-export const PREEMPT_LEAD_WINDOW_SEC = INTERGREEN_SEC + 6; // 10s lead time for green wave
+export const DEFAULT_MAX_RED_SEC = 120;
+export const REALISED_WINDOW_SEC = 300;
+export const PREEMPT_LEAD_WINDOW_SEC = INTERGREEN_SEC + 6; // 10s base green-wave lead
 
 function clamp(val, min, max) {
   return Math.max(min, Math.min(max, val));
@@ -25,14 +34,6 @@ function clamp(val, min, max) {
 
 /**
  * Pure Webster (1958) optimal cycle length and green split calculator.
- *
- * @param {object} params
- * @param {number[]} params.flowRatios Critical flow ratios y_k = q_k / S_k per phase
- * @param {number} [params.intergreenSec=4]
- * @param {number} [params.minCycleSec=45]
- * @param {number} [params.maxCycleSec=150]
- * @param {number} [params.minGreenSec=10]
- * @param {number} [params.maxGreenSec=60]
  */
 export function computeWebsterPlan({
   flowRatios,
@@ -59,6 +60,7 @@ export function computeWebsterPlan({
       splits,
       flowRatios: flowRatios.map(() => 0),
       criticalRatio: 0,
+      rawCriticalRatio: 0,
       saturated: false,
     };
   }
@@ -90,8 +92,160 @@ export function computeWebsterPlan({
 }
 
 /**
+ * Rolling 300 s realised green-time & cycle-length tracker.
+ * Measures actual green seconds, phase switches, completed cycle lengths,
+ * and mean green durations per phase without fabricating splits.
+ */
+class RealisedTimingTracker {
+  constructor(numPhases, intergreenSec = INTERGREEN_SEC, windowSec = REALISED_WINDOW_SEC) {
+    this.numPhases = numPhases;
+    this.intergreenSec = intergreenSec;
+    this.windowSec = windowSec;
+
+    this.slices = []; // { startSec, endSec, phaseIndex, inIntergreen }
+    this.episodes = []; // completed green episodes: { phaseIndex, durationSec, endSec }
+    this.cycleLengths = []; // { durationSec, endSec }
+    this._activeEpisodeStart = 0;
+    this._activePhase = null;
+    this._activeInIntergreen = false;
+    this._lastCycleStartSec = null;
+    this._sawNonZeroPhase = false;
+    this._lastNowSec = null;
+  }
+
+  record(nowSec, dt, phaseIndex, inIntergreen) {
+    if (this._activePhase === null) {
+      this._activePhase = phaseIndex;
+      this._activeInIntergreen = inIntergreen;
+      this._activeEpisodeStart = nowSec;
+      this._lastCycleStartSec = phaseIndex === 0 && !inIntergreen ? nowSec : null;
+      this._lastNowSec = nowSec;
+      return;
+    }
+
+    if (dt > 0) {
+      const startSec = nowSec - dt;
+      this.slices.push({
+        startSec,
+        endSec: nowSec,
+        phaseIndex: this._activePhase,
+        inIntergreen: this._activeInIntergreen,
+      });
+    }
+
+    // Detect transition from green -> intergreen (green episode completed)
+    if (!this._activeInIntergreen && inIntergreen) {
+      const dur = nowSec - this._activeEpisodeStart;
+      if (dur > 0) {
+        this.episodes.push({
+          phaseIndex: this._activePhase,
+          durationSec: dur,
+          endSec: nowSec,
+        });
+      }
+      if (this._activePhase !== 0) {
+        this._sawNonZeroPhase = true;
+      }
+    }
+
+    // Detect transition from intergreen -> green (new green episode begins)
+    if (this._activeInIntergreen && !inIntergreen) {
+      this._activeEpisodeStart = nowSec;
+      if (phaseIndex === 0 && this._sawNonZeroPhase) {
+        if (this._lastCycleStartSec !== null) {
+          this.cycleLengths.push({
+            durationSec: nowSec - this._lastCycleStartSec,
+            endSec: nowSec,
+          });
+        }
+        this._lastCycleStartSec = nowSec;
+        this._sawNonZeroPhase = false;
+      } else if (phaseIndex === 0 && this._lastCycleStartSec === null) {
+        this._lastCycleStartSec = nowSec;
+      }
+    }
+
+    this._activePhase = phaseIndex;
+    this._activeInIntergreen = inIntergreen;
+    this._lastNowSec = nowSec;
+
+    // Prune entries completely outside trailing window
+    const cutoff = nowSec - this.windowSec;
+    while (this.slices.length > 0 && this.slices[0].endSec <= cutoff) {
+      this.slices.shift();
+    }
+    while (this.episodes.length > 0 && this.episodes[0].endSec <= cutoff) {
+      this.episodes.shift();
+    }
+    while (this.cycleLengths.length > 0 && this.cycleLengths[0].endSec <= cutoff) {
+      this.cycleLengths.shift();
+    }
+  }
+
+  getSummary(nowSec) {
+    const cutoff = nowSec - this.windowSec;
+    const greenSec = new Array(this.numPhases).fill(0);
+    let totalObserved = 0;
+
+    for (let i = 0; i < this.slices.length; i++) {
+      const sl = this.slices[i];
+      const clampedStart = Math.max(sl.startSec, cutoff);
+      const dur = Math.max(0, sl.endSec - clampedStart);
+      if (dur <= 0) continue;
+      totalObserved += dur;
+      if (!sl.inIntergreen && sl.phaseIndex >= 0 && sl.phaseIndex < this.numPhases) {
+        greenSec[sl.phaseIndex] += dur;
+      }
+    }
+
+    const epSum = new Array(this.numPhases).fill(0);
+    const epCount = new Array(this.numPhases).fill(0);
+    let totalEpisodes = 0;
+    for (let i = 0; i < this.episodes.length; i++) {
+      const ep = this.episodes[i];
+      epSum[ep.phaseIndex] += ep.durationSec;
+      epCount[ep.phaseIndex] += 1;
+      totalEpisodes += 1;
+    }
+
+    // If current phase is active in green and has no completed episode yet, include ongoing duration
+    const splits = new Array(this.numPhases).fill(0);
+    for (let k = 0; k < this.numPhases; k++) {
+      if (epCount[k] > 0) {
+        splits[k] = Math.round(epSum[k] / epCount[k]);
+      } else if (!this._activeInIntergreen && this._activePhase === k && this._lastNowSec !== null) {
+        splits[k] = Math.round(Math.max(0, this._lastNowSec - this._activeEpisodeStart));
+      }
+    }
+
+    let meanCycleSec = 0;
+    if (this.cycleLengths.length > 0) {
+      const sumC = this.cycleLengths.reduce((acc, c) => acc + c.durationSec, 0);
+      meanCycleSec = Math.round(sumC / this.cycleLengths.length);
+    } else if (totalEpisodes > 0 && totalObserved > 0) {
+      const meanSlotSec = totalObserved / totalEpisodes;
+      meanCycleSec = Math.round(meanSlotSec * this.numPhases);
+    }
+
+    const greenSharePct = greenSec.map((g) =>
+      totalObserved > 0 ? Number(((g / totalObserved) * 100).toFixed(1)) : 0
+    );
+
+    return {
+      windowSec: this.windowSec,
+      observedSec: Number(totalObserved.toFixed(1)),
+      cycleSec: meanCycleSec,
+      splits,
+      greenSec: greenSec.map((g) => Number(g.toFixed(1))),
+      greenSharePct,
+      phaseSwitches: totalEpisodes,
+    };
+  }
+}
+
+/**
  * Shared preemption transition helper used by all controllers when an emergency
- * responder with `preempt=true` requests priority within PREEMPT_LEAD_WINDOW_SEC.
+ * responder with `preempt=true` requests priority.
  */
 function handlePreemptionTransition(ctrl, preemptApproachIdx) {
   if (preemptApproachIdx === null || preemptApproachIdx === undefined) {
@@ -99,18 +253,15 @@ function handlePreemptionTransition(ctrl, preemptApproachIdx) {
   }
 
   if (ctrl.inIntergreen) {
-    // Redirect target phase safely while clearance is already active
     ctrl.pendingPhaseIndex = preemptApproachIdx;
     return true;
   }
 
   if (ctrl.phaseIndex === preemptApproachIdx) {
-    // Hold current phase green while emergency responder clears stop line
     ctrl.greenRemainingSec = Math.max(ctrl.greenRemainingSec, 2);
     return true;
   }
 
-  // Trigger immediate clearance transition toward the emergency approach
   ctrl.inIntergreen = true;
   ctrl.intergreenRemainingSec = ctrl.intergreenSec;
   ctrl.pendingPhaseIndex = preemptApproachIdx;
@@ -120,15 +271,38 @@ function handlePreemptionTransition(ctrl, preemptApproachIdx) {
 
 /**
  * Fixed-Time Signal Controller
- * Uses static greenSplitSec values from the junction catalogue with fixed 4 s intergreen.
+ *
+ * Modes:
+ * - 'tod' (default): "Fixed-time (Webster-tuned TOD plan)". Uses a precomputed offline
+ *   time-of-day (night / am-peak / midday / pm-peak / evening) plan table derived via
+ *   Webster's formula from expected mean period demand, switching plans at period boundaries.
+ * - 'naive': Uses raw static catalogue `greenSplitSec` values (retained strictly for tests).
  */
 export class FixedTimeController {
   constructor(junctionConfig, options = {}) {
-    this.name = 'fixed-time';
+    this.mode = options.mode === 'naive' ? 'naive' : 'tod';
+    this.name = this.mode === 'naive' ? 'fixed-naive' : 'fixed-tod';
+    this.label =
+      this.mode === 'naive'
+        ? 'Fixed-time (Naive Catalogue Plan)'
+        : 'Fixed-time (Webster-tuned TOD plan)';
     this.intergreenSec = options.intergreenSec ?? INTERGREEN_SEC;
+    this.startTimeMs = options.startTimeMs ?? Date.parse('2026-11-14T13:30:00.000Z');
+
     const approaches = junctionConfig?.approaches || junctionConfig?.baseApproaches || [];
     this.numPhases = Math.max(1, approaches.length);
-    this.splits = approaches.map((a) => Math.max(MIN_GREEN_SEC, a.greenSplitSec || 35));
+    this.naiveSplits = approaches.map((a) => Math.max(MIN_GREEN_SEC, a.greenSplitSec || 35));
+    this.todPlans = junctionConfig?.todPlans || null;
+
+    this.activePeriodId = null;
+    if (this.mode === 'tod' && this.todPlans) {
+      const p = getTodPeriod(this.startTimeMs);
+      const plan = this.todPlans[p.id];
+      this.activePeriodId = p.id;
+      this.splits = plan ? [...plan.splits] : [...this.naiveSplits];
+    } else {
+      this.splits = [...this.naiveSplits];
+    }
     this.cycleSec = this.splits.reduce((a, b) => a + b, 0) + this.numPhases * this.intergreenSec;
 
     this.phaseIndex = options.initialPhaseIndex ?? 0;
@@ -137,24 +311,42 @@ export class FixedTimeController {
     this.intergreenRemainingSec = 0;
     this.pendingPhaseIndex = this.phaseIndex;
     this._lastNowSec = null;
+    this._tracker = new RealisedTimingTracker(this.numPhases, this.intergreenSec);
+  }
+
+  _syncTodPlan(simTimeMs) {
+    if (this.mode !== 'tod' || !this.todPlans) return;
+    const p = getTodPeriod(simTimeMs);
+    if (p.id !== this.activePeriodId && this.todPlans[p.id]) {
+      this.activePeriodId = p.id;
+      this.splits = [...this.todPlans[p.id].splits];
+      this.cycleSec = this.todPlans[p.id].cycleSec;
+    }
   }
 
   describe() {
+    const nowSec = this._lastNowSec ?? 0;
     return {
       name: this.name,
-      label: 'Fixed-Time Pre-Timed Controller',
+      label: this.label,
+      mode: this.mode,
+      activePeriod: this.activePeriodId,
       intergreenSec: this.intergreenSec,
       cycleSec: this.cycleSec,
       splits: [...this.splits],
+      planned: {
+        cycleSec: this.cycleSec,
+        splits: [...this.splits],
+      },
+      realised: this._tracker.getSummary(nowSec),
     };
   }
 
   decide(junctionState = {}, nowSec = 0) {
-    const dt =
-      this._lastNowSec === null
-        ? 0
-        : Math.max(0, nowSec - this._lastNowSec);
+    const dt = this._lastNowSec === null ? 0 : Math.max(0, nowSec - this._lastNowSec);
     this._lastNowSec = nowSec;
+
+    const simTimeMs = junctionState.simTimeMs ?? (this.startTimeMs + nowSec * 1000);
 
     if (dt > 0) {
       if (this.inIntergreen) {
@@ -163,6 +355,10 @@ export class FixedTimeController {
           this.inIntergreen = false;
           this.intergreenRemainingSec = 0;
           this.phaseIndex = this.pendingPhaseIndex;
+          // Apply any TOD period boundary transition cleanly on cycle wrap
+          if (this.phaseIndex === 0) {
+            this._syncTodPlan(simTimeMs);
+          }
           this.greenRemainingSec = this.splits[this.phaseIndex];
         }
       } else {
@@ -174,6 +370,8 @@ export class FixedTimeController {
           this.greenRemainingSec = 0;
         }
       }
+    } else if (this.mode === 'tod' && this.todPlans) {
+      this._syncTodPlan(simTimeMs);
     }
 
     const preemptIdx = junctionState.preemptApproachIdx;
@@ -181,12 +379,21 @@ export class FixedTimeController {
       handlePreemptionTransition(this, preemptIdx);
     }
 
+    this._tracker.record(nowSec, dt, this.phaseIndex, this.inIntergreen);
+    const realised = this._tracker.getSummary(nowSec);
+
     return {
       controller: this.name,
+      activePeriod: this.activePeriodId,
       phaseIndex: this.phaseIndex,
       greenRemainingSec: Math.max(0, Math.round(this.greenRemainingSec)),
       cycleSec: this.cycleSec,
       splits: [...this.splits],
+      planned: {
+        cycleSec: this.cycleSec,
+        splits: [...this.splits],
+      },
+      realised,
       inIntergreen: this.inIntergreen,
       intergreenRemainingSec: Math.max(0, Math.round(this.intergreenRemainingSec)),
     };
@@ -215,7 +422,6 @@ export class WebsterController {
       (a) => a.saturationFlowPerSec ?? (a.lanes || 2) * this.s0
     );
 
-    // Seed EWMA arrival flow estimates from configured base demands unless zero-init requested
     this.ewmaFlows = approaches.map((a) =>
       options.zeroInitFlows ? 0 : (a.baseDemandPerSec ?? 0)
     );
@@ -231,6 +437,7 @@ export class WebsterController {
     this.intergreenRemainingSec = 0;
     this.pendingPhaseIndex = this.phaseIndex;
     this._lastNowSec = null;
+    this._tracker = new RealisedTimingTracker(this.numPhases, this.intergreenSec);
   }
 
   _computePlanFromEwma() {
@@ -249,6 +456,7 @@ export class WebsterController {
   }
 
   describe() {
+    const nowSec = this._lastNowSec ?? 0;
     return {
       name: this.name,
       label: 'Webster Optimal Cycle & Split Controller',
@@ -261,6 +469,11 @@ export class WebsterController {
       ewmaTimeConstantSec: this.ewmaTimeConstantSec,
       cycleSec: this.cycleSec,
       splits: [...this.splits],
+      planned: {
+        cycleSec: this.cycleSec,
+        splits: [...this.splits],
+      },
+      realised: this._tracker.getSummary(nowSec),
     };
   }
 
@@ -283,10 +496,7 @@ export class WebsterController {
   }
 
   decide(junctionState = {}, nowSec = 0) {
-    const dt =
-      this._lastNowSec === null
-        ? 0
-        : Math.max(0, nowSec - this._lastNowSec);
+    const dt = this._lastNowSec === null ? 0 : Math.max(0, nowSec - this._lastNowSec);
     this._lastNowSec = nowSec;
 
     if (dt > 0) {
@@ -299,7 +509,6 @@ export class WebsterController {
           this.intergreenRemainingSec = 0;
           this.phaseIndex = this.pendingPhaseIndex;
 
-          // Recompute optimal cycle & splits at the start of every new cycle
           if (this.phaseIndex === 0) {
             const plan = this._computePlanFromEwma();
             this.splits = plan.splits;
@@ -325,12 +534,20 @@ export class WebsterController {
       handlePreemptionTransition(this, preemptIdx);
     }
 
+    this._tracker.record(nowSec, dt, this.phaseIndex, this.inIntergreen);
+    const realised = this._tracker.getSummary(nowSec);
+
     return {
       controller: this.name,
       phaseIndex: this.phaseIndex,
       greenRemainingSec: Math.max(0, Math.round(this.greenRemainingSec)),
       cycleSec: this.cycleSec,
       splits: [...this.splits],
+      planned: {
+        cycleSec: this.cycleSec,
+        splits: [...this.splits],
+      },
+      realised,
       inIntergreen: this.inIntergreen,
       intergreenRemainingSec: Math.max(0, Math.round(this.intergreenRemainingSec)),
     };
@@ -338,21 +555,26 @@ export class WebsterController {
 }
 
 /**
- * Varaiya Max-Pressure Adaptive Controller
+ * Varaiya Max-Pressure Adaptive Controller (with R1 starvation guard & R2 realised timing)
  *
- * Evaluates phase pressures every 5s once gmin (10s) is satisfied:
- *   w_i(t) = Q_i(t) - sum_{j in out(i)} r_ij * Q_j(t) * (1 + Q_j(t) / Q_max_j)
- *   P_k(t) = sum_{i in k} S_i * max(0, w_i(t))
- *
- * Switches with hysteresis (eta = 0.15, theta = 2.0) to prevent chattering,
- * forces phase rotation at gmax (60s), and never switches during intergreen (4s).
+ * Variants:
+ * - Standard (`capacityAware = false`):
+ *     w_i(t) = Q_i(t) - sum_{j in out(i)} r_ij * Q_j(t) * (1 + Q_j(t) / Q_max_j)
+ *     P_k(t) = sum_{i in k} S_i * max(0, w_i(t))
+ * - Capacity-Aware (`capacityAware = true`, Gregoire et al. 2015 + saturation-adaptive gmin):
+ *     Normalizes upstream & downstream queues by storage capacity (x = Q / Q_max) to prevent
+ *     4-lane downstream arterials from artificially starving 2-lane upstream approaches, and
+ *     scales effective gmin smoothly from 10s up to 28s under heavy congestion to eliminate
+ *     24% all-red intergreen chatter loss.
  */
 export class MaxPressureController {
   constructor(junctionConfig, options = {}) {
-    this.name = 'max-pressure';
+    this.capacityAware = Boolean(options.capacityAware);
+    this.name = this.capacityAware ? 'max-pressure-ca' : 'max-pressure';
     this.intergreenSec = options.intergreenSec ?? INTERGREEN_SEC;
     this.minGreenSec = options.minGreenSec ?? MIN_GREEN_SEC;
     this.maxGreenSec = options.maxGreenSec ?? MAX_GREEN_SEC;
+    this.maxRedSec = options.maxRedSec ?? DEFAULT_MAX_RED_SEC;
     this.evalIntervalSec = options.evalIntervalSec ?? MAX_PRESSURE_EVAL_INTERVAL_SEC;
     this.eta = options.eta ?? MAX_PRESSURE_ETA;
     this.theta = options.theta ?? MAX_PRESSURE_THETA;
@@ -363,8 +585,7 @@ export class MaxPressureController {
     this.saturationFlows = approaches.map(
       (a) => a.saturationFlowPerSec ?? (a.lanes || 2) * this.s0
     );
-    this.splits = approaches.map((a) => clamp(a.greenSplitSec || 30, this.minGreenSec, this.maxGreenSec));
-    this.cycleSec = this.splits.reduce((a, b) => a + b, 0) + this.numPhases * this.intergreenSec;
+    this.storageCaps = approaches.map((a) => a.storageCapVeh ?? 150);
 
     this.phaseIndex = options.initialPhaseIndex ?? 0;
     this.greenElapsedSec = options.initialGreenElapsedSec ?? 0;
@@ -372,29 +593,36 @@ export class MaxPressureController {
     this.inIntergreen = false;
     this.intergreenRemainingSec = 0;
     this.pendingPhaseIndex = this.phaseIndex;
+    this.redElapsedSec = new Array(this.numPhases).fill(0);
     this.lastPressures = new Array(this.numPhases).fill(0);
     this._lastNowSec = null;
+    this._tracker = new RealisedTimingTracker(this.numPhases, this.intergreenSec);
   }
 
   describe() {
+    const nowSec = this._lastNowSec ?? 0;
+    const realised = this._tracker.getSummary(nowSec);
     return {
       name: this.name,
-      label: 'Varaiya Max-Pressure Adaptive Controller',
+      label: this.capacityAware
+        ? 'Capacity-Aware Max-Pressure Controller (Gregoire + Loss-Adaptive)'
+        : 'Varaiya Max-Pressure Adaptive Controller',
+      capacityAware: this.capacityAware,
       s0PcuPerHourPerLane: Math.round(this.s0 * 3600),
       intergreenSec: this.intergreenSec,
       minGreenSec: this.minGreenSec,
       maxGreenSec: this.maxGreenSec,
+      maxRedSec: this.maxRedSec,
       evalIntervalSec: this.evalIntervalSec,
       hysteresisEta: this.eta,
       hysteresisTheta: this.theta,
-      cycleSec: this.cycleSec,
-      splits: [...this.splits],
+      cycleSec: realised.cycleSec,
+      splits: realised.splits,
+      planned: null,
+      realised,
     };
   }
 
-  /**
-   * Compute pressure P_k for each phase k from current approach queues and downstream spillback penalties.
-   */
   computePressures(approaches = []) {
     const pressures = new Array(this.numPhases).fill(0);
     for (let k = 0; k < this.numPhases; k++) {
@@ -403,60 +631,83 @@ export class MaxPressureController {
       const S = app.saturationFlowPerSec ?? this.saturationFlows[k] ?? this.s0 * 2;
       const q = app.queueVeh ?? 0;
 
-      let downstreamTerm = 0;
-      if (typeof app.downstreamPenalty === 'number') {
-        downstreamTerm = app.downstreamPenalty;
-      } else if (Array.isArray(app.downstreamQueues)) {
-        for (let m = 0; m < app.downstreamQueues.length; m++) {
-          const ds = app.downstreamQueues[m];
-          const qj = ds.queueVeh ?? 0;
-          const qMax = Math.max(1, ds.storageCapVeh ?? 150);
-          const r = ds.turnFraction ?? 0;
-          downstreamTerm += r * qj * (1 + qj / qMax);
+      if (this.capacityAware) {
+        const qMax = Math.max(1, app.storageCapVeh ?? this.storageCaps[k] ?? 150);
+        const occUp = q / qMax;
+        let occDownTerm = 0;
+        if (typeof app.downstreamOccupancyPenalty === 'number') {
+          occDownTerm = app.downstreamOccupancyPenalty;
+        } else if (Array.isArray(app.downstreamQueues)) {
+          for (let m = 0; m < app.downstreamQueues.length; m++) {
+            const ds = app.downstreamQueues[m];
+            const dsCap = Math.max(1, ds.storageCapVeh ?? 150);
+            const occDown = (ds.queueVeh ?? 0) / dsCap;
+            occDownTerm += (ds.turnFraction ?? 0) * occDown * (1 + occDown);
+          }
         }
+        // Rescale normalized occupancy pressure back to equivalent vehicle scale (~150 veh ref)
+        const wNorm = occUp - occDownTerm;
+        pressures[k] = S * Math.max(0, wNorm * qMax);
+      } else {
+        let downstreamTerm = 0;
+        if (typeof app.downstreamPenalty === 'number') {
+          downstreamTerm = app.downstreamPenalty;
+        } else if (Array.isArray(app.downstreamQueues)) {
+          for (let m = 0; m < app.downstreamQueues.length; m++) {
+            const ds = app.downstreamQueues[m];
+            const qj = ds.queueVeh ?? 0;
+            const qMax = Math.max(1, ds.storageCapVeh ?? 150);
+            const r = ds.turnFraction ?? 0;
+            downstreamTerm += r * qj * (1 + qj / qMax);
+          }
+        }
+        const w = q - downstreamTerm;
+        pressures[k] = S * Math.max(0, w);
       }
-
-      const w = q - downstreamTerm;
-      pressures[k] = S * Math.max(0, w);
     }
     return pressures;
   }
 
-  _updateEstimatedSplits(pressures) {
-    const totalP = pressures.reduce((a, b) => a + b, 0);
-    const budget = this.numPhases * 30;
-    for (let k = 0; k < this.numPhases; k++) {
-      if (totalP > 1e-6) {
-        this.splits[k] = clamp(
-          Math.round((pressures[k] / totalP) * budget),
-          this.minGreenSec,
-          this.maxGreenSec
-        );
-      } else {
-        this.splits[k] = this.minGreenSec;
-      }
+  _effectiveMinGreen(approaches = []) {
+    if (!this.capacityAware || approaches.length === 0) {
+      return this.minGreenSec;
     }
-    this.cycleSec = this.splits.reduce((a, b) => a + b, 0) + this.numPhases * this.intergreenSec;
+    let sumOcc = 0;
+    for (let i = 0; i < approaches.length; i++) {
+      const app = approaches[i];
+      const qMax = Math.max(1, app?.storageCapVeh ?? this.storageCaps[i] ?? 150);
+      sumOcc += Math.min(1, (app?.queueVeh ?? 0) / qMax);
+    }
+    const meanOcc = sumOcc / approaches.length;
+    // Scale min green smoothly from 10s (light) up to 28s (heavy congestion) to avoid intergreen loss
+    return Math.round(this.minGreenSec + Math.min(1, meanOcc * 1.4) * 18);
   }
 
   decide(junctionState = {}, nowSec = 0) {
-    const dt =
-      this._lastNowSec === null
-        ? 0
-        : Math.max(0, nowSec - this._lastNowSec);
+    const dt = this._lastNowSec === null ? 0 : Math.max(0, nowSec - this._lastNowSec);
     this._lastNowSec = nowSec;
 
-    const pressures = this.computePressures(junctionState.approaches);
+    const approaches = junctionState.approaches || [];
+    const pressures = this.computePressures(approaches);
     this.lastPressures = pressures;
 
     if (dt > 0) {
+      // Update red-wait elapsed timers for every phase
+      for (let k = 0; k < this.numPhases; k++) {
+        if (!this.inIntergreen && k === this.phaseIndex) {
+          this.redElapsedSec[k] = 0;
+        } else {
+          this.redElapsedSec[k] += dt;
+        }
+      }
+
       if (this.inIntergreen) {
-        // Strictly no switching during intergreen clearance
         this.intergreenRemainingSec -= dt;
         if (this.intergreenRemainingSec <= 1e-9) {
           this.inIntergreen = false;
           this.intergreenRemainingSec = 0;
           this.phaseIndex = this.pendingPhaseIndex;
+          this.redElapsedSec[this.phaseIndex] = 0;
           this.greenElapsedSec = 0;
           this.nextEvalAtSec = this.minGreenSec;
         }
@@ -473,12 +724,33 @@ export class MaxPressureController {
 
     if (isPreempted) {
       if (!this.inIntergreen && this.phaseIndex === preemptIdx) {
-        // Reset next eval after emergency clears so we return smoothly to normal control
         this.nextEvalAtSec = Math.max(this.nextEvalAtSec, this.greenElapsedSec + this.evalIntervalSec);
       }
     } else if (!this.inIntergreen && this.numPhases > 1) {
-      // Force phase switch once gmax is reached
-      if (this.greenElapsedSec >= this.maxGreenSec - 1e-9) {
+      const effGmin = this._effectiveMinGreen(approaches);
+
+      // R1 Starvation Guard: any queued phase waiting >= maxRedSec must be served next once gmin met
+      let starvedPhase = -1;
+      if (this.greenElapsedSec >= this.minGreenSec - 1e-9) {
+        let worstRed = -1;
+        for (let k = 0; k < this.numPhases; k++) {
+          if (k === this.phaseIndex) continue;
+          const qk = approaches[k]?.queueVeh ?? 0;
+          if (qk > 0 && this.redElapsedSec[k] >= this.maxRedSec - 1e-9) {
+            if (this.redElapsedSec[k] > worstRed) {
+              worstRed = this.redElapsedSec[k];
+              starvedPhase = k;
+            }
+          }
+        }
+      }
+
+      if (starvedPhase !== -1) {
+        this.inIntergreen = true;
+        this.intergreenRemainingSec = this.intergreenSec;
+        this.pendingPhaseIndex = starvedPhase;
+      } else if (this.greenElapsedSec >= this.maxGreenSec - 1e-9) {
+        // Force phase switch at gmax
         let bestOther = (this.phaseIndex + 1) % this.numPhases;
         let bestOtherP = -Infinity;
         for (let offset = 1; offset < this.numPhases; offset++) {
@@ -492,10 +764,9 @@ export class MaxPressureController {
         this.intergreenRemainingSec = this.intergreenSec;
         this.pendingPhaseIndex = bestOther;
       } else if (
-        this.greenElapsedSec >= this.minGreenSec - 1e-9 &&
+        this.greenElapsedSec >= effGmin - 1e-9 &&
         this.greenElapsedSec >= this.nextEvalAtSec - 1e-9
       ) {
-        // Advance evaluation schedule by 5s increments
         while (this.nextEvalAtSec <= this.greenElapsedSec + 1e-9) {
           this.nextEvalAtSec += this.evalIntervalSec;
         }
@@ -519,7 +790,8 @@ export class MaxPressureController {
       }
     }
 
-    this._updateEstimatedSplits(pressures);
+    this._tracker.record(nowSec, dt, this.phaseIndex, this.inIntergreen);
+    const realised = this._tracker.getSummary(nowSec);
 
     const greenRemainingSec = this.inIntergreen
       ? 0
@@ -529,8 +801,10 @@ export class MaxPressureController {
       controller: this.name,
       phaseIndex: this.phaseIndex,
       greenRemainingSec,
-      cycleSec: this.cycleSec,
-      splits: [...this.splits],
+      cycleSec: realised.cycleSec,
+      splits: realised.splits,
+      planned: null,
+      realised,
       inIntergreen: this.inIntergreen,
       intergreenRemainingSec: Math.max(0, Math.round(this.intergreenRemainingSec)),
       pressures,
@@ -545,10 +819,16 @@ export function createController(type, junctionConfig, options = {}) {
     case 'max-pressure':
     case 'max_pressure':
     case 'maxpressure':
-      return new MaxPressureController(junctionConfig, options);
+      return new MaxPressureController(junctionConfig, { ...options, capacityAware: false });
+    case 'max-pressure-ca':
+    case 'maxpressure-ca':
+      return new MaxPressureController(junctionConfig, { ...options, capacityAware: true });
+    case 'fixed-naive':
+      return new FixedTimeController(junctionConfig, { ...options, mode: 'naive' });
+    case 'fixed-tod':
     case 'fixed-time':
     case 'fixed':
     default:
-      return new FixedTimeController(junctionConfig, options);
+      return new FixedTimeController(junctionConfig, { ...options, mode: 'tod' });
   }
 }

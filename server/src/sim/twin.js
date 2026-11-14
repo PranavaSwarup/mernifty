@@ -3,8 +3,8 @@
  *
  * Runs two synchronized TrafficWorld instances side-by-side under Common Random Numbers
  * (identical seed, network topology, time-of-day demand, incidents, and surges):
- *  - `live`: adaptive/switchable signal controller (Fixed, Webster, or Max-Pressure) + optional preemption
- *  - `baseline`: locked to Fixed-Time pre-timed control with no preemption
+ *  - `live`: adaptive/switchable signal controller (Fixed-TOD, Webster, or Max-Pressure) + optional preemption
+ *  - `baseline`: locked to Fixed-time (Webster-tuned TOD plan) pre-timed control with no preemption
  */
 
 import { TrafficWorld } from './engine.js';
@@ -46,7 +46,7 @@ export class CounterfactualPair {
       network,
       startTime,
       dtSec,
-      controllerFactory: 'fixed-time',
+      controllerFactory: 'fixed-tod',
       prewarmLinks,
     });
 

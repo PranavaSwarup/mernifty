@@ -21,6 +21,8 @@
  */
 
 import { INITIAL_DEVICES } from './junctions.data.js';
+import { TOD_PERIODS, getPeriodMeanDemandFactor } from './demand.js';
+import { computeWebsterPlan } from './controllers.js';
 
 export const ROAD_TORTUOSITY_FACTOR = 1.3;
 export const FREE_FLOW_SPEED_KMPH = 40;
@@ -103,18 +105,100 @@ const RAW_CORRIDOR_LINKS = [
 ];
 
 /**
- * Build an enriched, immutable-ready Bengaluru network topology object.
- * @param {Array} [devices] Optional junction catalogue override (defaults to INITIAL_DEVICES)
- * @param {Array} [rawLinks] Optional link definitions override
+ * Compute offline Webster-tuned Time-of-Day (TOD) signal plans for each junction
+ * and TOD period via fixed-point expected arrival propagation over the directed link graph.
+ *
+ * Uses the exact period mean demand multiplier from demand.js and caps internal link
+ * propagation at each upstream approach's scheduled green discharge capacity.
  */
-export function buildNetwork(devices = INITIAL_DEVICES, rawLinks = RAW_CORRIDOR_LINKS) {
+export function computeNetworkTodPlans(junctions, links, periods = TOD_PERIODS) {
+  const jIdxById = new Map(junctions.map((j, idx) => [j.junctionId, idx]));
+  const plansByJunction = junctions.map(() => ({}));
+
+  for (const period of periods) {
+    const periodFactor = getPeriodMeanDemandFactor(period.id);
+    let arrRates = junctions.map((j) =>
+      j.approaches.map((a) => (a.hasUpstream ? 0 : a.baseDemandPerSec * periodFactor))
+    );
+    let currentPlans = new Array(junctions.length);
+
+    for (let iter = 0; iter < 20; iter++) {
+      for (let jIdx = 0; jIdx < junctions.length; jIdx++) {
+        const junc = junctions[jIdx];
+        currentPlans[jIdx] = computeWebsterPlan({
+          flowRatios: junc.approaches.map(
+            (a, aIdx) => arrRates[jIdx][aIdx] / a.saturationFlowPerSec
+          ),
+        });
+      }
+
+      const nextArrRates = junctions.map((j) =>
+        j.approaches.map((a) => (a.hasUpstream ? 0 : a.baseDemandPerSec * periodFactor))
+      );
+
+      for (const link of links) {
+        const fromJIdx = jIdxById.get(link.fromJunction);
+        const toJIdx = jIdxById.get(link.toJunction);
+        if (fromJIdx === undefined || toJIdx === undefined) continue;
+
+        const fromApp = junctions[fromJIdx].approaches[link.fromApproachIdx];
+        const plan = currentPlans[fromJIdx];
+        const greenShare = plan.splits[link.fromApproachIdx] / plan.cycleSec;
+        const maxDischargeRate = fromApp.saturationFlowPerSec * greenShare;
+        const meanOutflow = Math.min(arrRates[fromJIdx][link.fromApproachIdx], maxDischargeRate);
+        nextArrRates[toJIdx][link.toApproachIdx] += meanOutflow * link.turnFraction;
+      }
+
+      arrRates = nextArrRates;
+    }
+
+    for (let jIdx = 0; jIdx < junctions.length; jIdx++) {
+      const junc = junctions[jIdx];
+      const finalPlan = computeWebsterPlan({
+        flowRatios: junc.approaches.map(
+          (a, aIdx) => arrRates[jIdx][aIdx] / a.saturationFlowPerSec
+        ),
+      });
+      plansByJunction[jIdx][period.id] = {
+        ...finalPlan,
+        periodId: period.id,
+        periodLabel: period.label,
+        periodDemandFactor: periodFactor,
+      };
+    }
+  }
+
+  for (let jIdx = 0; jIdx < junctions.length; jIdx++) {
+    junctions[jIdx].todPlans = plansByJunction[jIdx];
+  }
+
+  return plansByJunction;
+}
+
+/**
+ * Build an enriched, immutable-ready Bengaluru network topology object.
+ * @param {object|Array} [optionsOrDevices] Options `{ devices, rawLinks, demandScale }` or legacy junction array
+ * @param {Array} [rawLinksArg] Optional link definitions override (legacy positional signature)
+ */
+export function buildNetwork(optionsOrDevices = {}, rawLinksArg = RAW_CORRIDOR_LINKS) {
+  const isLegacyArray = Array.isArray(optionsOrDevices);
+  const devices = isLegacyArray
+    ? optionsOrDevices
+    : optionsOrDevices.devices || INITIAL_DEVICES;
+  const rawLinks = isLegacyArray
+    ? rawLinksArg
+    : optionsOrDevices.rawLinks || RAW_CORRIDOR_LINKS;
+  const demandScale = isLegacyArray
+    ? BASE_DEMAND_SCALE
+    : optionsOrDevices.demandScale ?? BASE_DEMAND_SCALE;
+
   const junctions = devices.map((j) => {
     const approaches = j.baseApproaches.map((a, idx) => {
       const lanes = a.lanes || 2;
       const dir = a.dir || ['N', 'E', 'S', 'W'][idx % 4];
       const storageCapM = 240 + lanes * 25; // 290 m (2 lanes) to 340 m (4 lanes)
       const storageCapVeh = (storageCapM * lanes) / EFFECTIVE_VEH_LENGTH_M;
-      const baseDemandPerSec = ((a.baseVehiclesPerMin || 25) / 60) * BASE_DEMAND_SCALE;
+      const baseDemandPerSec = ((a.baseVehiclesPerMin || 25) / 60) * demandScale;
       const saturationFlowPerSec = lanes * SATURATION_PER_LANE_VEH_PER_SEC;
 
       return {
@@ -133,6 +217,7 @@ export function buildNetwork(devices = INITIAL_DEVICES, rawLinks = RAW_CORRIDOR_
     return {
       ...j,
       approaches,
+      todPlans: {},
     };
   });
 
@@ -164,10 +249,13 @@ export function buildNetwork(devices = INITIAL_DEVICES, rawLinks = RAW_CORRIDOR_
     });
   }
 
+  computeNetworkTodPlans(junctions, links);
+
   return {
     junctions,
     links,
     junctionMap,
+    demandScale,
   };
 }
 

@@ -84,3 +84,72 @@ export function getDemandRegimeLabel(simDate) {
   if (h < 5 || h >= 23) return 'Night Trough';
   return 'Transition';
 }
+
+/**
+ * 5 exhaustive Time-of-Day (TOD) signal timing periods in IST [0, 24).
+ */
+export const TOD_PERIODS = [
+  { id: 'night', label: 'Night Trough (22:00–06:00 IST)', startHour: 22, endHour: 6 },
+  { id: 'am-peak', label: 'AM Peak (06:00–11:30 IST)', startHour: 6, endHour: 11.5 },
+  { id: 'midday', label: 'Midday (11:30–16:30 IST)', startHour: 11.5, endHour: 16.5 },
+  { id: 'pm-peak', label: 'PM Peak (16:30–20:30 IST)', startHour: 16.5, endHour: 20.5 },
+  { id: 'evening', label: 'Evening (20:30–22:00 IST)', startHour: 20.5, endHour: 22 },
+];
+
+/**
+ * Resolve the TOD period metadata for a given timestamp.
+ * @param {Date|number|string} simDate
+ */
+export function getTodPeriod(simDate) {
+  const h = getIstHour(simDate);
+  for (const p of TOD_PERIODS) {
+    if (p.startHour < p.endHour) {
+      if (h >= p.startHour && h < p.endHour) return p;
+    } else {
+      // Wraps midnight (e.g. 22:00 -> 06:00)
+      if (h >= p.startHour || h < p.endHour) return p;
+    }
+  }
+  return TOD_PERIODS[0];
+}
+
+function evalDemandAtIstHour(h) {
+  const wrapped = ((h % 24) + 24) % 24;
+  for (let i = 0; i < DEMAND_KNOTS.length - 1; i++) {
+    const [h0, v0] = DEMAND_KNOTS[i];
+    const [h1, v1] = DEMAND_KNOTS[i + 1];
+    if (wrapped >= h0 && wrapped <= h1) {
+      const span = h1 - h0;
+      const t = span > 0 ? (wrapped - h0) / span : 0;
+      const eased = 0.5 * (1 - Math.cos(Math.PI * t));
+      return v0 + (v1 - v0) * eased;
+    }
+  }
+  return DEMAND_KNOTS[0][1];
+}
+
+/**
+ * Compute exact numerical mean of demandFactor across a TOD period's IST hours.
+ * Used offline by the Webster-tuned Fixed-TOD plan generator.
+ */
+const PERIOD_MEAN_CACHE = new Map();
+export function getPeriodMeanDemandFactor(periodId) {
+  if (PERIOD_MEAN_CACHE.has(periodId)) return PERIOD_MEAN_CACHE.get(periodId);
+  const period = TOD_PERIODS.find((p) => p.id === periodId);
+  if (!period) return 1.0;
+
+  const durationHrs =
+    period.startHour < period.endHour
+      ? period.endHour - period.startHour
+      : 24 - period.startHour + period.endHour;
+
+  const steps = 120;
+  let sum = 0;
+  for (let i = 0; i < steps; i++) {
+    const offset = ((i + 0.5) / steps) * durationHrs;
+    sum += evalDemandAtIstHour(period.startHour + offset);
+  }
+  const mean = sum / steps;
+  PERIOD_MEAN_CACHE.set(periodId, mean);
+  return mean;
+}

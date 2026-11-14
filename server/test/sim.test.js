@@ -7,8 +7,13 @@ import {
   computeWebsterPlan,
 } from '../src/sim/controllers.js';
 import { demandFactor } from '../src/sim/demand.js';
-import { DEFAULT_NETWORK } from '../src/sim/network.js';
-import { TrafficWorld } from '../src/sim/engine.js';
+import {
+  buildNetwork,
+  DEFAULT_NETWORK,
+  FREE_FLOW_SPEED_KMPH,
+  MIN_SPEED_KMPH,
+} from '../src/sim/network.js';
+import { TrafficWorld, EMERGENCY_WEAVING_SPEED_KMPH } from '../src/sim/engine.js';
 import { CounterfactualPair } from '../src/sim/twin.js';
 
 // Evening peak timestamp in Bengaluru: 19:00 IST (13:30 UTC)
@@ -208,41 +213,81 @@ test('5. MaxPressure: selects highest pressure phase, respects gmin/gmax, and ne
   assert.strictEqual(d.inIntergreen, true, 'Should force intergreen switch at gmax=60s');
 });
 
-test('6. Effectiveness: evening-peak + Silk Board surge (1800s) -> MaxPressure and Webster beat FixedTime delay', () => {
+test('6. Effectiveness vs fixed-tod: empirically supported behavior in stationary vs surge & saturated regimes', () => {
   // Sanity-check demandFactor at evening peak
   const peakMult = demandFactor(EVENING_PEAK_START);
   assert.ok(peakMult >= 1.6 && peakMult <= 1.9, `Evening peak multiplier should be ~1.6-1.9x, got ${peakMult}`);
 
-  const runScenario = (ctrlType) => {
+  const runScenario = ({ ctrlType, startTime = EVENING_PEAK_START, network = DEFAULT_NETWORK, surge = false }) => {
     const world = new TrafficWorld({
       seed: 20261114,
+      network,
       controllerFactory: ctrlType,
-      startTime: EVENING_PEAK_START,
+      startTime,
     });
-    // Asymmetric demand surge on Silk Board (JNC-BLR-001) Hosur Rd from south (approach 0)
-    world.setDemandSurge('JNC-BLR-001', 2.4, 1800, 0);
+    if (surge) {
+      // Asymmetric demand surge on Silk Board (JNC-BLR-001) Hosur Rd from south (approach 0)
+      world.setDemandSurge('JNC-BLR-001', 2.4, 1800, 0);
+    }
     for (let t = 0; t < 1800; t++) {
       world.step();
     }
     return world.snapshot();
   };
 
-  const fixedSnap = runScenario('fixed-time');
-  const websterSnap = runScenario('webster');
-  const mpSnap = runScenario('max-pressure');
+  // A. Default stationary PM peak (0.25): TOD beats naive catalogue plan, capacity-aware MP beats fixed-tod
+  const naivePm = runScenario({ ctrlType: 'fixed-naive' });
+  const todPm = runScenario({ ctrlType: 'fixed-tod' });
+  const mpCaPm = runScenario({ ctrlType: 'max-pressure-ca' });
 
-  console.log('[Effectiveness 1800s @ Evening Peak + Silk Board Asymmetric Surge]');
-  console.log(`  FixedTime   totalDelay=${fixedSnap.network.totalDelayVehSec} veh·s (${fixedSnap.network.totalDelayVehHours} veh·h), avgDelay=${fixedSnap.network.avgDelayPerVehSec} s/veh, throughput=${fixedSnap.network.totalThroughputVeh}`);
-  console.log(`  Webster     totalDelay=${websterSnap.network.totalDelayVehSec} veh·s (${websterSnap.network.totalDelayVehHours} veh·h), avgDelay=${websterSnap.network.avgDelayPerVehSec} s/veh, throughput=${websterSnap.network.totalThroughputVeh}`);
-  console.log(`  MaxPressure totalDelay=${mpSnap.network.totalDelayVehSec} veh·s (${mpSnap.network.totalDelayVehHours} veh·h), avgDelay=${mpSnap.network.avgDelayPerVehSec} s/veh, throughput=${mpSnap.network.totalThroughputVeh}`);
+  // B. Default stationary AM peak (0.25): both Max-Pressure variants beat fixed-tod
+  const AM_PEAK_START = '2026-11-14T03:30:00.000Z';
+  const todAm = runScenario({ ctrlType: 'fixed-tod', startTime: AM_PEAK_START });
+  const mpAm = runScenario({ ctrlType: 'max-pressure', startTime: AM_PEAK_START });
+  const mpCaAm = runScenario({ ctrlType: 'max-pressure-ca', startTime: AM_PEAK_START });
+
+  // C. Unplanned asymmetric Silk Board surge (PM peak 0.25): adaptive controllers strongly beat offline fixed-tod
+  const todSurge = runScenario({ ctrlType: 'fixed-tod', surge: true });
+  const websterSurge = runScenario({ ctrlType: 'webster', surge: true });
+  const mpSurge = runScenario({ ctrlType: 'max-pressure', surge: true });
+  const mpCaSurge = runScenario({ ctrlType: 'max-pressure-ca', surge: true });
+
+  // D. Near-saturated stationary PM peak (0.35): literature fix max-pressure-ca halves raw MP degradation,
+  //    while offline 150s-cycle fixed-tod holds lowest delay under heavy saturation
+  const net035 = buildNetwork({ demandScale: 0.35 });
+  const todSat = runScenario({ ctrlType: 'fixed-tod', network: net035 });
+  const mpSat = runScenario({ ctrlType: 'max-pressure', network: net035 });
+  const mpCaSat = runScenario({ ctrlType: 'max-pressure-ca', network: net035 });
+
+  console.log('[Effectiveness 1800s vs Fixed-TOD]');
+  console.log(`  PM@0.25 Normal:     fixed-naive=${naivePm.network.avgDelayPerVehSec}s, fixed-tod=${todPm.network.avgDelayPerVehSec}s, max-pressure-ca=${mpCaPm.network.avgDelayPerVehSec}s`);
+  console.log(`  AM@0.25 Normal:     fixed-tod=${todAm.network.avgDelayPerVehSec}s, max-pressure=${mpAm.network.avgDelayPerVehSec}s, max-pressure-ca=${mpCaAm.network.avgDelayPerVehSec}s`);
+  console.log(`  PM@0.25 SB-Surge:   fixed-tod=${todSurge.network.avgDelayPerVehSec}s, webster=${websterSurge.network.avgDelayPerVehSec}s, max-pressure=${mpSurge.network.avgDelayPerVehSec}s, max-pressure-ca=${mpCaSurge.network.avgDelayPerVehSec}s`);
+  console.log(`  PM@0.35 Saturated:  fixed-tod=${todSat.network.avgDelayPerVehSec}s, max-pressure=${mpSat.network.avgDelayPerVehSec}s, max-pressure-ca=${mpCaSat.network.avgDelayPerVehSec}s`);
 
   assert.ok(
-    mpSnap.network.totalDelayVehSec < fixedSnap.network.totalDelayVehSec,
-    `Expected MaxPressure delay (${mpSnap.network.totalDelayVehSec}) < FixedTime (${fixedSnap.network.totalDelayVehSec})`
+    todPm.network.avgDelayPerVehSec < naivePm.network.avgDelayPerVehSec * 0.7,
+    `Expected fixed-tod (${todPm.network.avgDelayPerVehSec}s) << fixed-naive (${naivePm.network.avgDelayPerVehSec}s)`
   );
   assert.ok(
-    websterSnap.network.totalDelayVehSec < fixedSnap.network.totalDelayVehSec,
-    `Expected Webster delay (${websterSnap.network.totalDelayVehSec}) < FixedTime (${fixedSnap.network.totalDelayVehSec})`
+    mpCaPm.network.avgDelayPerVehSec < todPm.network.avgDelayPerVehSec,
+    `Expected max-pressure-ca (${mpCaPm.network.avgDelayPerVehSec}s) < fixed-tod (${todPm.network.avgDelayPerVehSec}s) at PM@0.25`
+  );
+  assert.ok(
+    mpAm.network.avgDelayPerVehSec < todAm.network.avgDelayPerVehSec &&
+      mpCaAm.network.avgDelayPerVehSec < todAm.network.avgDelayPerVehSec,
+    `Expected MP (${mpAm.network.avgDelayPerVehSec}s) and MP-CA (${mpCaAm.network.avgDelayPerVehSec}s) < fixed-tod (${todAm.network.avgDelayPerVehSec}s) at AM@0.25`
+  );
+  assert.ok(
+    websterSurge.network.avgDelayPerVehSec < todSurge.network.avgDelayPerVehSec * 0.8 &&
+      mpSurge.network.avgDelayPerVehSec < todSurge.network.avgDelayPerVehSec * 0.8 &&
+      mpCaSurge.network.avgDelayPerVehSec < todSurge.network.avgDelayPerVehSec * 0.8,
+    `Expected all adaptive controllers to cut delay >20% vs fixed-tod (${todSurge.network.avgDelayPerVehSec}s) under Silk Board surge`
+  );
+  assert.ok(
+    mpCaSat.network.avgDelayPerVehSec < mpSat.network.avgDelayPerVehSec &&
+      todSat.network.avgDelayPerVehSec < mpSat.network.avgDelayPerVehSec,
+    `Expected max-pressure-ca (${mpCaSat.network.avgDelayPerVehSec}s) < raw max-pressure (${mpSat.network.avgDelayPerVehSec}s) and fixed-tod lowest (${todSat.network.avgDelayPerVehSec}s) at 0.35 saturation`
   );
 });
 
@@ -307,18 +352,40 @@ test('7. Stalled vehicle: capacity drop grows queue; clearing incident lets queu
   );
 });
 
-test('8. Emergency preemption: green-wave preempt=true yields strictly lower travel time than preempt=false', () => {
+test('8. Emergency preemption: weaving speed + queue-clearance lead makes preempt=true strictly faster than preempt=false', () => {
   const path = ['JNC-BLR-004', 'JNC-BLR-001', 'JNC-BLR-003', 'JNC-BLR-011'];
 
-  // A. Isolated preemption check (same FixedTime controller, preempt=true vs preempt=false)
+  // Verify weaving kinematics: 40 km/h upstream of queue, >= 12 km/h weaving inside queue (not 3 km/h)
+  const kinWorld = new TrafficWorld({
+    seed: 20261114,
+    controllerFactory: 'fixed-tod',
+    startTime: EVENING_PEAK_START,
+  });
+  const flatIdx0 = kinWorld.junctionApproachOffsets[3]; // JNC-BLR-004 approach 0
+  kinWorld.queueVeh[flatIdx0] = kinWorld.storageCapVeh[flatIdx0]; // Full queue (~50+ veh, queueLengthM = storageCapM)
+  assert.ok(
+    kinWorld._approachSpeedKmph(flatIdx0) < 4,
+    'Sanity check: mixed-traffic queue tail speed drops near MIN_SPEED_KMPH (3 km/h)'
+  );
+  const emKin = kinWorld.dispatchEmergency({ path, preempt: true });
+  emKin.remainingDistM = 5000; // Upstream of queue
+  assert.strictEqual(kinWorld._emergencySpeedMps(emKin, flatIdx0) * 3.6, FREE_FLOW_SPEED_KMPH);
+  emKin.remainingDistM = 50; // Inside queue along road shoulder
+  const insideSpeedKmph = kinWorld._emergencySpeedMps(emKin, flatIdx0) * 3.6;
+  assert.ok(
+    insideSpeedKmph >= EMERGENCY_WEAVING_SPEED_KMPH && MIN_SPEED_KMPH < EMERGENCY_WEAVING_SPEED_KMPH,
+    `Expected shoulder weaving >= ${EMERGENCY_WEAVING_SPEED_KMPH} km/h, got ${insideSpeedKmph} km/h`
+  );
+
+  // A. Isolated preemption check (same Fixed-TOD controller, preempt=true vs preempt=false)
   const wPreempt = new TrafficWorld({
     seed: 20261114,
-    controllerFactory: 'fixed-time',
+    controllerFactory: 'fixed-tod',
     startTime: EVENING_PEAK_START,
   });
   const wNoPreempt = new TrafficWorld({
     seed: 20261114,
-    controllerFactory: 'fixed-time',
+    controllerFactory: 'fixed-tod',
     startTime: EVENING_PEAK_START,
   });
 
@@ -342,15 +409,17 @@ test('8. Emergency preemption: green-wave preempt=true yields strictly lower tra
   assert.strictEqual(fixedNoPreempt.status, 'completed');
   assert.ok(
     fixedPreempt.travelTimeSec < fixedNoPreempt.travelTimeSec,
-    `Expected FixedTime preempt=true (${fixedPreempt.travelTimeSec}s) < preempt=false (${fixedNoPreempt.travelTimeSec}s)`
+    `Expected Fixed-TOD preempt=true (${fixedPreempt.travelTimeSec}s) < preempt=false (${fixedNoPreempt.travelTimeSec}s)`
   );
 
-  // B. CounterfactualPair check (live MaxPressure + preempt=true vs baseline FixedTime + preempt=false)
+  // B. CounterfactualPair check (live MaxPressure + preempt=true vs baseline Fixed-TOD + preempt=false)
   const pair = new CounterfactualPair({
     seed: 20261114,
     startTime: EVENING_PEAK_START,
     liveControllerFactory: 'max-pressure',
   });
+  assert.strictEqual(pair.baseline.controllers[0].name, 'fixed-tod');
+
   for (let t = 0; t < 120; t++) {
     pair.step();
   }
@@ -366,15 +435,25 @@ test('8. Emergency preemption: green-wave preempt=true yields strictly lower tra
   }
 
   console.log('[Emergency Corridor Preemption Travel Times]');
-  console.log(`  Path: ${path.join(' -> ')}`);
-  console.log(`  Isolated FixedTime: preempt=true=${fixedPreempt.travelTimeSec}s (redWait=${fixedPreempt.waitingAtRedSec}s) vs preempt=false=${fixedNoPreempt.travelTimeSec}s (redWait=${fixedNoPreempt.waitingAtRedSec}s)`);
-  console.log(`  CounterfactualTwin: live(MaxPressure+preempt)=${preemptAgent.travelTimeSec}s (redWait=${preemptAgent.waitingAtRedSec}s) vs baseline(FixedTime)=${nonPreemptAgent.travelTimeSec}s (redWait=${nonPreemptAgent.waitingAtRedSec}s)`);
+  console.log(
+    `  Path: ${path.join(' -> ')} | length=${fixedPreempt.totalLengthKm} km | freeFlowTime=${fixedPreempt.freeFlowTimeSec}s`
+  );
+  console.log(
+    `  Isolated Fixed-TOD: preempt=true -> travel=${fixedPreempt.travelTimeSec}s (redWait=${fixedPreempt.waitingAtRedSec}s) vs preempt=false -> travel=${fixedNoPreempt.travelTimeSec}s (redWait=${fixedNoPreempt.waitingAtRedSec}s)`
+  );
+  console.log(
+    `  CounterfactualTwin: live(MaxPressure+preempt) -> travel=${preemptAgent.travelTimeSec}s (redWait=${preemptAgent.waitingAtRedSec}s) vs baseline(Fixed-TOD) -> travel=${nonPreemptAgent.travelTimeSec}s (redWait=${nonPreemptAgent.waitingAtRedSec}s)`
+  );
 
   assert.strictEqual(preemptAgent.status, 'completed');
   assert.strictEqual(nonPreemptAgent.status, 'completed');
   assert.ok(
     preemptAgent.travelTimeSec < nonPreemptAgent.travelTimeSec,
     `Expected live preempt=true (${preemptAgent.travelTimeSec}s) < baseline preempt=false (${nonPreemptAgent.travelTimeSec}s)`
+  );
+  assert.ok(
+    preemptAgent.waitingAtRedSec < nonPreemptAgent.waitingAtRedSec,
+    `Expected lower red-wait under preemption (${preemptAgent.waitingAtRedSec}s vs ${nonPreemptAgent.waitingAtRedSec}s)`
   );
 });
 
@@ -398,4 +477,136 @@ test('9. Performance: 12-junction network step executes well under 2 ms per step
 
   console.log(`[Performance] ${steps} steps across ${DEFAULT_NETWORK.junctions.length} junctions in ${elapsedMs.toFixed(2)} ms -> avg ${avgStepMs.toFixed(4)} ms/step`);
   assert.ok(avgStepMs < 2.0, `Expected < 2.0 ms/step, measured ${avgStepMs.toFixed(4)} ms/step`);
+});
+
+test('10. Fixed-time (Webster-tuned TOD plan): switches plans across TOD period boundary', () => {
+  // Use KR Puram (JNC-BLR-006), whose TOD plans differ strictly across am-peak -> midday -> pm-peak
+  const junc006 = DEFAULT_NETWORK.junctionMap.get('JNC-BLR-006');
+  // 05:57 UTC = 11:27 IST (am-peak ends at 11:30 IST -> midday)
+  const startMs = Date.parse('2026-11-14T05:57:00.000Z');
+  const ctrl = new FixedTimeController(junc006, { startTimeMs: startMs });
+  assert.strictEqual(ctrl.label, 'Fixed-time (Webster-tuned TOD plan)');
+  assert.strictEqual(ctrl.activePeriodId, 'am-peak');
+  const amCycle = ctrl.cycleSec;
+  const amSplits = [...ctrl.splits];
+
+  for (let t = 1; t <= 420; t++) {
+    ctrl.decide({ simTimeMs: startMs + t * 1000 }, t);
+  }
+  const descAfter = ctrl.describe();
+  assert.strictEqual(descAfter.activePeriod, 'midday', 'Expected TOD plan to switch from am-peak to midday after 11:30 IST cycle wrap');
+  assert.ok(
+    descAfter.planned.cycleSec < amCycle &&
+      descAfter.planned.splits.some((s, idx) => s !== amSplits[idx]),
+    `Expected midday TOD plan to reduce cycle from am-peak (${amCycle}s -> ${descAfter.planned.cycleSec}s)`
+  );
+});
+
+test('11. R1 Starvation guard (MaxPressure): serves queued approach waited >= maxRedSec (120s) once gmin met', () => {
+  const mockJunction = {
+    approaches: [
+      { lanes: 2, saturationFlowPerSec: 1.0, storageCapVeh: 100 },
+      { lanes: 2, saturationFlowPerSec: 1.0, storageCapVeh: 100 },
+      { lanes: 2, saturationFlowPerSec: 1.0, storageCapVeh: 100 },
+      { lanes: 2, saturationFlowPerSec: 1.0, storageCapVeh: 100 },
+    ],
+  };
+
+  // Part A: Starved queued phase (phase 3, q=3) is served at red >= 120s, empty phase 2 (q=0) is skipped
+  const ctrl = new MaxPressureController(mockJunction, { maxRedSec: 120 });
+  const state = {
+    approaches: [
+      { queueVeh: 30, saturationFlowPerSec: 1.0, downstreamPenalty: 0 },
+      { queueVeh: 60, saturationFlowPerSec: 1.0, downstreamPenalty: 0 },
+      { queueVeh: 0, saturationFlowPerSec: 1.0, downstreamPenalty: 0 },
+      { queueVeh: 3, saturationFlowPerSec: 1.0, downstreamPenalty: 0 },
+    ],
+  };
+
+  ctrl.decide(state, 0);
+  let servedPhase3At = null;
+  let servedPhase2At = null;
+  for (let t = 1; t <= 135; t++) {
+    const d = ctrl.decide(state, t);
+    if (!d.inIntergreen && d.phaseIndex === 3 && servedPhase3At === null) {
+      servedPhase3At = t;
+    }
+    if (!d.inIntergreen && d.phaseIndex === 2 && servedPhase2At === null) {
+      servedPhase2At = t;
+    }
+    assert.ok(
+      t >= 120 || d.phaseIndex === 0 || d.phaseIndex === 1,
+      `Phase 3/2 must not pre-empt dominant phases prior to maxRedSec=120 at t=${t}`
+    );
+  }
+  assert.strictEqual(servedPhase2At, null, 'Empty phase 2 (q=0) must NOT trigger starvation switch');
+  assert.ok(
+    servedPhase3At !== null && servedPhase3At >= 124 && servedPhase3At <= 125,
+    `Expected queued phase 3 to receive green right after 4s intergreen at t~124, got t=${servedPhase3At}`
+  );
+
+  // Part B: Starvation guard waits for gmin even if maxRedSec threshold expires mid-phase
+  const shortGuardCtrl = new MaxPressureController(mockJunction, {
+    maxRedSec: 18,
+    minGreenSec: 10,
+    initialPhaseIndex: 0,
+  });
+  shortGuardCtrl.decide(state, 0);
+  // Runs phase 0 (t=0..10), switches to phase 1 at t=14 (greenElapsed=0), so at t=18 red[3]=18 >= maxRedSec
+  // while greenElapsed=4 < gmin=10. Switch MUST wait until t=24 (greenElapsed=10).
+  for (let t = 1; t <= 23; t++) {
+    const d = shortGuardCtrl.decide(state, t);
+    if (t >= 14) {
+      assert.strictEqual(d.phaseIndex, 1, `Should hold phase 1 for gmin before t=24 (at t=${t})`);
+      assert.strictEqual(d.inIntergreen, false, `Must wait for gmin=10s after t=18 starvation breach (at t=${t})`);
+    }
+  }
+  const dStarveRelease = shortGuardCtrl.decide(state, 24);
+  assert.strictEqual(dStarveRelease.inIntergreen, true, 'Must enter intergreen at t=24 once gmin=10s satisfied');
+  let dServed = dStarveRelease;
+  for (let t = 25; t <= 28; t++) dServed = shortGuardCtrl.decide(state, t);
+  assert.strictEqual(dServed.phaseIndex, 3, 'Should serve starved phase 3 right after 4s intergreen');
+});
+
+test('12. R2 Measured realised timing: reports real rolling 300s green splits without fabricating MaxPressure budgets', () => {
+  for (const ctrlType of ['fixed-tod', 'webster', 'max-pressure']) {
+    const world = new TrafficWorld({
+      seed: 20261114,
+      controllerFactory: ctrlType,
+      startTime: EVENING_PEAK_START,
+    });
+    for (let t = 0; t < 600; t++) {
+      world.step();
+    }
+
+    const juncId = 'JNC-BLR-001';
+    const jIdx = world.junctionIndexById.get(juncId);
+    const desc = world.controllers[jIdx].describe();
+    const jSnap = world.snapshot(juncId);
+
+    assert.ok(desc.realised, `${ctrlType}: describe().realised must be present`);
+    assert.ok(jSnap.control.realised, `${ctrlType}: snapshot().control.realised must be present`);
+    assert.strictEqual(desc.realised.windowSec, 300);
+    assert.strictEqual(desc.realised.observedSec, 300);
+
+    const sumGreen = desc.realised.greenSec.reduce((a, b) => a + b, 0);
+    assert.ok(
+      sumGreen > 200 && sumGreen <= 300,
+      `${ctrlType}: sum of realised green seconds in 300s window (${sumGreen}s) must reflect green + intergreen`
+    );
+    const expectedShareSumPct = (sumGreen / desc.realised.observedSec) * 100;
+    const sumShare = desc.realised.greenSharePct.reduce((a, b) => a + b, 0);
+    assert.ok(
+      Math.abs(sumShare - expectedShareSumPct) < 0.5 && sumShare >= 60 && sumShare <= 95,
+      `${ctrlType}: greenSharePct measures % of wall time (${expectedShareSumPct.toFixed(1)}%), got ${sumShare.toFixed(1)}%`
+    );
+    assert.ok(desc.realised.cycleSec > 0, `${ctrlType}: realised cycleSec should be positive`);
+
+    if (ctrlType === 'max-pressure') {
+      assert.strictEqual(desc.planned, null, 'MaxPressure must NOT fabricate a planned split budget');
+    } else {
+      assert.ok(desc.planned && desc.planned.cycleSec > 0, `${ctrlType}: planned cycleSec should exist`);
+      assert.strictEqual(desc.planned.splits.length, 4);
+    }
+  }
 });

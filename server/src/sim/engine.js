@@ -34,6 +34,8 @@ import {
   PREEMPT_LEAD_WINDOW_SEC,
 } from './controllers.js';
 
+export const EMERGENCY_WEAVING_SPEED_KMPH = 12;
+
 export class TrafficWorld {
   /**
    * @param {object} [opts]
@@ -188,7 +190,7 @@ export class TrafficWorld {
       this.controllers[j] =
         typeof controllerFactory === 'function'
           ? controllerFactory(junc)
-          : createController(controllerFactory, junc);
+          : createController(controllerFactory, junc, { startTimeMs: this.startTimeMs });
 
       const count = this.junctionApproachCounts[j];
       const offset = this.junctionApproachOffsets[j];
@@ -204,12 +206,14 @@ export class TrafficWorld {
           arrivalsThisStep: 0,
           arrivalRateVehPerSec: 0,
           downstreamPenalty: 0,
+          downstreamOccupancyPenalty: 0,
           capacityFactor: 1.0,
         };
       }
       this.junctionStates[j] = {
         junctionId: junc.junctionId,
         dtSec: this.dtSec,
+        simTimeMs: this.simTimeMs,
         preemptApproachIdx: null,
         approaches: scratchApproaches,
       };
@@ -236,9 +240,13 @@ export class TrafficWorld {
         typeof controllerOrFactory === 'function'
           ? controllerOrFactory(junc, prevPhase)
           : typeof controllerOrFactory === 'string'
-            ? createController(controllerOrFactory, junc, { initialPhaseIndex: prevPhase })
+            ? createController(controllerOrFactory, junc, {
+                initialPhaseIndex: prevPhase,
+                startTimeMs: this.startTimeMs,
+              })
             : controllerOrFactory;
       this.controllers[jIdx] = nextCtrl;
+      this.junctionStates[jIdx].simTimeMs = this.simTimeMs;
       this.lastDecisions[jIdx] = nextCtrl.decide(this.junctionStates[jIdx], this.elapsedSec);
     };
 
@@ -410,6 +418,10 @@ export class TrafficWorld {
       }
     }
 
+    const totalLengthM = legs.reduce((acc, l) => acc + l.lengthM, 0);
+    const totalLengthKm = Number((totalLengthM / 1000).toFixed(3));
+    const freeFlowTimeSec = Number((totalLengthM / (FREE_FLOW_SPEED_KMPH / 3.6)).toFixed(2));
+
     const id = `EMG-${this._nextEmergencySeq++}`;
     const agent = {
       id,
@@ -418,6 +430,9 @@ export class TrafficWorld {
       legs,
       legIndex: 0,
       remainingDistM: legs[0].lengthM,
+      totalLengthM,
+      totalLengthKm,
+      freeFlowTimeSec,
       startSimSec: this.elapsedSec,
       endSimSec: null,
       travelTimeSec: null,
@@ -433,6 +448,22 @@ export class TrafficWorld {
     const qMax = this.storageCapVeh[flatIdx];
     const occ = qMax > 0 ? Math.min(1, q / qMax) : 0;
     return MIN_SPEED_KMPH + (FREE_FLOW_SPEED_KMPH - MIN_SPEED_KMPH) * Math.pow(1 - occ, 1.5);
+  }
+
+  /**
+   * Emergency vehicle kinematics:
+   * - Upstream of back-of-queue (`remainingDistM > queueLengthM`): travels at 40 km/h free-flow.
+   * - Inside/weaving past stopped queue along the road shoulder (`remainingDistM <= queueLengthM`):
+   *   travels at max(12 km/h, approachSpeed) rather than decelerating to the mixed-traffic 3 km/h tail.
+   */
+  _emergencySpeedMps(em, flatIdx) {
+    const q = this.queueVeh[flatIdx];
+    const queueLengthM = (q * EFFECTIVE_VEH_LENGTH_M) / Math.max(1, this.lanes[flatIdx]);
+    if (em.remainingDistM > queueLengthM) {
+      return FREE_FLOW_SPEED_KMPH / 3.6;
+    }
+    const speedKmph = Math.max(EMERGENCY_WEAVING_SPEED_KMPH, this._approachSpeedKmph(flatIdx));
+    return speedKmph / 3.6;
   }
 
   _expireIncidentsAndSurges() {
@@ -456,9 +487,11 @@ export class TrafficWorld {
       if (em.status !== 'en-route' || !em.preempt) continue;
       const leg = em.legs[em.legIndex];
       const flatIdx = this.junctionApproachOffsets[leg.junctionIdx] + leg.approachIdx;
-      const speedMps = this._approachSpeedKmph(flatIdx) / 3.6;
+      const speedMps = this._emergencySpeedMps(em, flatIdx);
       const etaSec = em.remainingDistM / Math.max(0.5, speedMps);
-      if (etaSec <= PREEMPT_LEAD_WINDOW_SEC) {
+      const effSat = Math.max(0.5, this.saturationFlowPerSec[flatIdx] * this.capacityFactor[flatIdx]);
+      const queueClearanceSec = this.queueVeh[flatIdx] / effSat;
+      if (etaSec <= PREEMPT_LEAD_WINDOW_SEC + queueClearanceSec) {
         this.preemptRequests[leg.junctionIdx] = leg.approachIdx;
       }
     }
@@ -472,7 +505,7 @@ export class TrafficWorld {
 
       const leg = em.legs[em.legIndex];
       const flatIdx = this.junctionApproachOffsets[leg.junctionIdx] + leg.approachIdx;
-      const speedMps = this._approachSpeedKmph(flatIdx) / 3.6;
+      const speedMps = this._emergencySpeedMps(em, flatIdx);
 
       if (em.remainingDistM > 0) {
         em.remainingDistM = Math.max(0, em.remainingDistM - speedMps * dt);
@@ -568,6 +601,7 @@ export class TrafficWorld {
       const count = this.junctionApproachCounts[j];
       const jState = this.junctionStates[j];
       const preemptApp = this.preemptRequests[j];
+      jState.simTimeMs = this.simTimeMs;
       jState.preemptApproachIdx = preemptApp >= 0 ? preemptApp : null;
 
       for (let a = 0; a < count; a++) {
@@ -579,14 +613,18 @@ export class TrafficWorld {
         appScratch.capacityFactor = this.capacityFactor[flatIdx];
 
         let penalty = 0;
+        let occPenalty = 0;
         const outs = this.outgoingLinks[flatIdx];
         for (let m = 0; m < outs.length; m++) {
           const link = outs[m];
           const qDown = this.queueVeh[link.toFlatIdx];
           const qMaxDown = this.storageCapVeh[link.toFlatIdx];
-          penalty += link.turnFraction * qDown * (1 + qDown / qMaxDown);
+          const occDown = qMaxDown > 0 ? qDown / qMaxDown : 0;
+          penalty += link.turnFraction * qDown * (1 + occDown);
+          occPenalty += link.turnFraction * occDown * (1 + occDown);
         }
         appScratch.downstreamPenalty = penalty;
+        appScratch.downstreamOccupancyPenalty = occPenalty;
       }
 
       this.lastDecisions[j] = this.controllers[j].decide(jState, this.elapsedSec);
@@ -799,6 +837,8 @@ export class TrafficWorld {
         phaseIndex: decision.phaseIndex,
         greenRemainingSec: decision.greenRemainingSec,
         splits: [...decision.splits],
+        planned: decision.planned ?? null,
+        realised: decision.realised ?? null,
         inIntergreen: decision.inIntergreen,
       },
       kpi: {
