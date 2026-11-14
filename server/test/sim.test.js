@@ -755,8 +755,8 @@ test('15. Monsoon chaos & conservation-honest upstream diversion preserve conser
   }
 });
 
-test('16. Copilot analyzeDevice(): real saturation findings, variable confidence from evidence, 300s MPC delay savings', async () => {
-  // Construct two scenarios with different saturation & R² evidence to prove confidence is never constant
+test('16. Copilot analyzeDevice(): K=12 CRN probability confidence, evidenceScore, 300s MPC delay savings', async () => {
+  // Construct two scenarios with different saturation & R² evidence to verify evidenceScore + K=12 CRN confidence
   simulatorService.reset({ startTime: EVENING_PEAK_START, liveControllerFactory: 'fixed-naive' });
   // Noisy/early scenario: short history, mild congestion
   simulatorService.injectChaos('JNC-BLR-001', 'totalFlowVehiclesPerMin', 1.8, 300, { approachIdx: 0 });
@@ -770,9 +770,27 @@ test('16. Copilot analyzeDevice(): real saturation findings, variable confidence
   const heavyDiag = await copilotService.analyzeDevice('JNC-BLR-001');
 
   assert.ok(heavyDiag.findings.length >= 1, 'Expected findings on saturated junction');
+  assert.ok(heavyDiag.diagnosticsTiming && typeof heavyDiag.diagnosticsTiming.totalMs === 'number');
   const heavyCtrlFinding = heavyDiag.findings.find((f) => f.runbook?.action === 'switch_controller');
   assert.ok(heavyCtrlFinding, 'Expected switch_controller finding on fixed-naive saturated junction');
-  assert.ok(heavyCtrlFinding.confidenceInputs && heavyCtrlFinding.confidenceInputs.sampleCount >= 30);
+  assert.ok(heavyCtrlFinding.evidenceInputs && heavyCtrlFinding.evidenceInputs.sampleCount >= 30);
+  assert.strictEqual(heavyCtrlFinding.rolloutsCount, 12);
+  assert.ok(
+    typeof heavyCtrlFinding.probabilityImproves === 'number' &&
+      heavyCtrlFinding.probabilityImproves >= 0 &&
+      heavyCtrlFinding.probabilityImproves <= 1
+  );
+  assert.strictEqual(
+    heavyCtrlFinding.confidence,
+    Math.round(heavyCtrlFinding.probabilityImproves * 100),
+    'Confidence must equal round(P(with-action delay < without-action delay) * 100)'
+  );
+  assert.ok(
+    heavyCtrlFinding.interval90 &&
+      typeof heavyCtrlFinding.interval90.low === 'number' &&
+      typeof heavyCtrlFinding.interval90.high === 'number' &&
+      heavyCtrlFinding.interval90.low <= heavyCtrlFinding.interval90.high
+  );
   assert.ok(
     heavyCtrlFinding.predictedEffect && heavyCtrlFinding.predictedEffect.delayDeltaVehSec < 0,
     `Expected 300s MPC rollout to project negative delay delta (reduction), got ${heavyCtrlFinding.predictedEffect?.delayDeltaVehSec}`
@@ -782,9 +800,9 @@ test('16. Copilot analyzeDevice(): real saturation findings, variable confidence
   const mildCtrlFinding = mildDiag.findings.find((f) => f.runbook?.action === 'switch_controller');
   if (mildCtrlFinding) {
     assert.notStrictEqual(
-      mildCtrlFinding.confidence,
-      heavyCtrlFinding.confidence,
-      `Confidence must vary with evidence/R² instead of returning constant (${mildCtrlFinding.confidence})`
+      mildCtrlFinding.evidenceScore,
+      heavyCtrlFinding.evidenceScore,
+      `evidenceScore must vary with sampleCount/R² (${mildCtrlFinding.evidenceScore})`
     );
   }
 });

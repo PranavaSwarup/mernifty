@@ -2,11 +2,12 @@ import express from 'express';
 import mongoose from 'mongoose';
 import { OperatorAction } from '../models/OperatorAction.js';
 import { simulatorService } from '../services/simulatorService.js';
+import { publicReadOrAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // List operator actions with predicted vs realised 300s outcomes
-router.get('/', async (req, res) => {
+router.get('/', publicReadOrAuth, async (req, res) => {
   try {
     const { junctionId, status } = req.query;
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));

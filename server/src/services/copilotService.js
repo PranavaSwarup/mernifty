@@ -6,6 +6,7 @@ import { OperatorAction } from '../models/OperatorAction.js';
 import { simulatorService } from './simulatorService.js';
 import { socketService } from './socketService.js';
 import { haversineKm, ROAD_TORTUOSITY_FACTOR } from '../sim/network.js';
+import { createRng, deriveSeed } from '../sim/rng.js';
 import { loadStudyPolicy, recommendControllerForRegime } from '../sim/studyPolicy.js';
 
 const BTP_TOW_DEPOTS = [
@@ -159,18 +160,38 @@ function computeJunctionFlowRatioY(world, jIdx, jSnap) {
   return Number(clamp(sumY, 0, 2.0).toFixed(3));
 }
 
-/**
- * Run paired 300-second counterfactual rollouts on cloned TrafficWorld instances:
- *  - `worldWithout`: continues untouched physics from current live state
- *  - `worldWith`: applies `applyActionFn` and runs identical horizon under Common Random Numbers
- */
-export function rolloutPredictedEffect(liveWorld, deviceId, applyActionFn, horizonSec = 300) {
+const EVIDENCE_FORMULA =
+  'clamp(round(28 + 22*min(1, sampleCount/30) + 20*r2 + 18*min(1, excessRatio) + 16*directEventStrength), 40, 99)';
+
+function percentileSorted(sorted, q) {
+  if (!sorted || sorted.length === 0) return 0;
+  if (sorted.length === 1) return sorted[0];
+  const pos = clamp(q, 0, 1) * (sorted.length - 1);
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  if (lo === hi) return sorted[lo];
+  const frac = pos - lo;
+  return sorted[lo] * (1 - frac) + sorted[hi] * frac;
+}
+
+function yieldEventLoop() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function runSinglePairedRollout(liveWorld, deviceId, applyActionFn, horizonSec, rolloutSeedSalt = null) {
   const startSnap = liveWorld.snapshot(deviceId);
-  const startNet = liveWorld.snapshot();
   if (!startSnap) return null;
 
   const worldWithout = liveWorld.clone();
   const worldWith = liveWorld.clone();
+
+  if (rolloutSeedSalt !== null) {
+    for (let f = 0; f < worldWithout.totalApproaches; f++) {
+      const fSeed = deriveSeed(liveWorld.seed, `${rolloutSeedSalt}:${f}`);
+      worldWithout.approachRngs[f] = createRng(fSeed);
+      worldWith.approachRngs[f] = createRng(fSeed);
+    }
+  }
 
   applyActionFn(worldWith);
 
@@ -197,7 +218,6 @@ export function rolloutPredictedEffect(liveWorld, deviceId, applyActionFn, horiz
       ? Number((((withoutFutureDelay - withFutureDelay) / withoutFutureDelay) * 100).toFixed(1))
       : 0;
 
-  // Compare emergency corridor transit time or signal wait if relevant emergencies exist
   let emergencyTimeDeltaSec = null;
   const activePairs = [];
   for (const emWith of worldWith.emergencies) {
@@ -239,20 +259,105 @@ export function rolloutPredictedEffect(liveWorld, deviceId, applyActionFn, horiz
   };
 }
 
+/**
+ * Run paired 300-second counterfactual rollout on cloned TrafficWorld instances.
+ */
+export function rolloutPredictedEffect(liveWorld, deviceId, applyActionFn, horizonSec = 300) {
+  return runSinglePairedRollout(liveWorld, deviceId, applyActionFn, horizonSec, null);
+}
+
+/**
+ * Run K=12 independent future-arrival CRN 300s rollouts in non-blocking setImmediate chunks.
+ * Confidence is P(with-action delay < without-action delay) across the K rollouts,
+ * accompanied by mean delay delta and 90% [p5, p95] empirical interval.
+ */
+export async function rolloutMonteCarloEffect(
+  liveWorld,
+  deviceId,
+  applyActionFn,
+  { horizonSec = 300, rolloutsK = 12, chunkSize = 2 } = {}
+) {
+  const t0 = performance.now();
+  const samples = [];
+
+  for (let k = 0; k < rolloutsK; k++) {
+    const salt = `mc:${liveWorld.elapsedSec}:${deviceId}:k${k}`;
+    const sample = runSinglePairedRollout(liveWorld, deviceId, applyActionFn, horizonSec, salt);
+    if (!sample) return null;
+    samples.push(sample);
+
+    if ((k + 1) % chunkSize === 0 && k + 1 < rolloutsK) {
+      await yieldEventLoop();
+    }
+  }
+
+  const elapsedMs = Number((performance.now() - t0).toFixed(2));
+  const deltas = samples.map((s) => s.delayDeltaVehSec);
+  const sorted = [...deltas].sort((a, b) => a - b);
+  const improvedCount = deltas.filter((d) => d < -1e-6).length;
+  const probabilityImproves = Number((improvedCount / rolloutsK).toFixed(4));
+  const confidencePct = Math.round(probabilityImproves * 100);
+
+  const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+  const meanDeltaVehSec = Number(mean(deltas).toFixed(2));
+  const p5DeltaVehSec = Number(percentileSorted(sorted, 0.05).toFixed(2));
+  const p95DeltaVehSec = Number(percentileSorted(sorted, 0.95).toFixed(2));
+
+  const emSamples = samples.map((s) => s.emergencyTimeDeltaSec).filter((v) => v !== null);
+  const ref = samples[0];
+
+  return {
+    horizonSec,
+    rolloutsK,
+    withoutController: ref.withoutController,
+    withController: ref.withController,
+    probabilityImproves,
+    confidencePct,
+    improvedRollouts: improvedCount,
+    meanDeltaVehSec,
+    interval90: {
+      low: p5DeltaVehSec,
+      high: p95DeltaVehSec,
+    },
+    p5DeltaVehSec,
+    p95DeltaVehSec,
+    rolloutDurationMs: elapsedMs,
+    offHotPathChunked: true,
+    delayDeltaVehSec: meanDeltaVehSec,
+    queueDeltaVeh: Number(mean(samples.map((s) => s.queueDeltaVeh)).toFixed(2)),
+    maxQueueDeltaM: Number(mean(samples.map((s) => s.maxQueueDeltaM)).toFixed(2)),
+    baselineFutureDelayDeltaVehSec: Number(
+      mean(samples.map((s) => s.baselineFutureDelayDeltaVehSec)).toFixed(2)
+    ),
+    projectedFutureDelayDeltaVehSec: Number(
+      mean(samples.map((s) => s.projectedFutureDelayDeltaVehSec)).toFixed(2)
+    ),
+    futureDelayReductionPct: Number(
+      mean(samples.map((s) => s.futureDelayReductionPct)).toFixed(1)
+    ),
+    avgDelayPerVehDeltaSec: Number(mean(samples.map((s) => s.avgDelayPerVehDeltaSec)).toFixed(2)),
+    speedDeltaKmph: Number(mean(samples.map((s) => s.speedDeltaKmph)).toFixed(2)),
+    networkDelayDeltaVehSec: Number(mean(samples.map((s) => s.networkDelayDeltaVehSec)).toFixed(2)),
+    emergencyTimeDeltaSec:
+      emSamples.length > 0 ? Number(mean(emSamples).toFixed(2)) : null,
+  };
+}
+
 class CopilotService {
   normalizeAction(action) {
     return ACTION_ALIASES[action] || null;
   }
 
-  _buildFindingConfidence({ sampleCount = 0, r2 = 0, excessRatio = 0, directEventStrength = 0 }) {
+  computeEvidenceScore({ sampleCount = 0, r2 = 0, excessRatio = 0, directEventStrength = 0 }) {
     const sampleTerm = 22 * Math.min(1, sampleCount / 30);
     const fitTerm = 20 * clamp(r2, 0, 1);
     const magnitudeTerm = 18 * Math.min(1, Math.max(0, excessRatio));
     const eventTerm = 16 * Math.min(1, Math.max(0, directEventStrength));
     const raw = 28 + sampleTerm + fitTerm + magnitudeTerm + eventTerm;
     return {
-      confidence: Math.round(clamp(raw, 40, 99)),
-      confidenceInputs: {
+      evidenceScore: Math.round(clamp(raw, 40, 99)),
+      evidenceInputs: {
+        formula: EVIDENCE_FORMULA,
         sampleCount,
         r2: Number(clamp(r2, 0, 1).toFixed(3)),
         excessRatio: Number(clamp(excessRatio, 0, 2).toFixed(3)),
@@ -345,7 +450,7 @@ class CopilotService {
     };
   }
 
-  _pickBestControllerCandidate(state) {
+  async _pickBestControllerCandidate(state) {
     const { liveWorld, ctrl, activeControllerName, policyRec, junc } = state;
     const primary = policyRec.recommendedController;
     const candidates = [primary];
@@ -360,42 +465,40 @@ class CopilotService {
       }
     }
 
-    let bestCandidate = null;
-    let bestRollout = null;
-
-    for (const candidate of candidates) {
-      if (candidate === activeControllerName || candidate === ctrl.name) continue;
-      const rollout = rolloutPredictedEffect(
-        liveWorld,
-        junc.junctionId,
-        (w) => w.setController(junc.junctionId, candidate),
-        300
-      );
-      if (!rollout) continue;
-      if (!bestRollout || rollout.delayDeltaVehSec < bestRollout.delayDeltaVehSec) {
-        bestRollout = rollout;
-        bestCandidate = candidate;
-      }
-      // Accept study recommendation immediately when 300s rollout confirms measurable improvement
-      if (candidate === primary && rollout.delayDeltaVehSec <= -5) {
-        break;
+    // Screen only when primary matches current controller; otherwise go directly to K=12 Monte Carlo
+    let chosen = candidates.find((c) => c !== activeControllerName && c !== ctrl.name) || primary;
+    if (chosen !== primary) {
+      let bestScreen = null;
+      for (const candidate of candidates) {
+        if (candidate === activeControllerName || candidate === ctrl.name) continue;
+        const quick = rolloutPredictedEffect(
+          liveWorld,
+          junc.junctionId,
+          (w) => w.setController(junc.junctionId, candidate),
+          300
+        );
+        if (quick && (!bestScreen || quick.delayDeltaVehSec < bestScreen.delayDeltaVehSec)) {
+          bestScreen = quick;
+          chosen = candidate;
+        }
       }
     }
 
+    const rollout = await rolloutMonteCarloEffect(
+      liveWorld,
+      junc.junctionId,
+      (w) => w.setController(junc.junctionId, chosen),
+      { horizonSec: 300, rolloutsK: 12, chunkSize: 2 }
+    );
+
     return {
-      targetController: bestCandidate || primary,
-      rollout:
-        bestRollout ||
-        rolloutPredictedEffect(
-          liveWorld,
-          junc.junctionId,
-          (w) => w.setController(junc.junctionId, bestCandidate || primary),
-          300
-        ),
+      targetController: chosen,
+      rollout,
     };
   }
 
   async analyzeDevice(deviceId) {
+    const diagnoseStartMs = performance.now();
     const state = this._collectJunctionState(deviceId);
     if (!state) return null;
 
@@ -427,17 +530,17 @@ class CopilotService {
     const currentTotalQueueVeh = Number(
       jSnap.approaches.reduce((s, a) => s + a.queueVeh, 0).toFixed(1)
     );
+    let totalRolloutDurationMs = 0;
 
     // 1. Stalled vehicle / lane blockage -> distance-based BTP tow dispatch
     if (activeIncidents.length > 0) {
       const inc = activeIncidents[0];
       const appCfg = junc.approaches[inc.approachIdx];
       const towMeta = computeTowDispatchEta(junc, jSnap.avgSpeedKmph);
-      const rollout = rolloutPredictedEffect(
+      const rollout = await rolloutMonteCarloEffect(
         liveWorld,
         deviceId,
         (w) => {
-          // Wait towEtaSec in the counterfactual rollout before clearing the stalled lane
           const origStep = w.step.bind(w);
           const clearAt = w.elapsedSec + towMeta.towEtaSec;
           w.step = () => {
@@ -447,10 +550,11 @@ class CopilotService {
             origStep();
           };
         },
-        300
+        { horizonSec: 300, rolloutsK: 12, chunkSize: 2 }
       );
+      totalRolloutDurationMs += rollout.rolloutDurationMs;
 
-      const { confidence, confidenceInputs } = this._buildFindingConfidence({
+      const { evidenceScore, evidenceInputs } = this.computeEvidenceScore({
         sampleCount: trend.sampleCount,
         r2: trend.r2,
         excessRatio: 1 - inc.capacityFactor,
@@ -461,20 +565,25 @@ class CopilotService {
         id: `finding-incident-${deviceId}`,
         rule: 'Lane Capacity Loss: Active Stalled Vehicle Incident',
         severity: 'critical',
-        confidence,
-        confidenceInputs,
+        confidence: rollout.confidencePct,
+        probabilityImproves: rollout.probabilityImproves,
+        rolloutsCount: rollout.rolloutsK,
+        interval90: rollout.interval90,
+        evidenceScore,
+        evidenceInputs,
+        rolloutDurationMs: rollout.rolloutDurationMs,
         rootCause: `${appCfg.road} (${appCfg.dir}) discharge capacity degraded to ${Math.round(
           inc.capacityFactor * 100
         )}% due to active incident; queue growing at ${trend.slopeVehPerMin >= 0 ? '+' : ''}${
           trend.slopeVehPerMin
         } veh/min (R²=${trend.r2}, n=${trend.sampleCount}).`,
-        impact: `300s MPC rollout (${towMeta.nearestDepot}, ${towMeta.distanceKm} km, ETA ${
+        impact: `K=12 CRN 300s rollouts (${towMeta.nearestDepot}, ${towMeta.distanceKm} km, ETA ${
           towMeta.towEtaSec
-        }s): ${rollout.delayDeltaVehSec.toFixed(0)} veh-s delay delta (${
-          rollout.futureDelayReductionPct
-        }% future delay reduction), max queue ${rollout.maxQueueDeltaM >= 0 ? '+' : ''}${
-          rollout.maxQueueDeltaM
-        } m.`,
+        }s): P(improves)=${(rollout.probabilityImproves * 100).toFixed(0)}%, mean ${
+          rollout.meanDeltaVehSec
+        } veh-s (90% [${rollout.interval90.low}, ${rollout.interval90.high}] veh-s), max queue ${
+          rollout.maxQueueDeltaM >= 0 ? '+' : ''
+        }${rollout.maxQueueDeltaM} m.`,
         evidence: {
           approach: `${appCfg.road} (${appCfg.dir})`,
           capacityFactor: inc.capacityFactor,
@@ -497,7 +606,7 @@ class CopilotService {
     if (activeEmergencies.length > 0) {
       const em = activeEmergencies[0];
       const path = em.path;
-      const rollout = rolloutPredictedEffect(
+      const rollout = await rolloutMonteCarloEffect(
         liveWorld,
         deviceId,
         (w) => {
@@ -507,10 +616,11 @@ class CopilotService {
             }
           }
         },
-        300
+        { horizonSec: 300, rolloutsK: 12, chunkSize: 2 }
       );
+      totalRolloutDurationMs += rollout.rolloutDurationMs;
 
-      const { confidence, confidenceInputs } = this._buildFindingConfidence({
+      const { evidenceScore, evidenceInputs } = this.computeEvidenceScore({
         sampleCount: trend.sampleCount,
         r2: Math.max(trend.r2, 0.4),
         excessRatio: Math.min(1.2, em.remainingDistM / 500),
@@ -528,14 +638,21 @@ class CopilotService {
         id: `finding-emergency-${deviceId}`,
         rule: `Emergency Vehicle En-Route (${em.id})`,
         severity: 'critical',
-        confidence,
-        confidenceInputs,
+        confidence: rollout.confidencePct,
+        probabilityImproves: rollout.probabilityImproves,
+        rolloutsCount: rollout.rolloutsK,
+        interval90: rollout.interval90,
+        evidenceScore,
+        evidenceInputs,
+        rolloutDurationMs: rollout.rolloutDurationMs,
         rootCause: `Ambulance ${em.id} traversing ${path.join(' -> ')} (${Math.round(
           em.remainingDistM
         )}m remaining on current leg, preempt=${em.preempt}).`,
-        impact: `300s MPC rollout along connected path: ${emDeltaText}, junction delay ${rollout.delayDeltaVehSec.toFixed(
-          0
-        )} veh-s.`,
+        impact: `K=12 CRN 300s rollouts along path: ${emDeltaText}, P(delay improves)=${(
+          rollout.probabilityImproves * 100
+        ).toFixed(0)}%, mean ${rollout.meanDeltaVehSec} veh-s (90% [${rollout.interval90.low}, ${
+          rollout.interval90.high
+        }]).`,
         evidence: {
           emergencyId: em.id,
           corridorPath: path,
@@ -561,7 +678,7 @@ class CopilotService {
       (maxVOverC > 1.1 && trend.slopeVehPerMin > 1.0 && currentTotalQueueVeh > 25)
     ) {
       const targetAppIdx = worstApproach?.index ?? 0;
-      const rollout = rolloutPredictedEffect(
+      const rollout = await rolloutMonteCarloEffect(
         liveWorld,
         deviceId,
         (w) => {
@@ -572,15 +689,16 @@ class CopilotService {
             until: w.elapsedSec + 600,
           });
         },
-        300
+        { horizonSec: 300, rolloutsK: 12, chunkSize: 2 }
       );
+      totalRolloutDurationMs += rollout.rolloutDurationMs;
 
       const peakOcc =
         downstreamCongestedLinks.length > 0
           ? Math.max(...downstreamCongestedLinks.map((d) => d.occupancyRatio))
           : worstApproach?.storageRatio ?? 0.5;
 
-      const { confidence, confidenceInputs } = this._buildFindingConfidence({
+      const { evidenceScore, evidenceInputs } = this.computeEvidenceScore({
         sampleCount: trend.sampleCount,
         r2: trend.r2,
         excessRatio: Math.max(peakOcc - 0.65, maxVOverC - 0.9),
@@ -600,16 +718,23 @@ class CopilotService {
           ? 'Downstream Storage Spillback Risk'
           : 'Approach Demand Exceeding Signal Capacity',
         severity: maxVOverC > 1.2 || peakOcc >= 0.85 ? 'critical' : 'warning',
-        confidence,
-        confidenceInputs,
+        confidence: rollout.confidencePct,
+        probabilityImproves: rollout.probabilityImproves,
+        rolloutsCount: rollout.rolloutsK,
+        interval90: rollout.interval90,
+        evidenceScore,
+        evidenceInputs,
+        rolloutDurationMs: rollout.rolloutDurationMs,
         rootCause: `${spillDetail}; trailing 120s queue slope ${
           trend.slopeVehPerMin >= 0 ? '+' : ''
         }${trend.slopeVehPerMin} veh/min (R²=${trend.r2}, n=${trend.sampleCount}).`,
-        impact: `300s conservation-honest 20% diversion rollout (demand shifted to alternate corridor entry): ${rollout.delayDeltaVehSec.toFixed(
-          0
-        )} veh-s junction delay delta, max queue ${
-          rollout.maxQueueDeltaM >= 0 ? '+' : ''
-        }${rollout.maxQueueDeltaM} m, network delay ${rollout.networkDelayDeltaVehSec.toFixed(0)} veh-s.`,
+        impact: `K=12 CRN 300s diversion rollouts: P(improves)=${(
+          rollout.probabilityImproves * 100
+        ).toFixed(0)}%, mean ${rollout.meanDeltaVehSec} veh-s (90% [${rollout.interval90.low}, ${
+          rollout.interval90.high
+        }] veh-s), max queue ${rollout.maxQueueDeltaM >= 0 ? '+' : ''}${
+          rollout.maxQueueDeltaM
+        } m.`,
         evidence: {
           flowRatioY,
           maxVOverC,
@@ -630,7 +755,7 @@ class CopilotService {
       });
     }
 
-    // 4. Signal timing / regime mismatch -> study-backed controller switch with 300s MPC rollout
+    // 4. Signal timing / regime mismatch -> study-backed controller switch with K=12 CRN 300s rollouts
     const isCongestedOrGrowing =
       maxVOverC > 0.85 ||
       trend.slopeVehPerMin > 1.5 ||
@@ -639,14 +764,16 @@ class CopilotService {
       activeControllerName !== policyRec.recommendedController;
 
     if (isCongestedOrGrowing) {
-      const { targetController, rollout } = this._pickBestControllerCandidate(state);
+      const { targetController, rollout } = await this._pickBestControllerCandidate(state);
+      if (rollout) totalRolloutDurationMs += rollout.rolloutDurationMs;
+
       const shouldEmit =
         targetController !== activeControllerName &&
         rollout &&
-        rollout.delayDeltaVehSec < -1;
+        (rollout.delayDeltaVehSec < -1 || rollout.probabilityImproves > 0.5);
 
       if (shouldEmit) {
-        const { confidence, confidenceInputs } = this._buildFindingConfidence({
+        const { evidenceScore, evidenceInputs } = this.computeEvidenceScore({
           sampleCount: trend.sampleCount,
           r2: trend.r2,
           excessRatio: Math.max(maxVOverC - 0.75, flowRatioY - 0.55),
@@ -665,8 +792,13 @@ class CopilotService {
             2
           )}, Y=${flowRatioY.toFixed(2)}`,
           severity: maxVOverC > 1.1 || jSnap.congestionScore > 75 ? 'critical' : 'warning',
-          confidence,
-          confidenceInputs,
+          confidence: rollout.confidencePct,
+          probabilityImproves: rollout.probabilityImproves,
+          rolloutsCount: rollout.rolloutsK,
+          interval90: rollout.interval90,
+          evidenceScore,
+          evidenceInputs,
+          rolloutDurationMs: rollout.rolloutDurationMs,
           rootCause: `Active controller '${activeControllerName}' under v/c=${maxVOverC.toFixed(
             2
           )} (${worstApproach?.road || 'junction'} ${worstApproach?.dir || ''}) and Y=${flowRatioY.toFixed(
@@ -674,13 +806,13 @@ class CopilotService {
           )}; queue slope ${trend.slopeVehPerMin >= 0 ? '+' : ''}${
             trend.slopeVehPerMin
           } veh/min (R²=${trend.r2}). Study evidence (${studyCellLabel}): ${policyRec.reason}.`,
-          impact: `300s counterfactual MPC rollout ('${activeControllerName}' -> '${targetController}'): ${rollout.delayDeltaVehSec.toFixed(
-            0
-          )} veh-s delay delta (${rollout.futureDelayReductionPct}% future delay reduction), avg delay ${
-            rollout.avgDelayPerVehDeltaSec >= 0 ? '+' : ''
-          }${rollout.avgDelayPerVehDeltaSec} s/veh, speed ${
-            rollout.speedDeltaKmph >= 0 ? '+' : ''
-          }${rollout.speedDeltaKmph} km/h.`,
+          impact: `K=12 CRN 300s rollouts ('${activeControllerName}' -> '${targetController}'): P(improves)=${(
+            rollout.probabilityImproves * 100
+          ).toFixed(0)}%, mean ${rollout.meanDeltaVehSec} veh-s (90% [${rollout.interval90.low}, ${
+            rollout.interval90.high
+          }] veh-s), avg delay ${rollout.avgDelayPerVehDeltaSec >= 0 ? '+' : ''}${
+            rollout.avgDelayPerVehDeltaSec
+          } s/veh, speed ${rollout.speedDeltaKmph >= 0 ? '+' : ''}${rollout.speedDeltaKmph} km/h.`,
           evidence: {
             activeController: activeControllerName,
             recommendedController: targetController,
@@ -709,6 +841,7 @@ class CopilotService {
     const computedHealthScore = Math.round(
       clamp(100 - jSnap.congestionScore * 0.85 - (activeIncidents.length > 0 ? 12 : 0), 5, 100)
     );
+    const totalDiagnoseMs = Number((performance.now() - diagnoseStartMs).toFixed(2));
 
     return {
       deviceId,
@@ -726,6 +859,12 @@ class CopilotService {
         congestionScore: jSnap.congestionScore,
         queueTrend: trend,
         weatherActive: liveWorld.weather.active,
+      },
+      diagnosticsTiming: {
+        totalMs: totalDiagnoseMs,
+        rolloutDurationMs: Number(totalRolloutDurationMs.toFixed(2)),
+        offHotPathChunked: true,
+        rolloutsK: 12,
       },
       findings,
       timestamp: new Date(),

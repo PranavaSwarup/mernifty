@@ -8,6 +8,9 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'hyperpulse_super_secret_jwt_key_2026_dev',
   nodeEnv: process.env.NODE_ENV || 'development',
   simulatorEnabled: process.env.SIMULATOR_ENABLED !== 'false',
-  batchIntervalMs: parseInt(process.env.BATCH_INTERVAL_MS, 10) || 500,
-  batchSize: parseInt(process.env.BATCH_SIZE, 10) || 200,
+  batchIntervalMs: parseInt(process.env.BATCH_INTERVAL_MS, 10) || 1000,
+  batchSize: parseInt(process.env.BATCH_SIZE, 10) || 500,
+  telemetryTtlSec: parseInt(process.env.TELEMETRY_TTL_SEC, 10) || 7200,
+  publicReadonly: process.env.PUBLIC_READONLY !== 'false',
+  demoPersonas: process.env.DEMO_PERSONAS === 'true',
 };

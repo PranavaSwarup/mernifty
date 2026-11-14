@@ -1,34 +1,57 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
 import { User } from '../models/User.js';
 import { config } from '../config/config.js';
+import { publicReadOrAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// 1. Register new user
+const DEMO_PERSONA_EMAILS = {
+  admin: 'admin@hyperpulse.io',
+  'south-operator': 'south.operator@hyperpulse.io',
+  south: 'south.operator@hyperpulse.io',
+  'east-operator': 'east.operator@hyperpulse.io',
+  east: 'east.operator@hyperpulse.io',
+  viewer: 'viewer@hyperpulse.io',
+};
+
+function signUserToken(user, extra = {}) {
+  return jwt.sign(
+    {
+      id: user._id,
+      role: user.role,
+      zones: user.zones || [],
+      name: user.name,
+      email: user.email,
+      ...extra,
+    },
+    config.jwtSecret,
+    { expiresIn: extra.demo ? '24h' : '7d' }
+  );
+}
+
+// 1. Register new user (public self-registration creates viewer only; admins promote roles)
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, error: 'Name, email, and password are required' });
     }
 
-    const existing = await User.findOne({ email });
+    const existing = await User.findOne({ email: String(email).toLowerCase() });
     if (existing) {
       return res.status(400).json({ success: false, error: 'Email already registered' });
     }
 
-    const apiKey = `hp_key_${crypto.randomBytes(16).toString('hex')}`;
     const user = await User.create({
       name,
       email,
       password,
-      role: role || 'operator',
-      apiKey,
+      role: 'viewer',
+      zones: [],
     });
 
-    const token = jwt.sign({ id: user._id, role: user.role }, config.jwtSecret, { expiresIn: '7d' });
+    const token = signUserToken(user);
 
     res.status(201).json({
       success: true,
@@ -38,7 +61,7 @@ router.post('/register', async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        apiKey: user.apiKey,
+        zones: user.zones,
       },
     });
   } catch (err) {
@@ -54,7 +77,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: String(email).toLowerCase() });
     if (!user) {
       return res.status(401).json({ success: false, error: 'Invalid email or password' });
     }
@@ -64,7 +87,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Invalid email or password' });
     }
 
-    const token = jwt.sign({ id: user._id, role: user.role }, config.jwtSecret, { expiresIn: '7d' });
+    const token = signUserToken(user);
 
     res.json({
       success: true,
@@ -74,7 +97,7 @@ router.post('/login', async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        apiKey: user.apiKey,
+        zones: user.zones || [],
       },
     });
   } catch (err) {
@@ -82,33 +105,61 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// 3. Current User Session Check
-router.get('/me', async (req, res) => {
+// 3. Demo persona login (enabled strictly when DEMO_PERSONAS=true)
+router.post('/demo-login', async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
-      const decoded = jwt.verify(token, config.jwtSecret);
-      const user = await User.findById(decoded.id).select('-password');
-      if (user) {
-        return res.json({ success: true, user });
-      }
+    if (process.env.DEMO_PERSONAS !== 'true') {
+      return res.status(403).json({
+        success: false,
+        error: 'Demo persona switching is disabled (set DEMO_PERSONAS=true to enable)',
+      });
     }
 
-    // Default guest session
+    const { persona } = req.body || {};
+    const email = DEMO_PERSONA_EMAILS[persona];
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: `Unknown demo persona '${persona}'. Available: ${Object.keys(DEMO_PERSONA_EMAILS).join(', ')}`,
+      });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: `Demo user '${email}' is not seeded yet`,
+      });
+    }
+
+    const token = signUserToken(user, { demo: true });
+
     res.json({
       success: true,
+      demo: true,
+      persona,
+      notice: 'DEMO PERSONA JWT: issued for hackathon demo convenience only',
+      token,
       user: {
-        id: 'guest-operator-01',
-        name: 'Guest Mission Operator',
-        email: 'operator@hyperpulse.io',
-        role: 'operator',
-        apiKey: 'hp_key_demo_public_operator',
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        zones: user.zones || [],
+        demo: true,
       },
     });
   } catch (err) {
-    res.status(401).json({ success: false, error: 'Session expired' });
+    res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// 4. Current session check (explicit anonymous viewer when PUBLIC_READONLY=true; no silent operator escalation)
+router.get('/me', publicReadOrAuth, (req, res) => {
+  res.json({
+    success: true,
+    user: req.user,
+  });
 });
 
 export default router;

@@ -1,41 +1,42 @@
 import mongoose from 'mongoose';
+import { config } from '../config/config.js';
 
 const telemetrySchema = new mongoose.Schema(
   {
     eventId: {
       type: String,
       required: true,
-      index: true,
     },
     junctionId: {
       type: String,
-      index: true,
+      required: true,
     },
     deviceId: {
       type: String,
       required: true,
-      index: true,
     },
     junctionName: {
       type: String,
     },
     zoneId: {
       type: String,
-      index: true,
+      required: true,
     },
     category: {
       type: String,
       required: true,
-      index: true,
     },
     timestamp: {
       type: Date,
       required: true,
-      index: true,
     },
     sequence: {
       type: Number,
       default: 0,
+    },
+    late: {
+      type: Boolean,
+      default: false,
     },
     source: {
       type: String,
@@ -63,19 +64,16 @@ const telemetrySchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    timeseries: {
-      timeField: 'timestamp',
-      metaField: 'junctionId',
-      granularity: 'seconds',
-    },
   }
 );
 
-// Compound indexes for high-speed time-range queries
+// Integrity, ordering, query, and TTL indexes on regular collection (no timeseries)
+telemetrySchema.index({ eventId: 1 }, { unique: true });
+telemetrySchema.index({ junctionId: 1, sequence: -1 });
 telemetrySchema.index({ junctionId: 1, timestamp: -1 });
-telemetrySchema.index({ deviceId: 1, timestamp: -1 });
 telemetrySchema.index({ zoneId: 1, timestamp: -1 });
+telemetrySchema.index({ deviceId: 1, timestamp: -1 });
 telemetrySchema.index({ category: 1, timestamp: -1 });
-telemetrySchema.index({ timestamp: -1 });
+telemetrySchema.index({ timestamp: 1 }, { expireAfterSeconds: config.telemetryTtlSec });
 
 export const Telemetry = mongoose.models.Telemetry || mongoose.model('Telemetry', telemetrySchema);

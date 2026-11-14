@@ -29,8 +29,8 @@ const server = http.createServer(app);
 // Middleware
 app.use(cors({ origin: '*' }));
 app.use(compression());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 if (config.nodeEnv !== 'test') {
   app.use(morgan('short'));
@@ -74,10 +74,13 @@ app.get('*', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('[ServerError]', err.stack || err.message);
-  res.status(500).json({
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) {
+    console.error('[ServerError]', err.stack || err.message);
+  }
+  res.status(status).json({
     success: false,
-    error: 'Internal server error',
+    error: status === 413 ? 'Payload too large (max 1mb)' : err.message || 'Internal server error',
     message: err.message,
   });
 });
@@ -123,4 +126,9 @@ process.on('SIGINT', async () => {
   });
 });
 
-startServer();
+const isMain = Boolean(process.argv[1] && path.resolve(process.argv[1]) === __filename);
+if (isMain) {
+  startServer();
+}
+
+export { app, server, startServer };

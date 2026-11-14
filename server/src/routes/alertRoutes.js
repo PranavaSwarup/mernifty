@@ -1,11 +1,17 @@
 import express from 'express';
 import { Alert } from '../models/Alert.js';
 import { Device } from '../models/Device.js';
+import {
+  authenticate,
+  publicReadOrAuth,
+  requireRole,
+  resolveJunctionZone,
+} from '../middleware/auth.js';
 
 const router = express.Router();
 
-// 1. Get recent alerts with optional filters
-router.get('/', async (req, res) => {
+// 1. Get recent alerts (public read-only when PUBLIC_READONLY=true)
+router.get('/', publicReadOrAuth, async (req, res) => {
   try {
     const { severity, resolved, deviceId, limit = 50 } = req.query;
     const filter = {};
@@ -32,45 +38,51 @@ router.get('/', async (req, res) => {
   }
 });
 
-// 2. Resolve an alert
-router.patch('/:alertId/resolve', async (req, res) => {
+// 2. Resolve an alert (requires operator+ role & junction zone scope)
+router.patch('/:alertId/resolve', authenticate, requireRole(['admin', 'operator']), async (req, res) => {
   try {
     const { alertId } = req.params;
-    const { resolvedBy } = req.body;
+    const existingAlert = await Alert.findOne({ alertId });
 
-    const alert = await Alert.findOneAndUpdate(
-      { alertId },
-      {
-        $set: {
-          resolved: true,
-          resolvedAt: new Date(),
-          resolvedBy: resolvedBy || 'operator',
-        },
-      },
-      { new: true }
-    );
-
-    if (!alert) {
+    if (!existingAlert) {
       return res.status(404).json({ success: false, error: 'Alert not found' });
     }
 
-    // Restore device health score partially upon resolution
+    if (req.user.role === 'operator') {
+      const alertZone =
+        existingAlert.zoneId ||
+        existingAlert.category ||
+        (await resolveJunctionZone(existingAlert.junctionId || existingAlert.deviceId));
+      const userZones = Array.isArray(req.user.zones) ? req.user.zones : [];
+      if (!alertZone || !userZones.includes(alertZone)) {
+        return res.status(403).json({
+          success: false,
+          error: `Forbidden: alert junction belongs to zone '${alertZone}', outside operator zones [${userZones.join(', ')}]`,
+        });
+      }
+    }
+
+    existingAlert.resolved = true;
+    existingAlert.resolvedAt = new Date();
+    existingAlert.resolvedBy = req.user.name || req.user.email || 'Operator';
+    await existingAlert.save();
+
     await Device.updateOne(
-      { deviceId: alert.deviceId },
+      { deviceId: existingAlert.deviceId },
       {
         $inc: { healthScore: 15 },
         $set: { status: 'online' },
       }
     );
 
-    res.json({ success: true, alert });
+    res.json({ success: true, alert: existingAlert });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 3. Clear resolved alerts
-router.delete('/clear', async (req, res) => {
+// 3. Clear resolved alerts across all zones (admin only)
+router.delete('/clear', authenticate, requireRole(['admin']), async (req, res) => {
   try {
     const result = await Alert.deleteMany({ resolved: true });
     res.json({ success: true, deletedCount: result.deletedCount });

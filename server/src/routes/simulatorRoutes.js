@@ -1,19 +1,25 @@
 import express from 'express';
 import { simulatorService } from '../services/simulatorService.js';
+import {
+  authenticate,
+  publicReadOrAuth,
+  requireRole,
+  requireJunctionZoneAccess,
+} from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Get status
-router.get('/status', (req, res) => {
+// Get simulator status (public read-only when PUBLIC_READONLY=true)
+router.get('/status', publicReadOrAuth, (req, res) => {
   res.json({
     success: true,
     status: simulatorService.getStatus(),
   });
 });
 
-// Start simulator (`rate` is total telemetry events/sec across all 12 BLR junctions = emitHz * 12)
-router.post('/start', (req, res) => {
-  const { rate = 24 } = req.body;
+// Start simulator (requires operator+ role)
+router.post('/start', authenticate, requireRole(['admin', 'operator']), (req, res) => {
+  const { rate = 24 } = req.body || {};
   simulatorService.start(parseInt(rate, 10));
   res.json({
     success: true,
@@ -22,8 +28,8 @@ router.post('/start', (req, res) => {
   });
 });
 
-// Stop simulator
-router.post('/stop', (req, res) => {
+// Stop simulator (requires operator+ role)
+router.post('/stop', authenticate, requireRole(['admin', 'operator']), (req, res) => {
   simulatorService.stop();
   res.json({
     success: true,
@@ -32,9 +38,9 @@ router.post('/stop', (req, res) => {
   });
 });
 
-// Adjust emission rate (`rate` = events/sec across 12 junctions = emitHz * 12)
-router.post('/rate', (req, res) => {
-  const { rate } = req.body;
+// Adjust emission rate (requires operator+ role)
+router.post('/rate', authenticate, requireRole(['admin', 'operator']), (req, res) => {
+  const { rate } = req.body || {};
   if (!rate || isNaN(rate)) {
     return res.status(400).json({ success: false, error: 'Valid numeric rate is required' });
   }
@@ -46,16 +52,31 @@ router.post('/rate', (req, res) => {
   });
 });
 
-// Inject chaos / physical incident into live & baseline twins (CRN)
-router.post('/chaos', (req, res) => {
-  const { deviceId, junctionId, metric, multiplier = 2.5, durationSec = 20, flags = {} } = req.body;
-  const isMonsoon = metric === 'monsoon' || Boolean(flags.monsoon);
-  const targetId = junctionId || deviceId || (isMonsoon ? 'JNC-BLR-001' : null);
-  if (!targetId || !metric) {
-    return res.status(400).json({ success: false, error: 'junctionId/deviceId and metric are required for chaos injection' });
+// Inject chaos / physical incident (requires operator+ & junction zone scope; city-wide monsoon requires admin)
+router.post(
+  '/chaos',
+  authenticate,
+  requireRole(['admin', 'operator']),
+  requireJunctionZoneAccess,
+  (req, res) => {
+    const { deviceId, junctionId, metric, multiplier = 2.5, durationSec = 20, flags = {} } = req.body || {};
+    const isMonsoon = metric === 'monsoon' || Boolean(flags.monsoon);
+    const targetId = junctionId || deviceId || (isMonsoon ? 'JNC-BLR-001' : null);
+    if (!targetId || !metric) {
+      return res.status(400).json({
+        success: false,
+        error: 'junctionId/deviceId and metric are required for chaos injection',
+      });
+    }
+    const result = simulatorService.injectChaos(
+      targetId,
+      metric,
+      parseFloat(multiplier),
+      parseInt(durationSec, 10),
+      flags
+    );
+    res.json(result);
   }
-  const result = simulatorService.injectChaos(targetId, metric, parseFloat(multiplier), parseInt(durationSec, 10), flags);
-  res.json(result);
-});
+);
 
 export default router;
