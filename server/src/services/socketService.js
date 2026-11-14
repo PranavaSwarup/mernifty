@@ -1,4 +1,6 @@
 import { Server } from 'socket.io';
+import jwt from 'jsonwebtoken';
+import { config } from '../config/config.js';
 import { metricsService } from './metricsService.js';
 import { anomalyEngine } from './anomalyEngine.js';
 import { INITIAL_DEVICES } from '../data/junctionDevices.js';
@@ -62,14 +64,34 @@ class SocketService {
       pingTimeout: 5000,
     });
 
+    this.io.use((socket, next) => {
+      const auth = socket.handshake.auth || {};
+      const token = auth.token || socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '');
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, config.jwtSecret);
+          socket.user = decoded;
+          socket.isAuthenticated = true;
+        } catch (err) {
+          socket.user = null;
+          socket.isAuthenticated = false;
+        }
+      } else {
+        socket.user = null;
+        socket.isAuthenticated = false;
+      }
+      next();
+    });
+
     this.io.on('connection', (socket) => {
       // NOTE (Section 5.3): Sockets DO NOT auto-join global or all-inclusive rooms.
       // Sockets only join the specific streams they subscribe to.
       metricsService.setConnectedSockets(this.io.engine.clientsCount);
 
-      // Extract user info if authenticated token passed in handshake auth
-      const auth = socket.handshake.auth || {};
-      socket.user = auth.user || null;
+      // Join user's private notification room if authenticated
+      if (socket.user?.id) {
+        socket.join(`user:${socket.user.id}`);
+      }
 
       // 1. Whole City Slim Summary Subscription (Map view)
       socket.on('subscribe:city', () => {
@@ -137,8 +159,12 @@ class SocketService {
         socket.emit('unsubscribed', { room: 'corridor' });
       });
 
-      // 5. System Health Room Subscription (Health / Benchmark panel)
+      // 5. System Health Room Subscription (Health / Benchmark panel - restricted to officer/admin)
       socket.on('subscribe:system', () => {
+        if (!socket.isAuthenticated || !['admin', 'officer'].includes(socket.user?.role)) {
+          socket.emit('subscription:denied', { room: 'system', error: 'Authentication required for system metrics' });
+          return;
+        }
         socket.join('system');
         socket.emit('subscribed', { room: 'system' });
         socket.emit('metrics:snapshot', metricsService.getSnapshot());

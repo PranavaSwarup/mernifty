@@ -17,4 +17,15 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          leaflet: ['leaflet'],
+          recharts: ['recharts'],
+          lucide: ['lucide-react'],
+        },
+      },
+    },
+  },
 });

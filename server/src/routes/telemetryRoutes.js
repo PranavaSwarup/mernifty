@@ -217,9 +217,12 @@ router.get('/aggregate', async (req, res) => {
 
 // 5. System Performance & Throughput Metrics
 router.get('/stats', (req, res) => {
+  const snapshot = metricsService.getSnapshot();
   res.json({
     success: true,
-    stats: metricsService.getSnapshot(),
+    stats: snapshot,
+    bufferSize: snapshot.bufferSize,
+    queueSize: snapshot.bufferSize,
   });
 });
 

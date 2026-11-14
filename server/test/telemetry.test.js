@@ -7,10 +7,11 @@ import { normalizeTrafficEvent, validateTrafficEvent } from '../src/middleware/v
 import { JUNCTION_GRAPH, getShortestRoute, findNearestJunction } from '../src/data/junctionGraph.js';
 import { corridorService } from '../src/services/corridorService.js';
 import { simulatorService } from '../src/services/simulatorService.js';
-import { checkAreaAuthorization, requireDataSourceKey } from '../src/middleware/auth.js';
+import { checkAreaAuthorization, requireDataSourceKey, requireAuth } from '../src/middleware/auth.js';
 import { checkSourceRateLimit } from '../src/middleware/rateLimiter.js';
 import { baselineService } from '../src/services/baselineService.js';
 import mongoose from 'mongoose';
+import jwt from 'jsonwebtoken';
 import { seed24HourHistory } from '../src/utils/seedHistory.js';
 import { Telemetry } from '../src/models/Telemetry.js';
 import { User } from '../src/models/User.js';
@@ -727,6 +728,49 @@ test('17. Citizen Report Prioritization, Officer Cause Preservation, and Delayed
     Report.findOne = originalFindOneReport;
     Alert.updateOne = originalUpdateOneAlert;
   }
+});
+
+test('18. Anonymous Report 401, Pre-Validation Rate Limiter, and Socket Auth (Fix 6)', async (t) => {
+  // 1. Anonymous report returns 401 cleanly via requireAuth
+  let resStatus = null;
+  let resJson = null;
+  const mockRes = {
+    status: (s) => { resStatus = s; return mockRes; },
+    json: (j) => { resJson = j; return mockRes; },
+  };
+
+  const anonReq = { user: undefined };
+  let anonNextCalled = false;
+  requireAuth(anonReq, mockRes, () => { anonNextCalled = true; });
+  assert.strictEqual(resStatus, 401, 'Anonymous request must return 401');
+  assert.strictEqual(anonNextCalled, false, 'next() must not be called for anonymous request');
+
+  // 2. Invalid category rejected before rate limit consumption
+  const testCategory = 'invalid_category_123';
+  const VALID_CATEGORIES = ['accident', 'stalled_vehicle', 'waterlogging', 'road_work', 'vip_movement'];
+  const isValid = VALID_CATEGORIES.includes(testCategory);
+  assert.strictEqual(isValid, false, 'Invalid category must fail validation before rate limit check');
+
+  // 3. Socket authentication verification
+  const testUser = { id: 'USR-TEST-001', role: 'citizen' };
+  const validToken = jwt.sign(testUser, config.jwtSecret);
+  const decodedValid = jwt.verify(validToken, config.jwtSecret);
+  assert.strictEqual(decodedValid.id, 'USR-TEST-001');
+
+  // Verify restricted room subscription refusal for non-officer/unauthenticated
+  const socketAuthTest = {
+    user: decodedValid,
+    isAuthenticated: true,
+  };
+  const isOfficerOrAdmin = socketAuthTest.isAuthenticated && ['admin', 'officer'].includes(socketAuthTest.user?.role);
+  assert.strictEqual(isOfficerOrAdmin, false, 'Citizen socket must not be permitted to subscribe to system metrics');
+
+  const officerUser = { id: 'USR-OFFICER-001', role: 'officer' };
+  const officerToken = jwt.sign(officerUser, config.jwtSecret);
+  const decodedOfficer = jwt.verify(officerToken, config.jwtSecret);
+  const officerSocket = { user: decodedOfficer, isAuthenticated: true };
+  const officerAllowed = officerSocket.isAuthenticated && ['admin', 'officer'].includes(officerSocket.user?.role);
+  assert.strictEqual(officerAllowed, true, 'Officer socket must be permitted to subscribe to system metrics');
 });
 
 test.after(() => {

@@ -203,9 +203,6 @@ export function Navbar({ activeTab, setActiveTab }) {
               </div>
             )}
           </div>
-              </div>
-            )}
-          </div>
 
           {/* Audio Chime Toggle */}
           <button
