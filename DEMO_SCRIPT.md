@@ -1,17 +1,17 @@
-# MetroPulse BLR: Demo Video Script (about 4 minutes 30 seconds)
+# MetroPulse BLR: Demo Video Script (about 4 minutes 45 seconds)
 
-The problem statement says the video must show three things: data being ingested continuously with a live dashboard, several clients receiving the updates relevant to each of them, and historical data combined with live data. Scenes 2, 3 and 5 cover those. Scene 4 is the ambulance corridor, our main feature.
+The problem statement says the video must show three things: data being ingested continuously with a live dashboard, several clients receiving the updates relevant to each of them, and historical data combined with live data. Scenes 2, 3 and 6 cover those. Scene 4 shows the login roles, which the problem statement lists as a requirement, and scene 5 is the ambulance corridor, our main feature.
 
 | # | Time | Scene | What it proves |
 | :--- | :--- | :--- | :--- |
 | 1 | 0:00 – 0:30 | The problem and the app | Context |
-| 2 | 0:30 – 1:15 | Live city map | Continuous ingestion, live dashboard |
-| 3 | 1:15 – 2:00 | Two desks, two zones | Selective rooms: different clients get different updates |
-| 4 | 2:00 – 3:00 | Ambulance green corridor | Real-time coordination across zones |
-| 5 | 3:00 – 3:40 | One junction: history plus live, reconnect | History and live merged with no gaps or duplicates |
-| 6 | 3:40 – 4:20 | Engineering workbench | Throughput, latency, measured results |
-| 7 | 4:20 – 4:30 | Close | Live link |
-
+| 2 | 0:30 – 1:10 | Live city map | Continuous ingestion, live dashboard |
+| 3 | 1:10 – 1:50 | Two desks, two zones | Selective rooms: different clients get different updates |
+| 4 | 1:50 – 2:25 | Roles: who can do what | Authentication and access control |
+| 5 | 2:25 – 3:25 | Ambulance green corridor | Real-time coordination across zones |
+| 6 | 3:25 – 4:00 | One junction: history plus live, reconnect | History and live merged with no gaps or duplicates |
+| 7 | 4:00 – 4:35 | Engineering workbench | Throughput, latency, measured results |
+| 8 | 4:35 – 4:45 | Close | Live link |
 ---
 
 ## Before you record
@@ -35,7 +35,7 @@ The problem statement says the video must show three things: data being ingested
 
 ---
 
-## Scene 2 (0:30 – 1:15): Live city map
+## Scene 2 (0:30 – 1:10): Live city map
 
 **On screen:** stay on **Network**. Hover over Silk Board to show its tooltip, then click the **South** zone filter and back to **All Zones**.
 
@@ -48,7 +48,7 @@ The problem statement says the video must show three things: data being ingested
 
 ---
 
-## Scene 3 (1:15 – 2:00): Two desks, two zones
+## Scene 3 (1:10 – 1:50): Two desks, two zones
 
 **On screen:** click the **Desks** tab.
 
@@ -65,9 +65,37 @@ The problem statement says the video must show three things: data being ingested
 
 ---
 
-## Scene 4 (2:00 – 3:00): Ambulance green corridor
+## Scene 4 (1:50 – 2:25): Roles, who can do what
 
-**On screen:** back to **Network**, **All Zones**. Click **Dispatch Corridor** (Hebbal to Jayadeva).
+**On screen:** back to **Network**. Open the **persona switcher** in the header.
+
+**Say:**
+> "Who can do what depends on your role. Traffic data is public, so anyone can watch the map, even without logging in. What we protect is actions, because those change things."
+
+**On screen:** pick **Anonymous**. Point at the **Dispatch Corridor** button and the scenario dropdown, now greyed out.
+
+> "An anonymous visitor can watch, but can't dispatch an ambulance or trigger anything."
+
+**On screen:** pick **South Desk**. Open a junction in the East zone, such as **Marathahalli Bridge**, and point at its controls being locked with the message to switch persona.
+
+> "A zone operator can act only inside their own zone. The South operator can manage South junctions, but not East ones."
+
+**On screen:** click **Switch to Admin**.
+
+> "The admin, or supervisor, controls the whole city: scenarios, the simulator and the ambulance corridor. And these checks happen on the server, not just in the buttons. A request without the right role is rejected with an error, and signing up always creates a read-only viewer, so nobody can make themselves an admin. Passwords for these demo accounts are generated on the server and never sent to the browser."
+
+| Role | Can see | Can do |
+| :--- | :--- | :--- |
+| Anonymous | Everything (public view) | Nothing |
+| Viewer | Everything, plus city alerts | Nothing (read-only account) |
+| South / East Desk (operator) | Everything | Act on junctions in their own zone only |
+| Admin / Supervisor | Everything | Everything, in every zone |
+
+---
+
+## Scene 5 (2:25 – 3:25): Ambulance green corridor
+
+**On screen:** still on **Network** as **Admin**, **All Zones**. Click **Dispatch Corridor** (Hebbal to Jayadeva).
 
 **Say as it starts:**
 > "Now our main feature. An ambulance leaves Hebbal for Jayadeva, the cardiac hospital. The system finds its route through the junction network: Mekhri Circle, Town Hall, Richmond Circle, Dairy Circle."
@@ -85,7 +113,7 @@ The problem statement says the video must show three things: data being ingested
 
 ---
 
-## Scene 5 (3:00 – 3:40): History plus live, and a reconnect
+## Scene 6 (3:25 – 4:00): History plus live, and a reconnect
 
 **On screen:** open the **Junction** tab for **Silk Board**.
 
@@ -98,7 +126,7 @@ The problem statement says the video must show three things: data being ingested
 
 ---
 
-## Scene 6 (3:40 – 4:20): Engineering workbench
+## Scene 7 (4:00 – 4:35): Engineering workbench
 
 **On screen:** click the **Engineering** tab. Scroll through the panels.
 
@@ -109,7 +137,7 @@ The problem statement says the video must show three things: data being ingested
 
 ---
 
-## Scene 7 (4:20 – 4:30): Close
+## Scene 8 (4:35 – 4:45): Close
 
 **On screen:** the Network map.
 
