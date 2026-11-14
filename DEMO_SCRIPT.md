@@ -76,9 +76,8 @@ The problem statement says the video must show three things: data being ingested
 
 > "An anonymous visitor can watch, but can't dispatch an ambulance or trigger anything."
 
-**On screen:** pick **South Desk**. Open a junction in the East zone, such as **Marathahalli Bridge**, and point at its controls being locked with the message to switch persona.
-
-> "A zone operator can act only inside their own zone. The South operator can manage South junctions, but not East ones."
+**Say (no click needed here):**
+> "In between are the zone operators, the South Desk and the East Desk. An operator can act only inside their own zone, so the South operator can manage South junctions but not East ones."
 
 **On screen:** click **Switch to Admin**.
 
