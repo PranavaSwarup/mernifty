@@ -177,6 +177,12 @@ export function SocketProvider({ children }) {
   const [socketError, setSocketError] = useState(null);
   const [disconnectCountdownSec, setDisconnectCountdownSec] = useState(0);
 
+  // Live Ambulance Green Corridor State
+  const [activeCorridorTrip, setActiveCorridorTrip] = useState(null);
+  const [corridorGiveway, setCorridorGiveway] = useState(null);
+  const [corridorOfficerAlert, setCorridorOfficerAlert] = useState(null);
+  const [preemptedJunctions, setPreemptedJunctions] = useState(new Set());
+
   const schemaRef = useRef(DEFAULT_WIRE_SCHEMA);
   const socketRef = useRef(null);
   const pendingBufferRef = useRef([]);
@@ -445,6 +451,43 @@ export function SocketProvider({ children }) {
       }
     });
 
+    // Ambulance Green Corridor Events
+    socket.on('corridor:started', (data) => {
+      setActiveCorridorTrip(data);
+      setPreemptedJunctions(new Set([data.startJunctionId, data.route?.[1]].filter(Boolean)));
+    });
+
+    socket.on('corridor:position', (pos) => {
+      setActiveCorridorTrip((prev) => (prev ? { ...prev, ...pos } : pos));
+    });
+
+    socket.on('corridor:junction_preempted', ({ junctionId }) => {
+      setPreemptedJunctions((prev) => new Set([...prev, junctionId]));
+    });
+
+    socket.on('corridor:junction_cleared', ({ junctionId }) => {
+      setPreemptedJunctions((prev) => {
+        const next = new Set(prev);
+        next.delete(junctionId);
+        return next;
+      });
+    });
+
+    socket.on('corridor:giveway', (data) => {
+      setCorridorGiveway(data);
+    });
+
+    socket.on('corridor:officer_alert', (data) => {
+      setCorridorOfficerAlert(data);
+    });
+
+    socket.on('corridor:ended', () => {
+      setActiveCorridorTrip(null);
+      setCorridorGiveway(null);
+      setCorridorOfficerAlert(null);
+      setPreemptedJunctions(new Set());
+    });
+
     const pingInterval = setInterval(() => {
       if (socket.connected) {
         socket.emit('telemetry:ping', Date.now());
@@ -628,6 +671,10 @@ export function SocketProvider({ children }) {
         subscribeDevice,
         unsubscribeDevice,
         cursorsRef,
+        activeCorridorTrip,
+        corridorGiveway,
+        corridorOfficerAlert,
+        preemptedJunctions,
       }}
     >
       {children}

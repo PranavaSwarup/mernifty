@@ -183,15 +183,31 @@ export function NetworkWorkspace({
   onOpenJunction,
   onCloseJunction,
 }) {
-  const { latestByDevice, counterfactual, alerts, setAlerts, stats, simMeta, setSimMeta } = useSocket();
+  const {
+    latestByDevice,
+    counterfactual,
+    alerts,
+    setAlerts,
+    stats,
+    simMeta,
+    setSimMeta,
+    activeCorridorTrip,
+    corridorGiveway,
+    corridorOfficerAlert,
+    preemptedJunctions,
+  } = useSocket();
   const { user } = useAuth();
   const { isDark } = useTheme();
   const isOperatorPlus = user?.role === 'admin' || user?.role === 'operator';
   const isAdmin = user?.role === 'admin';
+  const isAmbulanceDriver = user?.role === 'ambulance';
+  const isOfficer = user?.role === 'operator' || user?.persona?.includes('operator');
 
   const [simState, setSimState] = useState(null);
   const [scenariosList, setScenariosList] = useState(QUICK_SCENARIOS);
   const [quickBusy, setQuickBusy] = useState(false);
+  const [corridorAvoidJams, setCorridorAvoidJams] = useState(true);
+  const [corridorDispatching, setCorridorDispatching] = useState(false);
   const [cfSnapshot, setCfSnapshot] = useState(null);
   const [cfHistory, setCfHistory] = useState([]);
   const [alertFilter, setAlertFilter] = useState('all');
@@ -286,6 +302,36 @@ export function NetworkWorkspace({
     },
     [quickBusy, isOperatorPlus, setSimMeta, fetchSimOverview]
   );
+
+  const handleDispatchCorridor = useCallback(async () => {
+    if (corridorDispatching || !isOperatorPlus) return;
+    setCorridorDispatching(true);
+    try {
+      const res = await fetch('/api/corridor/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('hp_token') || ''}`,
+        },
+        body: JSON.stringify({
+          vehicleId: 'AMB-BLR-01',
+          startJunctionId: 'JNC-BLR-008',
+          destinationJunctionId: 'JNC-BLR-004',
+          durationSeconds: 75,
+          avoidJams: corridorAvoidJams,
+        }),
+      });
+      if (!res.ok) {
+        await handleQuickScenario('ambulance-corridor');
+      } else {
+        await fetchSimOverview();
+      }
+    } catch {
+      await handleQuickScenario('ambulance-corridor');
+    } finally {
+      setCorridorDispatching(false);
+    }
+  }, [corridorDispatching, isOperatorPlus, corridorAvoidJams, handleQuickScenario, fetchSimOverview]);
 
   const handleQuickSpeed = useCallback(
     async (speedVal) => {
@@ -573,8 +619,14 @@ export function NetworkWorkspace({
 
     // 2. Active emergency responder routes (snapped to arterial street curves)
     emergencyLayerRef.current.clearLayers();
-    for (const em of simState?.activeEmergencies || []) {
-      const pathIds = (em.path || []).filter((id) => posById.has(id));
+    const activeList = (simState?.activeEmergencies?.length
+      ? simState.activeEmergencies
+      : activeCorridorTrip
+        ? [activeCorridorTrip]
+        : []);
+
+    for (const em of activeList) {
+      const pathIds = (em.path || em.route || []).filter((id) => posById.has(id));
       const fullPathPts = [];
       for (let i = 0; i < pathIds.length - 1; i++) {
         const segPts = getCorridorRoadWaypoints(
@@ -590,27 +642,50 @@ export function NetworkWorkspace({
         }
       }
       if (fullPathPts.length >= 2) {
+        // Outer glowing green wave
         L.polyline(fullPathPts, {
-          color: isDark ? '#38bdf8' : '#0369a1',
+          color: '#10b981',
+          weight: 7,
+          opacity: 0.4,
+        }).addTo(emergencyLayerRef.current);
+
+        // Core green corridor
+        L.polyline(fullPathPts, {
+          color: '#34d399',
           weight: 4,
-          dashArray: '6 5',
-          opacity: 0.9,
+          opacity: 0.95,
         }).addTo(emergencyLayerRef.current);
       }
       const pts = pathIds.map((id) => posById.get(id)).filter(Boolean);
       const legIdx = Math.max(0, Math.min(pts.length - 1, em.legIndex ?? 0));
-      const pos = pts[legIdx];
-      if (pos) {
-        L.circleMarker(pos, {
-          radius: 7,
-          color: '#ffffff',
-          weight: 2,
-          fillColor: isDark ? '#38bdf8' : '#0369a1',
-          fillOpacity: 1,
-        })
-          .bindTooltip(`Responder ${em.id || ''} (${em.preempt ? 'Preempt active' : 'Passive'})`, {
-            className: 'mp-tooltip',
-          })
+      const fallbackPos = pts[legIdx];
+      const ambPos =
+        typeof em.latitude === 'number' && typeof em.longitude === 'number'
+          ? [em.latitude, em.longitude]
+          : fallbackPos;
+
+      if (ambPos) {
+        const ambIcon = L.divIcon({
+          className: 'mp-ambulance-marker',
+          html: `
+            <div style="position:relative;display:flex;align-items:center;justify-content:center;">
+              <div style="position:absolute;width:28px;height:28px;border-radius:50%;background:rgba(16,185,129,0.45);animation:ping 1.5s cubic-bezier(0,0,0.2,1) infinite;"></div>
+              <div style="position:relative;background:#059669;color:#ffffff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:9999px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.4);border:1.5px solid #a7f3d0;display:flex;align-items:center;gap:4px;white-space:nowrap;font-family:monospace;">
+                <span>🚑</span>
+                <span>${em.vehicleId || em.id || 'AMB-BLR-01'}</span>
+                <span style="font-size:9.5px;color:#d1fae5;">(${em.speedKmph || 48}km/h)</span>
+              </div>
+            </div>
+          `,
+          iconSize: [110, 26],
+          iconAnchor: [55, 13],
+        });
+
+        L.marker(ambPos, { icon: ambIcon, zIndexOffset: 2500 })
+          .bindTooltip(
+            `Emergency Responder ${em.vehicleId || em.id || 'AMB-BLR-01'} • Speed: ${em.speedKmph || 48} km/h • Next: ${em.nextJunctionId || 'Jayadeva'} • Preempt: ${em.preempt !== false ? 'ACTIVE' : 'Passive'}`,
+            { className: 'mp-tooltip' }
+          )
           .addTo(emergencyLayerRef.current);
       }
     }
@@ -853,6 +928,18 @@ export function NetworkWorkspace({
                 ))}
               </select>
             </label>
+            {isOperatorPlus && (
+              <button
+                type="button"
+                disabled={corridorDispatching || (simState?.activeEmergencies?.length > 0) || Boolean(activeCorridorTrip)}
+                onClick={handleDispatchCorridor}
+                title="Dispatch Emergency Responder Green Corridor from Hebbal Flyover (008) to Jayadeva Hospital (004)"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/80 font-mono text-[11px] font-semibold transition-colors disabled:opacity-50"
+              >
+                <span>🚑</span>
+                <span>{(simState?.activeEmergencies?.length > 0) || Boolean(activeCorridorTrip) ? 'Corridor Active' : 'Dispatch Corridor'}</span>
+              </button>
+            )}
             {isAdmin && (
               <div className="inline-flex items-center rounded border border-hairline bg-inset overflow-hidden" role="group" aria-label="Simulation clock speed">
                 {[1, 2, 5].map((spd) => {
@@ -880,6 +967,91 @@ export function NetworkWorkspace({
             )}
           </div>
         </div>
+
+        {/* Role-Specific Tactical & Public Banners */}
+        {(() => {
+          const activeEm = (simState?.activeEmergencies?.[0] || activeCorridorTrip || null);
+          const isAmbulanceActive = Boolean(activeEm);
+          const hasOfficerAlert = Boolean(corridorOfficerAlert) || (isOfficer && isAmbulanceActive && preemptedJunctions?.size > 0);
+
+          return (
+            <>
+              {/* 1. Ambulance Driver Live Navigation HUD */}
+              {(isAmbulanceDriver || isAmbulanceActive) && activeEm && (
+                <div className="px-3 py-2 bg-emerald-950/90 border-b border-emerald-500/30 flex flex-wrap items-center justify-between gap-3 text-emerald-100 text-xs backdrop-blur-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1 rounded bg-emerald-500/20 text-emerald-400 font-bold animate-pulse text-sm">🚑</span>
+                    <div>
+                      <div className="font-semibold text-emerald-300 flex items-center gap-1.5 font-mono">
+                        <span>PRIORITY CORRIDOR: Hebbal (008) ➔ Jayadeva (004)</span>
+                        <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                          {activeEm.isDynamicRerouted ? 'DYNAMIC BYPASS' : 'GREEN WAVE LOCKED'}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-emerald-400/80">
+                        {activeEm.rerouteReason || 'Incoming approaches locked GREEN to flush queues naturally ahead of transit.'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 font-mono text-[11px]">
+                    <div>
+                      <span className="text-emerald-400/70">Next: </span>
+                      <span className="font-semibold text-emerald-200">{activeEm.nextJunctionId || 'Jayadeva (004)'}</span>
+                    </div>
+                    <div>
+                      <span className="text-emerald-400/70">ETA: </span>
+                      <span className="font-semibold text-emerald-200">{activeEm.etaToNextSec ?? 12}s</span>
+                    </div>
+                    <div>
+                      <span className="text-emerald-400/70">Speed: </span>
+                      <span className="font-semibold text-emerald-200">{activeEm.speedKmph || 48} km/h</span>
+                    </div>
+                    <div className="w-24 bg-emerald-950 rounded-full h-2 border border-emerald-500/30 overflow-hidden">
+                      <div
+                        className="bg-emerald-400 h-full transition-all duration-300"
+                        style={{ width: `${activeEm.progressPct || 0}%` }}
+                      />
+                    </div>
+                    <span className="font-bold text-emerald-300">{activeEm.progressPct || 0}%</span>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. BTP Officer Tactical Alert Banner */}
+              {isOfficer && hasOfficerAlert && (
+                <div className="px-3 py-1.5 bg-amber-950/90 border-b border-amber-500/40 flex items-center justify-between text-amber-200 text-xs backdrop-blur-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-amber-400 font-bold">👮 BTP TACTICAL ALERT:</span>
+                    <span>
+                      {corridorOfficerAlert?.message ||
+                        `Emergency Corridor active at assigned junction. Priority signals set to GREEN on approach to flush queue. Hold cross-traffic.`}
+                    </span>
+                  </div>
+                  <span className="font-mono text-[10px] text-amber-400 font-bold px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40">
+                    HOLD CROSS-TRAFFIC
+                  </span>
+                </div>
+              )}
+
+              {/* 3. Citizen / Public Traffic Advisory Notice */}
+              {!isAmbulanceDriver && !isOfficer && isAmbulanceActive && (
+                <div className="px-3 py-1 bg-cyan-950/80 border-b border-cyan-500/30 flex items-center justify-between text-cyan-200 text-[11px] backdrop-blur-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-cyan-400">ℹ️</span>
+                    <span>
+                      {corridorGiveway?.message ||
+                        `Traffic Advisory: Emergency vehicle transit active (Hebbal ➔ Jayadeva). Ahead signals automatically turn GREEN to clear queues naturally.`}
+                    </span>
+                  </div>
+                  <span className="text-cyan-400/80 font-mono text-[10px]">
+                    Normal dynamic AI cycle resumes immediately after vehicle passage
+                  </span>
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         {/* Interactive Bengaluru Leaflet Canvas */}
         <div className="relative h-[430px] lg:h-auto lg:flex-1 bg-ground">

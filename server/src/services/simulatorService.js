@@ -10,7 +10,10 @@ import { CounterfactualPair } from '../sim/twin.js';
 import { getIstHour, getTodPeriod } from '../sim/demand.js';
 import { loadStudyPolicy } from '../sim/studyPolicy.js';
 import { OperatorAction } from '../models/OperatorAction.js';
+import { CorridorTrip } from '../models/CorridorTrip.js';
+import mongoose from 'mongoose';
 import { withSyncSpan, recordSimStep } from '../telemetry/instruments.js';
+import { JUNCTION_COORDINATES, getIncomingApproachRoad } from '../data/junctionGraph.js';
 
 export { INITIAL_DEVICES };
 
@@ -100,11 +103,22 @@ export const SCENARIO_PRESETS = [
     demandScale: 1.25,
     chaos: {
       type: 'ambulance',
-      junctionId: 'JNC-BLR-001',
+      startJunctionId: 'JNC-BLR-008',
+      destinationJunctionId: 'JNC-BLR-004',
+      junctionId: 'JNC-BLR-008',
+      path: [
+        'JNC-BLR-008',
+        'JNC-BLR-010',
+        'JNC-BLR-012',
+        'JNC-BLR-011',
+        'JNC-BLR-003',
+        'JNC-BLR-004',
+      ],
       durationSec: 120,
       preempt: true,
     },
-    description: 'Emergency responder green-corridor dispatch from Hosur Rd through Silk Board & ORR.',
+    description:
+      'Emergency responder green corridor dispatch from Hebbal Flyover (008) through Mekhri, Town Hall, Richmond, and Dairy Circle to Jayadeva Hospital (004).',
   },
 ];
 
@@ -346,14 +360,50 @@ class SimulatorService {
             }
           );
         } else if (preset.chaos?.type === 'ambulance') {
-          const path = this.findCorridorPathThrough(preset.chaos.junctionId);
+          const defaultPath = Array.isArray(preset.chaos.path) && preset.chaos.path.length > 0
+            ? preset.chaos.path
+            : [
+                'JNC-BLR-008',
+                'JNC-BLR-010',
+                'JNC-BLR-012',
+                'JNC-BLR-011',
+                'JNC-BLR-003',
+                'JNC-BLR-004',
+              ];
+          let path = defaultPath;
+          let isDynamicRerouted = false;
+          let rerouteReason = null;
+
+          // If central core is jammed/stalled, dynamically route via ORR East bypass
+          const mekhriIdx = this.pair.live.junctionIndexById.get('JNC-BLR-010');
+          const isMekhriJammed = mekhriIdx !== undefined && this.pair.live.incidents.has(this.pair.live.junctionApproachOffsets[mekhriIdx]);
+          if (isMekhriJammed) {
+            path = [
+              'JNC-BLR-008',
+              'JNC-BLR-006',
+              'JNC-BLR-007',
+              'JNC-BLR-005',
+              'JNC-BLR-001',
+              'JNC-BLR-004',
+            ];
+            isDynamicRerouted = true;
+            rerouteReason = 'Dynamically rerouted via Outer Ring Road East to bypass jammed Mekhri Circle.';
+            console.log(`[TrafficSimulator] ${rerouteReason}`);
+          }
+
           this.enableEmergencyModeForPath(path);
           this.injectChaos(
-            preset.chaos.junctionId,
+            preset.chaos.junctionId || 'JNC-BLR-008',
             'ambulancePreemption',
             1,
             preset.chaos.durationSec,
-            { ambulance: true, preempt: Boolean(preset.chaos.preempt), path }
+            {
+              ambulance: true,
+              preempt: Boolean(preset.chaos.preempt),
+              path,
+              isDynamicRerouted,
+              rerouteReason,
+            }
           );
         }
 
@@ -494,8 +544,229 @@ class SimulatorService {
     const startNs = process.hrtime.bigint();
     this.pair.step();
     this._recordQueueHistoryPoint();
+    this._stepEmergencyCorridorBroadcasts();
     this._processScheduledTasks();
     recordSimStep(Number(process.hrtime.bigint() - startNs) / 1e6);
+  }
+
+  _stepEmergencyCorridorBroadcasts() {
+    const world = this.pair.live;
+    if (!world.emergencies || world.emergencies.length === 0) return;
+
+    if (!this._emergencyTracker) {
+      this._emergencyTracker = new Map();
+    }
+
+    for (let i = 0; i < world.emergencies.length; i++) {
+      const em = world.emergencies[i];
+      let track = this._emergencyTracker.get(em.id);
+      if (!track) {
+        track = {
+          lastLegIndex: -1,
+          junctionEvents: new Map(),
+          positions: [],
+          startTime: new Date(),
+          clearedJunctions: new Set(),
+          preemptedJunctions: new Set(),
+          saved: false,
+        };
+        this._emergencyTracker.set(em.id, track);
+
+        socketService.io?.to('corridor').emit('corridor:started', {
+          tripId: em.id,
+          vehicleId: em.id,
+          route: em.path,
+          startJunctionId: em.path[0],
+          destinationJunctionId: em.path[em.path.length - 1],
+          durationSeconds: em.freeFlowTimeSec || 75,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (em.status === 'en-route') {
+        const leg = em.legs?.[em.legIndex];
+        const currJId = leg?.junctionId || em.path[em.legIndex] || em.path[0];
+        const prevJId =
+          em.legIndex > 0
+            ? em.legs?.[em.legIndex - 1]?.junctionId || em.path[em.legIndex - 1]
+            : em.path[0];
+        const nextJId = em.legIndex + 1 < em.path.length ? em.path[em.legIndex + 1] : currJId;
+
+        const fromCoords = JUNCTION_COORDINATES[prevJId] || { latitude: 13.0358, longitude: 77.597 };
+        const toCoords = JUNCTION_COORDINATES[currJId] || { latitude: 12.918, longitude: 77.597 };
+
+        const legLengthM = Math.max(1, leg?.lengthM || 500);
+        const fraction = Math.min(1, Math.max(0, 1 - em.remainingDistM / legLengthM));
+
+        const latitude = Number(
+          (fromCoords.latitude + (toCoords.latitude - fromCoords.latitude) * fraction).toFixed(5)
+        );
+        const longitude = Number(
+          (fromCoords.longitude + (toCoords.longitude - fromCoords.longitude) * fraction).toFixed(5)
+        );
+
+        const speedKmph = 48;
+        const etaToNextSec = Math.max(1, Math.round(em.remainingDistM / 13.33));
+
+        let doneM = 0;
+        if (Array.isArray(em.legs)) {
+          for (let l = 0; l < em.legIndex; l++) doneM += em.legs[l].lengthM;
+          doneM += legLengthM - em.remainingDistM;
+        }
+        const totalM = Math.max(1, em.totalLengthM || 1);
+        const progressPct = Math.min(100, Math.max(0, Math.round((doneM / totalM) * 100)));
+
+        const posPayload = {
+          tripId: em.id,
+          vehicleId: em.id,
+          latitude,
+          longitude,
+          speedKmph,
+          progressPct,
+          lastJunctionId: prevJId,
+          currentJunctionId: currJId,
+          nextJunctionId: nextJId,
+          etaToNextSec,
+          route: em.path,
+          timestamp: new Date().toISOString(),
+        };
+
+        if (track.positions.length < 500) {
+          track.positions.push(posPayload);
+        }
+
+        const toZone = JUNCTION_COORDINATES[currJId]?.zoneId;
+
+        // Broadcast 2 Hz position updates
+        socketService.io?.to('corridor').emit('corridor:position', posPayload);
+        socketService.io?.to(`junction:${currJId}`).emit('corridor:position', posPayload);
+        if (toZone) {
+          socketService.io?.to(`zone:${toZone}`).emit('corridor:position', posPayload);
+        }
+
+        // If leg changed or just initialized, handle preemption announcements
+        if (track.lastLegIndex !== em.legIndex) {
+          track.lastLegIndex = em.legIndex;
+
+          if (!track.preemptedJunctions.has(currJId)) {
+            track.preemptedJunctions.add(currJId);
+            const incomingRoad = getIncomingApproachRoad(prevJId, currJId);
+            const now = new Date();
+            track.junctionEvents.set(currJId, {
+              junctionId: currJId,
+              incomingRoad,
+              preemptedAt: now,
+              clearedAt: null,
+            });
+
+            socketService.io
+              ?.to('corridor')
+              .to(`zone:${toZone}`)
+              .to(`junction:${currJId}`)
+              .emit('corridor:junction_preempted', {
+                junctionId: currJId,
+                tripId: em.id,
+                incomingRoad,
+                timestamp: now.toISOString(),
+                adaptiveSignalMode: 'emergency-corridor',
+              });
+
+            socketService.io
+              ?.to(`junction:${currJId}`)
+              .to(`zone:${toZone}`)
+              .emit('corridor:officer_alert', {
+                junctionId: currJId,
+                tripId: em.id,
+                junctionName: JUNCTION_COORDINATES[currJId]?.name || currJId,
+                incomingRoad,
+                etaToNextSec,
+                message: `Emergency Corridor active at ${JUNCTION_COORDINATES[currJId]?.name || currJId}. Signals locked GREEN on ${incomingRoad} to flush queue. Hold cross-traffic.`,
+                timestamp: now.toISOString(),
+              });
+
+            socketService.io
+              ?.to(`junction:${currJId}`)
+              .to(`zone:${toZone}`)
+              .emit('corridor:giveway', {
+                junctionId: currJId,
+                tripId: em.id,
+                etaToNextSec,
+                junctionName: JUNCTION_COORDINATES[currJId]?.name || currJId,
+                incomingRoad,
+                message: `Ambulance approaching ${JUNCTION_COORDINATES[currJId]?.name || currJId}. Ahead signals automatically set to GREEN on ${incomingRoad} to flush queue.`,
+                timestamp: now.toISOString(),
+              });
+          }
+
+          // Clear previously passed junction
+          if (em.legIndex > 0) {
+            const passedJId = em.legs[em.legIndex - 1]?.junctionId;
+            if (passedJId && !track.clearedJunctions.has(passedJId)) {
+              track.clearedJunctions.add(passedJId);
+              const clearNow = new Date();
+              if (track.junctionEvents.has(passedJId)) {
+                track.junctionEvents.get(passedJId).clearedAt = clearNow;
+              }
+              const passedZone = JUNCTION_COORDINATES[passedJId]?.zoneId || 'south-bangalore';
+              socketService.io
+                ?.to('corridor')
+                .to(`zone:${passedZone}`)
+                .to(`junction:${passedJId}`)
+                .emit('corridor:junction_cleared', {
+                  junctionId: passedJId,
+                  tripId: em.id,
+                  timestamp: clearNow.toISOString(),
+                  adaptiveSignalMode: 'dynamic-ai',
+                });
+            }
+          }
+        }
+      } else if (em.status === 'completed' && !track.saved) {
+        track.saved = true;
+        const endTime = new Date();
+        const durationSeconds = Math.round((endTime.getTime() - track.startTime.getTime()) / 1000);
+
+        const lastJId = em.path[em.path.length - 1];
+        if (track.junctionEvents.has(lastJId)) {
+          track.junctionEvents.get(lastJId).clearedAt = endTime;
+        }
+        const lastZone = JUNCTION_COORDINATES[lastJId]?.zoneId || 'south-bangalore';
+        socketService.io
+          ?.to('corridor')
+          .to(`zone:${lastZone}`)
+          .to(`junction:${lastJId}`)
+          .emit('corridor:junction_cleared', {
+            junctionId: lastJId,
+            tripId: em.id,
+            timestamp: endTime.toISOString(),
+            adaptiveSignalMode: 'dynamic-ai',
+          });
+
+        const summary = {
+          tripId: em.id,
+          vehicleId: em.id,
+          startJunctionId: em.path[0],
+          destinationJunctionId: em.path[em.path.length - 1],
+          routeJunctionIds: em.path,
+          status: 'completed',
+          startTime: track.startTime,
+          endTime,
+          durationSeconds,
+          junctionEvents: Array.from(track.junctionEvents.values()),
+          positions: track.positions || [],
+          isDynamicRerouted: Boolean(em.isDynamicRerouted),
+          rerouteReason: em.rerouteReason || null,
+        };
+
+        if (mongoose.connection?.readyState === 1) {
+          CorridorTrip.create(summary).catch((err) => {
+            console.warn('[TrafficSimulator] Warning saving CorridorTrip:', err.message);
+          });
+        }
+
+        socketService.io?.to('corridor').emit('corridor:ended', summary);
+      }
+    }
   }
 
   _recordQueueHistoryPoint() {
@@ -980,14 +1251,50 @@ class SimulatorService {
       activeDiversionsCount: world.diversions.size,
       activeEmergencies: world.emergencies
         .filter((e) => e.status === 'en-route')
-        .map((e) => ({
-          id: e.id,
-          path: e.path,
-          legIndex: e.legIndex,
-          remainingDistM: Math.round(e.remainingDistM),
-          preempt: e.preempt,
-          waitingAtRedSec: e.waitingAtRedSec,
-        })),
+        .map((e) => {
+          const leg = e.legs?.[e.legIndex];
+          const currJId = leg?.junctionId || e.path[e.legIndex] || e.path[0];
+          const prevJId = e.legIndex > 0 ? (e.legs?.[e.legIndex - 1]?.junctionId || e.path[e.legIndex - 1]) : e.path[0];
+          const nextJId = e.legIndex + 1 < e.path.length ? e.path[e.legIndex + 1] : currJId;
+
+          const fromCoords = JUNCTION_COORDINATES[prevJId] || { latitude: 13.0358, longitude: 77.5970 };
+          const toCoords = JUNCTION_COORDINATES[currJId] || { latitude: 12.9180, longitude: 77.5970 };
+
+          const legLengthM = Math.max(1, leg?.lengthM || 500);
+          const fraction = Math.min(1, Math.max(0, 1 - (e.remainingDistM / legLengthM)));
+
+          const latitude = Number((fromCoords.latitude + (toCoords.latitude - fromCoords.latitude) * fraction).toFixed(5));
+          const longitude = Number((fromCoords.longitude + (toCoords.longitude - fromCoords.longitude) * fraction).toFixed(5));
+
+          const speedKmph = 48;
+          const etaToNextSec = Math.max(1, Math.round(e.remainingDistM / 13.33));
+
+          let doneM = 0;
+          if (Array.isArray(e.legs)) {
+            for (let i = 0; i < e.legIndex; i++) doneM += e.legs[i].lengthM;
+            doneM += (legLengthM - e.remainingDistM);
+          }
+          const totalM = Math.max(1, e.totalLengthM || 1);
+          const progressPct = Math.min(100, Math.max(0, Math.round((doneM / totalM) * 100)));
+
+          return {
+            id: e.id,
+            vehicleId: e.id || 'AMB-BLR-01',
+            path: e.path,
+            legIndex: e.legIndex,
+            remainingDistM: Math.round(e.remainingDistM),
+            preempt: e.preempt,
+            waitingAtRedSec: e.waitingAtRedSec,
+            latitude,
+            longitude,
+            speedKmph,
+            progressPct,
+            lastJunctionId: prevJId,
+            currentJunctionId: currJId,
+            nextJunctionId: nextJId,
+            etaToNextSec,
+          };
+        }),
       junctions,
       corridors: (this.network.links || []).map((l) => {
         const fromJ = snap.junctions[l.fromJunction];

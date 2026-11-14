@@ -19,6 +19,7 @@ import simRoutes from './routes/simRoutes.js';
 import actionRoutes from './routes/actionRoutes.js';
 import observabilityRoutes from './routes/observabilityRoutes.js';
 import benchmarkRoutes from './routes/benchmarkRoutes.js';
+import corridorRoutes from './routes/corridorRoutes.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -63,6 +64,7 @@ app.use('/api/sim', simRoutes);
 app.use('/api/actions', actionRoutes);
 app.use('/api/observability', observabilityRoutes);
 app.use('/api/benchmarks', benchmarkRoutes);
+app.use('/api/corridor', corridorRoutes);
 
 // Fallback to client index.html for SPA routing
 app.get('*', (req, res) => {
