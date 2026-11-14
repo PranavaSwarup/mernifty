@@ -8,6 +8,7 @@ const router = express.Router();
 
 const DEMO_PERSONA_EMAILS = {
   admin: 'admin@metropulse.io',
+  supervisor: 'admin@metropulse.io',
   'south-operator': 'south.operator@metropulse.io',
   south: 'south.operator@metropulse.io',
   'east-operator': 'east.operator@metropulse.io',

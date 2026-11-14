@@ -54,8 +54,10 @@ export function AuthProvider({ children }) {
             ...res.user,
             persona: res.user.anonymous
               ? 'anonymous'
-              : res.user.role === 'admin'
-                ? 'admin'
+              : res.user.persona === 'supervisor'
+                ? 'supervisor'
+                : res.user.role === 'admin'
+                  ? 'admin'
                 : res.user.role === 'operator'
                   ? res.user.zones?.includes('east-bangalore')
                     ? 'east-operator'

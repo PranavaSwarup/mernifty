@@ -55,15 +55,19 @@ export function Navbar({ activeWorkspace, onChangeWorkspace }) {
 
   const currentPersona = !user
     ? 'anonymous'
-    : user.role === 'admin'
-      ? 'admin'
-      : user.role === 'viewer'
-        ? 'viewer'
-        : Array.isArray(user.zones) &&
-            user.zones.includes('east-bangalore') &&
-            !user.zones.includes('south-bangalore')
-          ? 'east-operator'
-          : 'south-operator';
+    : user.persona === 'supervisor'
+      ? 'supervisor'
+      : user.role === 'admin'
+        ? 'admin'
+        : user.role === 'viewer'
+          ? 'viewer'
+          : Array.isArray(user.zones) &&
+              user.zones.includes('east-bangalore') &&
+              !user.zones.includes('south-bangalore')
+            ? 'east-operator'
+            : 'south-operator';
+
+  const isPrivileged = currentPersona === 'admin' || currentPersona === 'supervisor' || user?.role === 'admin';
 
   const handlePersonaChange = async (e) => {
     const next = e.target.value;
@@ -170,17 +174,17 @@ export function Navbar({ activeWorkspace, onChangeWorkspace }) {
             </span>
           )}
 
-          {/* Persona Selector (with distinct Admin indicator & 1-click switch) */}
+          {/* Persona Selector (with distinct Admin/Supervisor indicator & 1-click switch) */}
           <div className="flex items-center gap-1.5">
             <label
               className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors ${
-                currentPersona === 'admin'
+                isPrivileged
                   ? 'border-purple-500/50 bg-purple-500/10 text-purple-200'
                   : 'border-hairline bg-inset text-ink-primary'
               }`}
               title={`Active Persona: ${currentPersona}. Switch demo persona.`}
             >
-              <UserCheck className={`w-3.5 h-3.5 ${currentPersona === 'admin' ? 'text-purple-400' : 'text-ink-muted'} shrink-0`} aria-hidden="true" />
+              <UserCheck className={`w-3.5 h-3.5 ${isPrivileged ? 'text-purple-400' : 'text-ink-muted'} shrink-0`} aria-hidden="true" />
               <select
                 aria-label="Demo personas"
                 value={currentPersona}
@@ -194,14 +198,14 @@ export function Navbar({ activeWorkspace, onChangeWorkspace }) {
                   </option>
                 ))}
               </select>
-              {currentPersona === 'admin' && (
+              {isPrivileged && (
                 <span className="hidden md:inline px-1 py-0.2 rounded text-[9px] font-mono bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
                   FULL ACCESS
                 </span>
               )}
             </label>
 
-            {currentPersona !== 'admin' && (
+            {!isPrivileged && (
               <button
                 type="button"
                 onClick={() => switchPersona('admin')}
