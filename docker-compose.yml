@@ -32,6 +32,9 @@ services:
       PORT: 5000
       MONGODB_URI: mongodb://mongodb:27017/metropulse
       NODE_ENV: production
+      # Required in production: put JWT_SECRET=<long random string> in a .env file next to this file.
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (24+ characters) in a .env file before running docker compose}
+      DEMO_PERSONAS: ${DEMO_PERSONAS:-true}
       SIMULATOR_ENABLED: "true"
       BATCH_INTERVAL_MS: 500
       BATCH_SIZE: 200
