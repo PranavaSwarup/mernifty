@@ -311,6 +311,7 @@ export function FleetMapView({ devices = [] }) {
   const markersRef = useRef(new Map());
   const circlesRef = useRef(new Map());
   const polylinesRef = useRef([]);
+  const lastIconHtmlRef = useRef(new Map());
 
   const [basemapStyle, setBasemapStyle] = useState('voyager'); // 'voyager' (colored) or 'dark' (stealth)
   const [showCorridors, setShowCorridors] = useState(true);
@@ -550,13 +551,20 @@ export function FleetMapView({ devices = [] }) {
       });
 
       let marker = markersRef.current.get(dev.deviceId);
+      const prevHtml = lastIconHtmlRef.current.get(dev.deviceId);
+
       if (!marker) {
         marker = L.marker([loc.latitude, loc.longitude], { icon: customIcon }).addTo(map);
         marker.on('click', () => setSelectedJunctionId(dev.deviceId));
         markersRef.current.set(dev.deviceId, marker);
+        lastIconHtmlRef.current.set(dev.deviceId, iconHtml);
       } else {
         marker.setLatLng([loc.latitude, loc.longitude]);
-        marker.setIcon(customIcon);
+        // Only update icon DOM when visual state actually changes to prevent cursor hover flickering
+        if (prevHtml !== iconHtml) {
+          marker.setIcon(customIcon);
+          lastIconHtmlRef.current.set(dev.deviceId, iconHtml);
+        }
       }
     }
   }, [latestByDevice, activeJunctions, showHalos]);
