@@ -2,8 +2,19 @@ import express from 'express';
 import { Device } from '../models/Device.js';
 import { Telemetry } from '../models/Telemetry.js';
 import { INITIAL_DEVICES } from '../services/simulatorService.js';
+import { getGraphPayload } from '../data/junctionGraph.js';
 
 const router = express.Router();
+
+// 0. Road Network Graph & Links
+router.get('/graph', (req, res) => {
+  try {
+    const graphData = getGraphPayload();
+    res.json({ success: true, graph: graphData });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // 1. Get all registered traffic junctions
 router.get('/', async (req, res) => {

@@ -4,6 +4,7 @@ import { ingestionBuffer } from '../src/services/ingestionBuffer.js';
 import { anomalyEngine } from '../src/services/anomalyEngine.js';
 import { metricsService } from '../src/services/metricsService.js';
 import { normalizeTrafficEvent } from '../src/middleware/validator.js';
+import { JUNCTION_GRAPH, getShortestRoute } from '../src/data/junctionGraph.js';
 
 test('1. Ingestion Buffer & Deduplication Logic', (t) => {
   const uniqueEventId = `TEST-EVT-${Date.now()}`;
@@ -98,6 +99,35 @@ test('4. Team Traffic JSON Normalization Verification', (t) => {
   assert.strictEqual(normalized.data.stalledVehicleDetected, false);
   assert.ok(normalized.metrics.congestionScore > 50, 'High queue on red should produce high congestion score');
   assert.ok(normalized.status === 'gridlock' || normalized.status === 'congested', 'Status should reflect congestion');
+});
+
+test('5. Connected Junctions Graph & Shortest Route (Hebbal to Jayadeva)', (t) => {
+  // Test link symmetry
+  for (const [node, neighbors] of Object.entries(JUNCTION_GRAPH)) {
+    for (const nbr of neighbors) {
+      assert.ok(JUNCTION_GRAPH[nbr].includes(node), `Link between ${node} and ${nbr} must be symmetric`);
+    }
+  }
+
+  // Test route exists between every pair of junctions
+  const allNodes = Object.keys(JUNCTION_GRAPH);
+  assert.strictEqual(allNodes.length, 12, 'Graph must contain all 12 junctions');
+  for (const src of allNodes) {
+    for (const dst of allNodes) {
+      const r = getShortestRoute(src, dst);
+      assert.ok(Array.isArray(r) && r.length > 0, `Route must exist between ${src} and ${dst}`);
+      assert.strictEqual(r[0], src);
+      assert.strictEqual(r[r.length - 1], dst);
+    }
+  }
+
+  // Exact Hebbal (JNC-BLR-008) to Jayadeva (JNC-BLR-004) route verification
+  const hebbalToJayadeva = getShortestRoute('JNC-BLR-008', 'JNC-BLR-004');
+  assert.deepStrictEqual(
+    hebbalToJayadeva,
+    ['JNC-BLR-008', 'JNC-BLR-010', 'JNC-BLR-012', 'JNC-BLR-011', 'JNC-BLR-003', 'JNC-BLR-004'],
+    'Route from Hebbal to Jayadeva must match expected road corridor'
+  );
 });
 
 test.after(() => {

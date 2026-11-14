@@ -51,6 +51,7 @@ app.get('/api/health', (req, res) => {
 // Mount Routes
 app.use('/api/telemetry', telemetryRoutes);
 app.use('/api/devices', deviceRoutes);
+app.use('/api/junctions', deviceRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/simulator', simulatorRoutes);
 app.use('/api/auth', authRoutes);
