@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { Report } from '../models/Report.js';
 import { Alert } from '../models/Alert.js';
-import { authenticate, requireRole, checkAreaAuthorization } from '../middleware/auth.js';
+import { authenticate, requireAuth, requireRole, checkAreaAuthorization } from '../middleware/auth.js';
 import { JUNCTION_COORDINATES, findNearestJunction } from '../data/junctionGraph.js';
 import { socketService } from '../services/socketService.js';
 
