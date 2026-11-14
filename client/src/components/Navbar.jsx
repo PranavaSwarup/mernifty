@@ -22,7 +22,7 @@ import { useAuth, DEMO_LOGINS } from '../context/AuthContext';
 
 export function Navbar({ activeTab, setActiveTab }) {
   const { isConnected, isPaused, togglePause, clientLatency, soundEnabled, setSoundEnabled, activeRooms, eventsPerSec, simClock } = useSocket();
-  const { user, switchDemoRole, logout } = useAuth();
+  const { user, switchDemoRole, logout, demoMode } = useAuth();
   const [showRoleMenu, setShowRoleMenu] = useState(false);
 
   const tabs = [
@@ -131,40 +131,62 @@ export function Navbar({ activeTab, setActiveTab }) {
             </div>
           )}
 
+          {/* Evaluator Demo Mode Label */}
+          {demoMode && (
+            <div
+              title="Demo Mode active: 1-click evaluator role switcher enabled"
+              className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-purple-950/40 border border-purple-500/30 text-[10px] font-mono text-purple-300 font-semibold"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+              <span>Demo mode</span>
+            </div>
+          )}
+
           {/* Section 5.4: Role Badge & Quick Switcher Dropdown */}
           <div className="relative">
             <button
-              onClick={() => setShowRoleMenu((prev) => !prev)}
+              onClick={() => {
+                if (demoMode || user) setShowRoleMenu((prev) => !prev);
+              }}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold transition-all shadow-sm ${badge.color}`}
             >
               <Shield className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">{badge.label}</span>
               <span className="sm:hidden">{user?.role || 'Guest'}</span>
-              <ChevronDown className="w-3 h-3 opacity-70" />
+              {(demoMode || user) && <ChevronDown className="w-3 h-3 opacity-70" />}
             </button>
 
             {showRoleMenu && (
               <div className="absolute right-0 mt-2 w-64 rounded-xl bg-slate-950 border border-slate-800 shadow-2xl p-1.5 z-50 text-xs font-sans">
-                <div className="px-2.5 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800">
-                  Switch Demo Account
-                </div>
-                <div className="py-1 space-y-0.5">
-                  {DEMO_LOGINS.map((item) => (
-                    <button
-                      key={item.roleKey}
-                      onClick={() => {
-                        switchDemoRole(item.roleKey);
-                        setShowRoleMenu(false);
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-900 transition-colors flex items-center justify-between"
-                    >
-                      <span className="text-slate-200 font-medium">{item.label}</span>
-                      {user?.role === item.role && (
-                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                      )}
-                    </button>
-                  ))}
-                </div>
+                {demoMode ? (
+                  <>
+                    <div className="px-2.5 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
+                      <span>Switch Demo Account</span>
+                      <span className="text-purple-400 font-mono text-[9px]">DEMO ON</span>
+                    </div>
+                    <div className="py-1 space-y-0.5">
+                      {DEMO_LOGINS.map((item) => (
+                        <button
+                          key={item.roleKey}
+                          onClick={() => {
+                            switchDemoRole(item.roleKey);
+                            setShowRoleMenu(false);
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-900 transition-colors flex items-center justify-between"
+                        >
+                          <span className="text-slate-200 font-medium">{item.label}</span>
+                          {user?.role === item.role && (
+                            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="px-2.5 py-1.5 text-[10px] text-slate-400">
+                    Logged in as <span className="font-bold text-slate-200">{user?.email}</span>
+                  </div>
+                )}
                 {user && (
                   <div className="pt-1 border-t border-slate-800">
                     <button
@@ -178,6 +200,9 @@ export function Navbar({ activeTab, setActiveTab }) {
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+          </div>
               </div>
             )}
           </div>

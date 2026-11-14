@@ -10,4 +10,7 @@ export const config = {
   simulatorEnabled: process.env.SIMULATOR_ENABLED !== 'false',
   batchIntervalMs: parseInt(process.env.BATCH_INTERVAL_MS, 10) || 500,
   batchSize: parseInt(process.env.BATCH_SIZE, 10) || 200,
+  demoMode: process.env.DEMO_MODE ? process.env.DEMO_MODE === 'true' : process.env.NODE_ENV !== 'production',
+  stressTestKey: process.env.STRESS_TEST_KEY || 'blr_datasource_stress_test_key_2026',
+  producerKey: process.env.PRODUCER_KEY || 'blr_datasource_producer_key_2026',
 };

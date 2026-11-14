@@ -96,6 +96,67 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// 2b. Demo Login (Gated by DEMO_MODE setting, zero passwords exposed to browser)
+router.post('/demo-login', async (req, res) => {
+  if (!config.demoMode) {
+    return res.status(403).json({
+      success: false,
+      error: 'Demo login is disabled when DEMO_MODE is off.',
+    });
+  }
+
+  const { roleKey } = req.body;
+  if (!roleKey) {
+    return res.status(400).json({ success: false, error: 'Field "roleKey" is required' });
+  }
+
+  let query = {};
+  if (roleKey === 'admin') query = { role: 'admin' };
+  else if (roleKey === 'officer_south') query = { role: 'officer', assignedZoneId: 'south-bangalore' };
+  else if (roleKey === 'officer_junction') query = { role: 'officer', assignedJunctionId: 'JNC-BLR-001' };
+  else if (roleKey === 'ambulance') query = { role: 'ambulance' };
+  else if (roleKey === 'citizen') query = { role: 'citizen' };
+  else {
+    return res.status(400).json({ success: false, error: `Unknown roleKey: ${roleKey}` });
+  }
+
+  try {
+    const user = await User.findOne(query);
+    if (!user) {
+      return res.status(404).json({ success: false, error: `Demo account for roleKey "${roleKey}" not found` });
+    }
+
+    const token = jwt.sign(
+      {
+        id: user._id,
+        role: user.role,
+        assignedZoneId: user.assignedZoneId,
+        assignedJunctionId: user.assignedJunctionId,
+        vehicleId: user.vehicleId,
+      },
+      config.jwtSecret,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        assignedZoneId: user.assignedZoneId,
+        assignedJunctionId: user.assignedJunctionId,
+        vehicleId: user.vehicleId,
+        apiKey: user.apiKey,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 3. Current User Session Check
 router.get('/me', authenticate, async (req, res) => {
   if (!req.user) {

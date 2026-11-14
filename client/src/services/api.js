@@ -88,8 +88,11 @@ export const api = {
     }),
 
   // Auth
+  getConfig: () => fetchJson('/api/config'),
   login: (email, password) =>
     fetchJson('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  demoLogin: (roleKey) =>
+    fetchJson('/api/auth/demo-login', { method: 'POST', body: JSON.stringify({ roleKey }) }),
   register: (name, email, password) =>
     fetchJson('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password }) }),
   getMe: () => fetchJson('/api/auth/me'),

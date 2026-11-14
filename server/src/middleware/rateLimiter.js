@@ -1,3 +1,5 @@
+import { config } from '../config/config.js';
+
 const ipRequests = new Map();
 const sourceEvents = new Map(); // junctionId -> { count, resetTime }
 
@@ -57,7 +59,7 @@ export function sourceRateLimiter(options = {}) {
 
     // Whitelist stress-test API key with higher throughput allowance
     const apiKey = req.headers['x-api-key'];
-    const isStressKey = apiKey === 'blr_traffic_key_live_command_center_2026';
+    const isStressKey = apiKey && apiKey === config.stressTestKey;
     const limit = isStressKey ? maxEventsPerSec * 10 : maxEventsPerSec;
 
     const now = Date.now();

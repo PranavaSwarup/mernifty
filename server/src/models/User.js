@@ -22,7 +22,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['admin', 'officer', 'ambulance', 'citizen'],
+      enum: ['admin', 'officer', 'ambulance', 'citizen', 'source'],
       default: 'citizen',
     },
     assignedZoneId: {

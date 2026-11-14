@@ -12,6 +12,9 @@ import { baselineService } from '../src/services/baselineService.js';
 import mongoose from 'mongoose';
 import { seed24HourHistory } from '../src/utils/seedHistory.js';
 import { Telemetry } from '../src/models/Telemetry.js';
+import { User } from '../src/models/User.js';
+import { config } from '../src/config/config.js';
+import authRoutes from '../src/routes/authRoutes.js';
 
 test('1. Ingestion Buffer & Deduplication Logic', (t) => {
   const uniqueEventId = `TEST-EVT-${Date.now()}`;
@@ -377,6 +380,56 @@ test('13. 24-Hour Telemetry History Seeding on Time-Series Collection', async (t
     Telemetry.countDocuments = originalCountDocuments;
     Telemetry.bulkWrite = originalBulkWrite;
     Telemetry.deleteMany = originalDeleteMany;
+  }
+});
+
+test('14. Demo Login Gating & Zero Password Token Issuance', async (t) => {
+  // 1. With demoMode = false, demo-login must be rejected with 403
+  config.demoMode = false;
+
+  let resStatus = 0;
+  let resBody = null;
+  const mockRes = {
+    status: (code) => {
+      resStatus = code;
+      return mockRes;
+    },
+    json: (data) => {
+      resBody = data;
+      return mockRes;
+    },
+  };
+
+  const demoRoute = authRoutes.stack.find((layer) => layer.route?.path === '/demo-login');
+  const demoHandler = demoRoute.route.stack[0].handle;
+
+  await demoHandler({ body: { roleKey: 'admin' } }, mockRes);
+  assert.strictEqual(resStatus, 403, 'demo-login must return 403 when demoMode is off');
+
+  // 2. With demoMode = true, demo-login issues valid token without client providing passwords
+  config.demoMode = true;
+  const originalFindOne = User.findOne;
+  User.findOne = async (query) => {
+    return {
+      _id: '507f1f77bcf86cd799439011',
+      name: 'Admin User',
+      email: 'admin@metropulse.blr',
+      role: 'admin',
+      assignedZoneId: null,
+      assignedJunctionId: null,
+      vehicleId: null,
+      apiKey: 'test-admin-key',
+    };
+  };
+
+  try {
+    await demoHandler({ body: { roleKey: 'admin' } }, mockRes);
+    assert.strictEqual(resBody.success, true);
+    assert.ok(resBody.token, 'Must issue a signed JWT token');
+    assert.strictEqual(resBody.user.role, 'admin');
+  } finally {
+    User.findOne = originalFindOne;
+    config.demoMode = true; // reset
   }
 });
 

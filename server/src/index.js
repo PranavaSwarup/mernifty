@@ -65,6 +65,15 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
+// Public Configuration Endpoint
+app.get('/api/config', (req, res) => {
+  res.json({
+    success: true,
+    demoMode: config.demoMode,
+    environment: config.nodeEnv,
+  });
+});
+
 // Mount Routes
 app.use('/api/telemetry', telemetryRoutes);
 app.use('/api/devices', deviceRoutes);
