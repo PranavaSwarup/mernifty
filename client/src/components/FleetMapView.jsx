@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { MapPin, Navigation, Car, AlertTriangle, ShieldCheck, Activity, Sparkles, Layers, Eye, RefreshCw, Sun, Moon } from 'lucide-react';
+import { MapPin, Navigation, Car, AlertTriangle, ShieldCheck, Activity, Sparkles, Layers, Eye, RefreshCw, Sun, Moon, Play, Square, Siren } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
+import { api } from '../services/api';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -243,9 +244,9 @@ const ARTERIAL_CORRIDORS = [
     baseStatus: 'gridlock',
     baseQueue: 155,
     path: [
-      [12.9172, 77.6228], // Silk Board
-      [12.9260, 77.6762], // Bellandur EcoSpace
-      [12.9562, 77.7011], // Marathahalli
+      [12.9172, 77.6228],
+      [12.9260, 77.6762],
+      [12.9562, 77.7011],
     ],
   },
   {
@@ -256,10 +257,10 @@ const ARTERIAL_CORRIDORS = [
     baseStatus: 'gridlock',
     baseQueue: 165,
     path: [
-      [12.9562, 77.7011], // Marathahalli
-      [12.9982, 77.6695], // Tin Factory
-      [13.0358, 77.5970], // Hebbal
-      [13.0285, 77.5408], // Goraguntepalya
+      [12.9562, 77.7011],
+      [12.9982, 77.6695],
+      [13.0358, 77.5970],
+      [13.0285, 77.5408],
     ],
   },
   {
@@ -270,10 +271,10 @@ const ARTERIAL_CORRIDORS = [
     baseStatus: 'congested',
     baseQueue: 110,
     path: [
-      [12.9172, 77.6228], // Silk Board
-      [12.9345, 77.6265], // Sony World
-      [12.9372, 77.5985], // Dairy Circle
-      [12.9667, 77.6006], // Richmond Circle
+      [12.9172, 77.6228],
+      [12.9345, 77.6265],
+      [12.9372, 77.5985],
+      [12.9667, 77.6006],
     ],
   },
   {
@@ -284,9 +285,9 @@ const ARTERIAL_CORRIDORS = [
     baseStatus: 'healthy',
     baseQueue: 40,
     path: [
-      [13.0358, 77.5970], // Hebbal
-      [13.0076, 77.5835], // Mekhri Circle
-      [12.9634, 77.5855], // Town Hall
+      [13.0358, 77.5970],
+      [13.0076, 77.5835],
+      [12.9634, 77.5855],
     ],
   },
   {
@@ -297,14 +298,14 @@ const ARTERIAL_CORRIDORS = [
     baseStatus: 'congested',
     baseQueue: 115,
     path: [
-      [12.9180, 77.5970], // Jayadeva
-      [12.9372, 77.5985], // Dairy Circle
+      [12.9180, 77.5970],
+      [12.9372, 77.5985],
     ],
   },
 ];
 
 export function FleetMapView({ devices = [] }) {
-  const { latestByDevice } = useSocket();
+  const { latestByDevice, activeCorridorTrip, corridorGiveway, preemptedJunctions, joinRoom, leaveRoom } = useSocket();
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const tileLayerRef = useRef(null);
@@ -312,10 +313,24 @@ export function FleetMapView({ devices = [] }) {
   const circlesRef = useRef(new Map());
   const polylinesRef = useRef([]);
 
-  const [basemapStyle, setBasemapStyle] = useState('voyager'); // 'voyager' (colored) or 'dark' (stealth)
+  const ambulanceMarkerRef = useRef(null);
+  const corridorRouteLineRef = useRef(null);
+
+  const [basemapStyle, setBasemapStyle] = useState('voyager');
   const [showCorridors, setShowCorridors] = useState(true);
   const [showHalos, setShowHalos] = useState(true);
   const [filterZone, setFilterZone] = useState('all');
+  const [isStartingCorridor, setIsStartingCorridor] = useState(false);
+
+  // Subscribe to city and corridor rooms on mount
+  useEffect(() => {
+    joinRoom('city');
+    joinRoom('corridor');
+    return () => {
+      leaveRoom('city');
+      leaveRoom('corridor');
+    };
+  }, [joinRoom, leaveRoom]);
 
   // Filter for authentic Bangalore junctions only, fallback to 12 junctions
   const activeJunctions = useMemo(() => {
@@ -333,21 +348,20 @@ export function FleetMapView({ devices = [] }) {
 
   // Helper to extract live or default traffic data for a junction
   const getJunctionState = (junc) => {
-    const live = latestByDevice[junc.deviceId];
+    const live = latestByDevice[junc.deviceId || junc.junctionId];
     const loc = live?.location || junc.lastLocation || junc.location || { latitude: 12.9716, longitude: 77.5946 };
     const m = live?.metrics || live?.data || junc.lastMetrics || junc.lastData || {};
     const queue = m.maxQueueLengthM || junc.defaultQueue || 65;
     const speed = m.avgSpeedKmph || junc.defaultSpeed || 18;
     const status = live?.status || (queue > 140 ? 'gridlock' : queue > 80 ? 'congested' : junc.defaultStatus || 'healthy');
-    const stalled = Boolean(live?.data?.stalledVehicleDetected || m.stalledVehicleDetected || junc.stalledVehicleDetected);
-    const ambulance = Boolean(live?.data?.ambulanceDetected || m.ambulanceDetected || junc.ambulanceDetected);
+    const isPreempted = preemptedJunctions?.has(junc.deviceId || junc.junctionId) || m.adaptiveSignalMode === 'emergency-corridor';
     const approaches = live?.data?.approaches || junc.approaches || junc.baseApproaches || [];
     const vehicleMix = live?.data?.vehicleMix || junc.vehicleMix || { twoWheeler: 45, car: 35, bus: 14, truck: 6 };
 
-    return { loc, queue, speed, status, stalled, ambulance, approaches, vehicleMix };
+    return { loc, queue, speed, status, isPreempted, approaches, vehicleMix };
   };
 
-  // Initialize Leaflet Map centered on Bengaluru
+  // 1. Initialize Leaflet Map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
@@ -372,7 +386,6 @@ export function FleetMapView({ devices = [] }) {
     tileLayerRef.current = tileLayer;
     mapInstanceRef.current = map;
 
-    // Force Leaflet recalculation after DOM renders
     const timer = setTimeout(() => {
       map.invalidateSize();
     }, 200);
@@ -384,7 +397,7 @@ export function FleetMapView({ devices = [] }) {
     };
   }, []);
 
-  // Update Basemap Tiles when toggling between Voyager & Dark Matter
+  // Update Basemap Tiles
   useEffect(() => {
     if (!mapInstanceRef.current || !tileLayerRef.current) return;
     const cartoKey = import.meta.env.VITE_CARTO_API_KEY || 'cb1_58v3_1_04116f2e1f7c9a0bff6bff6f';
@@ -393,52 +406,49 @@ export function FleetMapView({ devices = [] }) {
     tileLayerRef.current.setUrl(newUrl);
   }, [basemapStyle]);
 
-  // Draw Arterial Corridors (Polylines with Google Maps-style traffic colors)
+  // 2. Draw Arterial Corridors
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    // Clear existing corridor layers
     polylinesRef.current.forEach((l) => map.removeLayer(l));
     polylinesRef.current = [];
 
     if (!showCorridors) return;
 
     for (const corr of ARTERIAL_CORRIDORS) {
-      // Determine corridor status from its connected junctions
       let maxQueue = corr.baseQueue || 50;
       let hasGridlock = corr.baseStatus === 'gridlock';
-      let hasAmbulance = false;
+      let hasPreemption = false;
 
       for (const juncId of corr.junctionIds) {
         const junc = activeJunctions.find((j) => j.deviceId === juncId || j.junctionId === juncId);
         if (junc) {
           const state = getJunctionState(junc);
           if (state.queue > maxQueue) maxQueue = state.queue;
-          if (state.queue > 140 || state.status === 'gridlock' || state.stalled) hasGridlock = true;
-          if (state.ambulance) hasAmbulance = true;
+          if (state.queue > 140 || state.status === 'gridlock') hasGridlock = true;
+          if (state.isPreempted) hasPreemption = true;
         }
       }
 
-      let corrColor = '#10B981'; // Flow Normal (Emerald Green)
+      let corrColor = '#10B981';
       let glowColor = 'rgba(16, 185, 129, 0.45)';
       let statusText = 'Normal Flow (Clear)';
 
-      if (hasAmbulance) {
-        corrColor = '#3B82F6'; // Emergency Ambulance Corridor (Blue)
+      if (hasPreemption) {
+        corrColor = '#3B82F6';
         glowColor = 'rgba(59, 130, 246, 0.7)';
         statusText = 'Emergency Ambulance Priority Active';
       } else if (hasGridlock || maxQueue > 140) {
-        corrColor = '#EF4444'; // Gridlock (Red)
+        corrColor = '#EF4444';
         glowColor = 'rgba(239, 68, 68, 0.6)';
         statusText = 'Gridlock / Critical Queuing';
       } else if (maxQueue > 80) {
-        corrColor = '#F59E0B'; // Heavy Queue (Amber)
+        corrColor = '#F59E0B';
         glowColor = 'rgba(245, 158, 11, 0.5)';
         statusText = 'Heavy Congestion / Slow Crawl';
       }
 
-      // Outer glow polyline for rich cyber contrast
       const glowLine = L.polyline(corr.path, {
         color: glowColor,
         weight: 12,
@@ -447,14 +457,13 @@ export function FleetMapView({ devices = [] }) {
         lineJoin: 'round',
       }).addTo(map);
 
-      // Inner crisp arterial polyline (Google Maps traffic style)
       const crispLine = L.polyline(corr.path, {
         color: corrColor,
         weight: 5,
         opacity: 0.95,
         lineCap: 'round',
         lineJoin: 'round',
-        dashArray: hasAmbulance ? '10, 8' : undefined,
+        dashArray: hasPreemption ? '10, 8' : undefined,
       }).addTo(map);
 
       crispLine.bindTooltip(
@@ -471,9 +480,73 @@ export function FleetMapView({ devices = [] }) {
 
       polylinesRef.current.push(glowLine, crispLine);
     }
-  }, [showCorridors, activeJunctions, latestByDevice]);
+  }, [showCorridors, activeJunctions, latestByDevice, preemptedJunctions]);
 
-  // Update or create Custom Traffic Markers & Pulsing Halos
+  // 3. Section 5.2: Draw Active Ambulance Green Corridor Trip on Map
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    // A. Draw or update Ambulance moving marker
+    if (activeCorridorTrip && activeCorridorTrip.latitude && activeCorridorTrip.longitude) {
+      const ambHtml = `
+        <div style="display: flex; flex-direction: column; align-items: center; cursor: pointer; filter: drop-shadow(0 0 12px #3B82F6);">
+          <div style="width: 38px; height: 38px; border-radius: 50%; background: #070B14; border: 3px solid #3B82F6; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 20px rgba(59, 130, 246, 0.9); animation: pulse 0.8s infinite;">
+            <span style="font-size: 18px;">🚑</span>
+          </div>
+          <div style="margin-top: 4px; white-space: nowrap; font-size: 10px; font-weight: 800; background: #020617; color: #60A5FA; padding: 2px 7px; border-radius: 6px; border: 1.5px solid #3B82F6; font-family: monospace; box-shadow: 0 4px 10px rgba(0,0,0,0.9);">
+            ${activeCorridorTrip.vehicleId || 'AMB-BLR-01'} • ${activeCorridorTrip.speedKmph || 48}km/h
+          </div>
+        </div>
+      `;
+
+      const ambIcon = L.divIcon({
+        html: ambHtml,
+        className: 'ambulance-active-marker',
+        iconSize: [120, 50],
+        iconAnchor: [60, 19],
+      });
+
+      if (!ambulanceMarkerRef.current) {
+        ambulanceMarkerRef.current = L.marker([activeCorridorTrip.latitude, activeCorridorTrip.longitude], {
+          icon: ambIcon,
+          zIndexOffset: 1000,
+        }).addTo(map);
+      } else {
+        ambulanceMarkerRef.current.setLatLng([activeCorridorTrip.latitude, activeCorridorTrip.longitude]);
+        ambulanceMarkerRef.current.setIcon(ambIcon);
+      }
+    } else if (ambulanceMarkerRef.current) {
+      map.removeLayer(ambulanceMarkerRef.current);
+      ambulanceMarkerRef.current = null;
+    }
+
+    // B. Draw or remove active corridor highlighted route line
+    if (activeCorridorTrip && activeCorridorTrip.routeJunctionIds && activeCorridorTrip.routeJunctionIds.length > 1) {
+      const routePoints = activeCorridorTrip.routeJunctionIds
+        .map((id) => BLR_JUNCTIONS_FALLBACK.find((j) => j.junctionId === id)?.location)
+        .filter(Boolean)
+        .map((loc) => [loc.latitude, loc.longitude]);
+
+      if (routePoints.length > 1) {
+        if (!corridorRouteLineRef.current) {
+          corridorRouteLineRef.current = L.polyline(routePoints, {
+            color: '#3B82F6',
+            weight: 7,
+            opacity: 0.85,
+            dashArray: '12, 8',
+          }).addTo(map);
+        } else {
+          corridorRouteLineRef.current.setLatLngs(routePoints);
+        }
+      }
+    } else if (corridorRouteLineRef.current) {
+      map.removeLayer(corridorRouteLineRef.current);
+      corridorRouteLineRef.current = null;
+    }
+  }, [activeCorridorTrip]);
+
+  // 4. Update Custom Traffic Markers & Pulsing Halos
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -484,28 +557,29 @@ export function FleetMapView({ devices = [] }) {
       if (!loc || !loc.latitude || !loc.longitude) continue;
 
       const queue = state.queue;
-      const speed = state.speed;
       const shortName = dev.name.split(' ')[0];
 
-      let markerColor = '#10B981'; // Green
+      let markerColor = '#10B981';
       let glowColor = 'rgba(16, 185, 129, 0.85)';
       let haloColor = '#10B981';
+      let badgeLabel = `${shortName} • ${queue}m`;
 
-      if (state.ambulance) {
-        markerColor = '#3B82F6'; // Blue
+      if (state.isPreempted) {
+        markerColor = '#3B82F6';
         glowColor = 'rgba(59, 130, 246, 0.95)';
         haloColor = '#3B82F6';
-      } else if (state.stalled || state.status === 'gridlock' || queue > 140) {
-        markerColor = '#EF4444'; // Red
+        badgeLabel = `🚨 ${shortName} • GREEN WAVE`;
+      } else if (state.status === 'gridlock' || queue > 140) {
+        markerColor = '#EF4444';
         glowColor = 'rgba(239, 68, 68, 0.95)';
         haloColor = '#EF4444';
       } else if (state.status === 'congested' || queue > 80) {
-        markerColor = '#F59E0B'; // Amber
+        markerColor = '#F59E0B';
         glowColor = 'rgba(245, 158, 11, 0.85)';
         haloColor = '#F59E0B';
       }
 
-      // 1. Draw or Update Congestion Halo (Pulsing circular impact radius)
+      // Halos
       let halo = circlesRef.current.get(dev.deviceId);
       if (showHalos) {
         if (!halo) {
@@ -513,31 +587,29 @@ export function FleetMapView({ devices = [] }) {
             radius: 400,
             color: haloColor,
             fillColor: haloColor,
-            fillOpacity: 0.22,
+            fillOpacity: state.isPreempted ? 0.35 : 0.22,
             weight: 2,
-            dashArray: '4, 4',
+            dashArray: state.isPreempted ? '8, 4' : '4, 4',
           }).addTo(map);
           circlesRef.current.set(dev.deviceId, halo);
         } else {
           halo.setLatLng([loc.latitude, loc.longitude]);
-          halo.setStyle({ color: haloColor, fillColor: haloColor });
+          halo.setStyle({ color: haloColor, fillColor: haloColor, fillOpacity: state.isPreempted ? 0.35 : 0.22 });
         }
       } else if (halo) {
         map.removeLayer(halo);
         circlesRef.current.delete(dev.deviceId);
       }
 
-      // 2. Custom Cyber Traffic Signal Node Marker with Live Meter Badge
-      const isUrgent = state.stalled || state.ambulance || queue > 140;
+      // Marker
+      const isUrgent = state.isPreempted || queue > 140;
       const iconHtml = `
         <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
-          <!-- Glowing Pulse Outer Ring -->
           <div style="width: 32px; height: 32px; border-radius: 50%; background: #070B14; border: 3px solid ${markerColor}; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 16px ${glowColor};">
             <div style="width: 12px; height: 12px; border-radius: 50%; background: ${markerColor}; ${isUrgent ? 'animation: ping 1.2s cubic-bezier(0, 0, 0.2, 1) infinite;' : ''}"></div>
           </div>
-          <!-- Road Label & Live Queue Meter -->
           <div style="margin-top: 4px; white-space: nowrap; font-size: 11px; font-weight: 800; background: #060911; color: #FFFFFF; padding: 2px 7px; border-radius: 6px; border: 1.5px solid ${markerColor}; font-family: monospace; box-shadow: 0 4px 10px rgba(0,0,0,0.85);">
-            ${shortName} • <span style="color: ${markerColor};">${queue}m</span>
+            <span style="color: ${markerColor};">${badgeLabel}</span>
           </div>
         </div>
       `;
@@ -545,8 +617,8 @@ export function FleetMapView({ devices = [] }) {
       const customIcon = L.divIcon({
         html: iconHtml,
         className: 'traffic-custom-marker',
-        iconSize: [90, 50],
-        iconAnchor: [45, 16],
+        iconSize: [110, 50],
+        iconAnchor: [55, 16],
       });
 
       let marker = markersRef.current.get(dev.deviceId);
@@ -559,7 +631,7 @@ export function FleetMapView({ devices = [] }) {
         marker.setIcon(customIcon);
       }
     }
-  }, [latestByDevice, activeJunctions, showHalos]);
+  }, [latestByDevice, activeJunctions, showHalos, preemptedJunctions]);
 
   // Center / FlyTo Junction
   const focusJunction = (dev) => {
@@ -573,6 +645,32 @@ export function FleetMapView({ devices = [] }) {
   const fitAllBengaluru = () => {
     if (mapInstanceRef.current) {
       mapInstanceRef.current.flyTo([12.9716, 77.6200], 12, { duration: 1.0 });
+    }
+  };
+
+  // Dispatch demo ambulance corridor
+  const handleDispatchAmbulance = async () => {
+    setIsStartingCorridor(true);
+    try {
+      await api.startCorridor({
+        vehicleId: 'AMB-BLR-01',
+        startJunctionId: 'JNC-BLR-008', // Hebbal Flyover
+        destinationJunctionId: 'JNC-BLR-004', // Jayadeva Hospital
+        durationSeconds: 70,
+      });
+    } catch (err) {
+      alert(`Could not start corridor: ${err.message}`);
+    } finally {
+      setIsStartingCorridor(false);
+    }
+  };
+
+  const handleCancelAmbulance = async () => {
+    if (!activeCorridorTrip?.tripId) return;
+    try {
+      await api.cancelCorridor(activeCorridorTrip.tripId);
+    } catch (err) {
+      alert(`Could not cancel corridor: ${err.message}`);
     }
   };
 
@@ -604,22 +702,40 @@ export function FleetMapView({ devices = [] }) {
 
         {/* View Controls & Toggles */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          {/* Basemap Toggle: Voyager (Colored Roads) vs Dark Matter */}
+          {/* Section 5.2: Demo Centrepiece Dispatch Ambulance Corridor Button */}
+          {!activeCorridorTrip ? (
+            <button
+              onClick={handleDispatchAmbulance}
+              disabled={isStartingCorridor}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-mono font-bold transition-all bg-blue-600/30 border-blue-500/60 text-blue-200 hover:bg-blue-600/40 shadow-lg shadow-blue-500/20 animate-pulse"
+              title="Launch Hackathon Demo Centrepiece: Hebbal to Jayadeva Green Corridor"
+            >
+              <Siren className="w-4 h-4 text-blue-400" />
+              <span>{isStartingCorridor ? 'Dispatching...' : '🚑 Send Ambulance (Hebbal ➔ Jayadeva)'}</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleCancelAmbulance}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-mono font-bold transition-all bg-rose-600/30 border-rose-500/60 text-rose-200 hover:bg-rose-600/40 shadow-lg shadow-rose-500/20"
+            >
+              <Square className="w-3.5 h-3.5 text-rose-400" />
+              <span>Cancel Trip ({activeCorridorTrip.progressPct || 0}%)</span>
+            </button>
+          )}
+
+          {/* Basemap Toggle */}
           <button
             onClick={() => setBasemapStyle((prev) => (prev === 'voyager' ? 'dark' : 'voyager'))}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-mono font-bold transition-all bg-indigo-500/20 border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/30"
-            title="Toggle between Voyager (Colored Roads) and Dark Matter"
           >
             {basemapStyle === 'voyager' ? <Sun className="w-3.5 h-3.5 text-amber-300" /> : <Moon className="w-3.5 h-3.5 text-indigo-300" />}
-            Basemap: {basemapStyle === 'voyager' ? 'Voyager (Color)' : 'Dark Matter'}
+            {basemapStyle === 'voyager' ? 'Voyager (Color)' : 'Dark Matter'}
           </button>
 
           <button
             onClick={() => setShowCorridors((prev) => !prev)}
             className={`px-3 py-1.5 rounded-lg border font-mono font-bold transition-all ${
-              showCorridors
-                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                : 'bg-slate-900 border-slate-800 text-slate-400'
+              showCorridors ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-slate-900 border-slate-800 text-slate-400'
             }`}
           >
             Corridors: {showCorridors ? 'ON' : 'OFF'}
@@ -628,9 +744,7 @@ export function FleetMapView({ devices = [] }) {
           <button
             onClick={() => setShowHalos((prev) => !prev)}
             className={`px-3 py-1.5 rounded-lg border font-mono font-bold transition-all ${
-              showHalos
-                ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300'
-                : 'bg-slate-900 border-slate-800 text-slate-400'
+              showHalos ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-slate-900 border-slate-800 text-slate-400'
             }`}
           >
             Halos: {showHalos ? 'ON' : 'OFF'}
@@ -645,9 +759,23 @@ export function FleetMapView({ devices = [] }) {
         </div>
       </div>
 
+      {/* Section 5.2: Give-Way Alert Banner for drivers/viewers */}
+      {corridorGiveway && (
+        <div className="rounded-xl border border-blue-500/60 bg-blue-950/60 p-3 flex items-center justify-between text-xs font-mono text-blue-200 shadow-xl animate-bounce">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🚨</span>
+            <span className="font-bold text-white uppercase tracking-wider">EMERGENCY GIVE WAY NOTICE:</span>
+            <span>{corridorGiveway.message}</span>
+          </div>
+          <span className="px-2 py-0.5 rounded bg-blue-500/30 border border-blue-400/50 text-blue-200 font-bold">
+            ETA ~{corridorGiveway.etaToNextSec || 15}s
+          </span>
+        </div>
+      )}
+
       {/* Main Map Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* Left Sidebar: Junction List with Real-Time Traffic Status */}
+        {/* Left Sidebar */}
         <div className="lg:col-span-1 rounded-2xl border border-slate-800 bg-[#0B101D] p-3 flex flex-col max-h-[660px] overflow-hidden shadow-xl">
           <div className="pb-2 mb-2 border-b border-slate-800 flex items-center justify-between">
             <span className="text-xs font-bold text-slate-200">Bengaluru Nodes</span>
@@ -661,9 +789,7 @@ export function FleetMapView({ devices = [] }) {
                 key={z}
                 onClick={() => setFilterZone(z)}
                 className={`flex-1 py-1 rounded text-center transition-colors ${
-                  filterZone === z
-                    ? 'bg-emerald-500/20 text-emerald-300 font-bold'
-                    : 'text-slate-400 hover:text-slate-200'
+                  filterZone === z ? 'bg-emerald-500/20 text-emerald-300 font-bold' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 {z === 'all' ? 'All' : z.replace('-bangalore', '')}
@@ -680,8 +806,8 @@ export function FleetMapView({ devices = [] }) {
               const isSelected = d.deviceId === selectedJunctionId;
 
               let dotColor = 'bg-emerald-400';
-              if (state.ambulance) dotColor = 'bg-blue-400 animate-ping';
-              else if (state.stalled || q > 140) dotColor = 'bg-rose-500 animate-pulse';
+              if (state.isPreempted) dotColor = 'bg-blue-400 animate-ping';
+              else if (q > 140) dotColor = 'bg-rose-500 animate-pulse';
               else if (q > 80) dotColor = 'bg-amber-400';
 
               return (
@@ -701,8 +827,8 @@ export function FleetMapView({ devices = [] }) {
                     <span className={`w-2.5 h-2.5 rounded-full ${dotColor}`} />
                   </div>
                   <div className="flex items-center justify-between mt-1 text-[10px] font-mono text-slate-400">
-                    <span className="text-cyan-400">
-                      {d.zoneName ? d.zoneName.replace(' Bengaluru Zone', '') : d.zoneId}
+                    <span className={state.isPreempted ? 'text-blue-300 font-bold' : 'text-cyan-400'}>
+                      {state.isPreempted ? '🚨 GREEN CORRIDOR' : (d.zoneName ? d.zoneName.replace(' Bengaluru Zone', '') : d.zoneId)}
                     </span>
                     <span className={`font-semibold ${q > 140 ? 'text-rose-400 font-bold' : q > 80 ? 'text-amber-400 font-bold' : 'text-emerald-400'}`}>
                       {q}m • {spd}km/h
@@ -719,7 +845,7 @@ export function FleetMapView({ devices = [] }) {
           <div className="rounded-2xl border border-slate-800 overflow-hidden relative shadow-2xl h-[490px] bg-[#070A10]">
             <div ref={mapContainerRef} className="w-full h-full z-0" />
 
-            {/* Google-Maps-Style Traffic Congestion Legend */}
+            {/* Traffic Congestion Legend */}
             <div className="absolute bottom-3 left-3 z-10 bg-slate-950/90 backdrop-blur-md p-2.5 rounded-xl border border-slate-800 text-[11px] font-mono flex flex-wrap items-center gap-3 shadow-2xl">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-emerald-400" />
@@ -748,14 +874,9 @@ export function FleetMapView({ devices = [] }) {
                   <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-400">
                     {selectedDev.zoneName || selectedDev.zoneId}
                   </span>
-                  {selectedState.ambulance && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/40 animate-pulse">
-                      AMBULANCE PREEMPTION
-                    </span>
-                  )}
-                  {selectedState.stalled && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
-                      STALLED VEHICLE
+                  {selectedState.isPreempted && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/40 animate-pulse font-bold">
+                      🚑 EMERGENCY GREEN CORRIDOR PREEMPTED
                     </span>
                   )}
                 </div>

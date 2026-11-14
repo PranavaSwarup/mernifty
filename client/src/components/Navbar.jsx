@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Activity,
   Radio,
@@ -13,18 +13,21 @@ import {
   VolumeX,
   Gauge,
   Navigation,
+  Shield,
+  UserCheck,
+  ChevronDown,
 } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, DEMO_LOGINS } from '../context/AuthContext';
 
 export function Navbar({ activeTab, setActiveTab }) {
-  const { isConnected, stats, isPaused, togglePause, clientLatency, soundEnabled, setSoundEnabled } = useSocket();
-  const { user } = useAuth();
+  const { isConnected, isPaused, togglePause, clientLatency, soundEnabled, setSoundEnabled, activeRooms, eventsPerSec } = useSocket();
+  const { user, switchDemoRole, logout } = useAuth();
+  const [showRoleMenu, setShowRoleMenu] = useState(false);
 
   const tabs = [
     { id: 'dashboard', label: 'Junction Operations', icon: Activity },
     { id: 'map', label: 'Bengaluru Traffic Map', icon: MapPin },
-    { id: 'topology', label: 'Central DC Topology', icon: Globe },
     { id: 'multiclient', label: 'Zonal Multi-Desk', icon: Users },
     { id: 'inspector', label: 'Camera Stream Tap', icon: Terminal },
     { id: 'historical', label: 'Congestion Analytics', icon: Database },
@@ -32,6 +35,19 @@ export function Navbar({ activeTab, setActiveTab }) {
     { id: 'benchmarks', label: 'Throughput Engine', icon: Gauge },
     { id: 'architecture', label: 'Architecture & Design', icon: BookOpen },
   ];
+
+  const getRoleBadge = () => {
+    if (!user) return { label: 'Public Citizen (Viewer)', color: 'bg-slate-800 text-slate-300 border-slate-700' };
+    if (user.role === 'admin') return { label: 'Admin (City Operations)', color: 'bg-rose-500/20 text-rose-300 border-rose-500/40' };
+    if (user.role === 'ambulance') return { label: `Ambulance (${user.vehicleId || 'AMB-BLR-01'})`, color: 'bg-blue-500/20 text-blue-300 border-blue-500/40' };
+    if (user.role === 'officer') {
+      const area = user.assignedJunctionId ? user.assignedJunctionId : user.assignedZoneId ? user.assignedZoneId.replace('-bangalore', '') : 'All BLR';
+      return { label: `Officer (${area})`, color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
+    }
+    return { label: 'Citizen (Logged In)', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' };
+  };
+
+  const badge = getRoleBadge();
 
   return (
     <header className="sticky top-0 z-50 bg-[#0B101D]/90 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-6 py-2.5">
@@ -79,8 +95,79 @@ export function Navbar({ activeTab, setActiveTab }) {
           })}
         </nav>
 
-        {/* Live Metrics & Controls */}
+        {/* Live Metrics, Room Indicators & Role Switcher */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Section 5.3: Active Socket.IO Rooms Pill */}
+          <div
+            title={`Active Socket.IO Rooms: ${activeRooms.join(', ')}`}
+            className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/40 border border-cyan-500/30 text-[11px] font-mono text-cyan-300"
+          >
+            <Radio className="w-3 h-3 text-cyan-400 animate-pulse" />
+            <span className="text-cyan-400/70 font-semibold">Rooms:</span>
+            <span className="font-bold max-w-[150px] truncate">{activeRooms.join(', ')}</span>
+          </div>
+
+          {/* Section 5.3: Client-side Received Rate Pill */}
+          <div
+            title="Real-time events received by this client window"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[11px] font-mono text-emerald-300"
+          >
+            <span className="text-emerald-400">⚡</span>
+            <span className="font-bold">{eventsPerSec}</span>
+            <span className="text-emerald-500/70 text-[10px]">evt/s</span>
+          </div>
+
+          {/* Section 5.4: Role Badge & Quick Switcher Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowRoleMenu((prev) => !prev)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold transition-all shadow-sm ${badge.color}`}
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{badge.label}</span>
+              <span className="sm:hidden">{user?.role || 'Guest'}</span>
+              <ChevronDown className="w-3 h-3 opacity-70" />
+            </button>
+
+            {showRoleMenu && (
+              <div className="absolute right-0 mt-2 w-64 rounded-xl bg-slate-950 border border-slate-800 shadow-2xl p-1.5 z-50 text-xs font-sans">
+                <div className="px-2.5 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                  Switch Demo Account
+                </div>
+                <div className="py-1 space-y-0.5">
+                  {DEMO_LOGINS.map((item) => (
+                    <button
+                      key={item.roleKey}
+                      onClick={() => {
+                        switchDemoRole(item.roleKey);
+                        setShowRoleMenu(false);
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-900 transition-colors flex items-center justify-between"
+                    >
+                      <span className="text-slate-200 font-medium">{item.label}</span>
+                      {user?.role === item.role && (
+                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {user && (
+                  <div className="pt-1 border-t border-slate-800">
+                    <button
+                      onClick={() => {
+                        logout();
+                        setShowRoleMenu(false);
+                      }}
+                      className="w-full text-left px-2.5 py-1 text-rose-400 hover:bg-rose-950/20 rounded-lg transition-colors text-[11px]"
+                    >
+                      Sign Out (Return to Anonymous Viewer)
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Audio Chime Toggle */}
           <button
             onClick={() => setSoundEnabled((prev) => !prev)}
@@ -94,11 +181,11 @@ export function Navbar({ activeTab, setActiveTab }) {
             {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
           </button>
 
-          {/* Pause / Resume Live Stream */}
+          {/* Pause / Resume */}
           <button
             onClick={togglePause}
             title={isPaused ? 'Resume live frame processing' : 'Pause live frame processing'}
-            className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-colors ${
+            className={`px-2 py-1 rounded-lg border text-xs font-bold transition-colors ${
               isPaused
                 ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
                 : 'bg-slate-800/60 border-slate-700/60 text-slate-300 hover:bg-slate-800'
@@ -106,17 +193,6 @@ export function Navbar({ activeTab, setActiveTab }) {
           >
             {isPaused ? 'PAUSED' : 'LIVE'}
           </button>
-
-          {/* WebSocket Latency Pill */}
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'
-              }`}
-            />
-            <span className="text-slate-400">RTT:</span>
-            <span className="text-emerald-400 font-bold">{clientLatency || 2}ms</span>
-          </div>
         </div>
       </div>
 

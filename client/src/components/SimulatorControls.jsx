@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, Zap, Flame, ShieldAlert, AlertCircle, Sparkles, Navigation, Bus, Truck, Car } from 'lucide-react';
+import { Play, Pause, Zap, Flame, Siren, Car, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { api } from '../services/api';
 import { useSocket } from '../context/SocketContext';
 
 export function SimulatorControls() {
-  const { stats } = useSocket();
+  const { stats, activeCorridorTrip } = useSocket();
   const [isRunning, setIsRunning] = useState(true);
   const [targetRate, setTargetRate] = useState(12);
-  const [chaosMessage, setChaosMessage] = useState('');
+  const [scenarioMessage, setScenarioMessage] = useState('');
   const [loadingAction, setLoadingAction] = useState(false);
 
-  // Sync simulator status on mount
   useEffect(() => {
     api.getSimulatorStatus()
       .then((res) => {
@@ -49,76 +48,61 @@ export function SimulatorControls() {
     }
   };
 
-  const handleInjectChaos = async (junctionId, metric, multiplier, durationSec, label, flags = {}) => {
+  // 1. Scenario: Ambulance Green Corridor (Section 5.2)
+  const handleStartAmbulanceCorridor = async () => {
     try {
-      setChaosMessage(`Injecting incident: ${label}...`);
-      const res = await api.fetchJson('/api/simulator/chaos', {
-        method: 'POST',
-        body: JSON.stringify({
-          junctionId,
-          deviceId: junctionId,
-          metric,
-          multiplier,
-          durationSec,
-          flags,
-        }),
+      setScenarioMessage('Dispatching Ambulance Corridor from Hebbal to Jayadeva...');
+      const res = await api.startCorridor({
+        vehicleId: 'AMB-BLR-01',
+        startJunctionId: 'JNC-BLR-008',
+        destinationJunctionId: 'JNC-BLR-004',
+        durationSeconds: 70,
       });
-      setChaosMessage(res.message);
-      setTimeout(() => setChaosMessage(''), 5000);
+      setScenarioMessage(`🚑 Corridor active! Trip ID: ${res.tripId}. Signals preempting along route.`);
+      setTimeout(() => setScenarioMessage(''), 8000);
     } catch (err) {
-      setChaosMessage(`Error: ${err.message}`);
+      setScenarioMessage(`Error: ${err.message}`);
     }
   };
 
-  const chaosScenarios = [
-    {
-      id: 'silk-board-surge',
-      name: 'Silk Board Peak-Hour Surge',
-      description: 'Simulates evening rush hour spillover from Hosur Rd flyover. Queue surges +160m with speeds dropping below 5 km/h.',
-      junctionId: 'JNC-BLR-001',
-      metric: 'queueLengthM',
-      multiplier: 2.6,
-      duration: 25,
-      flags: {},
-      accent: 'rose',
-    },
-    {
-      id: 'bellandur-stalled-bus',
-      name: 'Stalled BMTC Bus on Bellandur ORR',
-      description: 'Breakdown in lane 2 on Outer Ring Rd blocking throughway. Optical flow detects zero vehicle motion in feeder lanes.',
-      junctionId: 'JNC-BLR-005',
-      metric: 'stalledVehicle',
-      multiplier: 2.2,
-      duration: 30,
-      flags: { stalled: true },
-      accent: 'amber',
-    },
-    {
-      id: 'hebbal-ambulance-preemption',
-      name: 'Inbound Ambulance at Hebbal Flyover',
-      description: 'Emergency siren/camera transponder detection approaching from Airport Expressway. Triggers Green Corridor preemption.',
-      junctionId: 'JNC-BLR-008',
-      metric: 'ambulancePreemption',
-      multiplier: 1.0,
-      duration: 20,
-      flags: { ambulance: true },
-      accent: 'cyan',
-    },
-    {
-      id: 'tin-factory-choke',
-      name: 'Tin Factory Hanging Bridge Bottleneck',
-      description: 'Massive surge on Old Madras Rd causing critical multi-arterial gridlock across KR Puram interchange.',
-      junctionId: 'JNC-BLR-006',
-      metric: 'congestion',
-      multiplier: 2.4,
-      duration: 25,
-      flags: {},
-      accent: 'purple',
-    },
-  ];
+  const handleCancelCorridor = async () => {
+    if (!activeCorridorTrip?.tripId) return;
+    try {
+      await api.cancelCorridor(activeCorridorTrip.tripId);
+      setScenarioMessage('Ambulance corridor cancelled. Signals restored to dynamic AI.');
+      setTimeout(() => setScenarioMessage(''), 5000);
+    } catch (err) {
+      setScenarioMessage(`Error: ${err.message}`);
+    }
+  };
+
+  // 2. Scenario: Sudden Arterial Blockage (Section 5.6)
+  const handleSuddenBlockage = async () => {
+    try {
+      setScenarioMessage('Triggering Sudden Blockage on Silk Board Hosur Rd...');
+      const res = await api.injectChaos('JNC-BLR-001', 'gridlock', 2.8, 30);
+      setScenarioMessage(res.message || '⚠️ Sudden blockage active on Silk Board Hosur Rd! Speed collapsed, queue building.');
+      setTimeout(() => setScenarioMessage(''), 8000);
+    } catch (err) {
+      setScenarioMessage(`Error: ${err.message}`);
+    }
+  };
+
+  // 3. Scenario: Rush Hour Volume Surge (Section 5.6)
+  const handleRushHourSurge = async () => {
+    try {
+      setScenarioMessage('Triggering Peak Rush Hour Volume Surge across ORR IT Corridor...');
+      await api.injectChaos('JNC-BLR-005', 'volume', 2.2, 35);
+      await api.injectChaos('JNC-BLR-001', 'volume', 2.0, 35);
+      setScenarioMessage('🚗 Rush hour surge active: 2.2x volume injected across Bellandur EcoSpace and Silk Board.');
+      setTimeout(() => setScenarioMessage(''), 8000);
+    } catch (err) {
+      setScenarioMessage(`Error: ${err.message}`);
+    }
+  };
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-[#0B101D] p-5">
+    <div className="rounded-xl border border-slate-800 bg-[#0B101D] p-5 shadow-xl">
       {/* Title & Status */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
         <div className="flex items-center gap-3">
@@ -188,59 +172,111 @@ export function SimulatorControls() {
         </div>
       </div>
 
-      {/* Chaos & Incident Injection Scenarios */}
+      {/* Section 5.6: Named Demo Scenarios */}
       <div className="pt-4">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h4 className="font-bold text-xs uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+            <h4 className="font-bold text-xs uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
               <Flame className="w-4 h-4" />
-              <span>1-Click Live Incident Injection</span>
+              <span>Hackathon Evaluation Scenarios (1-Click Triggers)</span>
             </h4>
             <p className="text-[11px] text-slate-400">
-              Trigger real-world bottlenecks, stalled buses, or emergency priority preemption
+              Named scenarios matching the evaluation script and judge demonstrations
             </p>
           </div>
         </div>
 
-        {chaosMessage && (
-          <div className="mb-3 p-3 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-mono animate-fadeIn flex items-center gap-2">
-            <Sparkles className="w-4 h-4 flex-shrink-0" />
-            <span>{chaosMessage}</span>
+        {scenarioMessage && (
+          <div className="mb-3 p-3 rounded-xl bg-cyan-950/40 border border-cyan-500/40 text-cyan-200 text-xs font-mono animate-fadeIn flex items-center gap-2">
+            <span>✨</span>
+            <span>{scenarioMessage}</span>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {chaosScenarios.map((sc) => (
-            <div
-              key={sc.id}
-              className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/50 hover:bg-slate-900/80 transition-all flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between">
-                  <h5 className="font-bold text-xs text-slate-100">{sc.name}</h5>
-                  <span className="text-[10px] font-mono text-slate-400">{sc.junctionId}</span>
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                  {sc.description}
-                </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Scenario 1: Ambulance Green Corridor */}
+          <div className="p-4 rounded-xl border border-blue-500/30 bg-blue-950/20 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">Centrepiece Demo</span>
+                <span className="text-[10px] font-mono text-blue-300">Hebbal ➔ Jayadeva</span>
               </div>
-
-              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
-                <span className="text-[10px] font-mono text-slate-500">
-                  Duration: {sc.duration}s
-                </span>
-                <button
-                  onClick={() =>
-                    handleInjectChaos(sc.junctionId, sc.metric, sc.multiplier, sc.duration, sc.name, sc.flags)
-                  }
-                  className="px-3 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-bold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
-                >
-                  <Flame className="w-3.5 h-3.5" />
-                  <span>Trigger Incident</span>
-                </button>
-              </div>
+              <h5 className="font-bold text-sm text-white mt-1">Ambulance Green Corridor</h5>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Emergency vehicle traverses North to South zones across 6 junctions. Signals turn green ahead and restore behind.
+              </p>
             </div>
-          ))}
+
+            <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+              <span className="text-[10px] font-mono text-slate-400">Duration: ~70s</span>
+              {!activeCorridorTrip ? (
+                <button
+                  onClick={handleStartAmbulanceCorridor}
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition-colors flex items-center gap-1.5 shadow-md shadow-blue-500/30"
+                >
+                  <Siren className="w-3.5 h-3.5" />
+                  <span>Send Ambulance</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleCancelCorridor}
+                  className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-colors"
+                >
+                  <span>Cancel Trip</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Scenario 2: Sudden Arterial Blockage */}
+          <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-950/20 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400">Incident Detection</span>
+                <span className="text-[10px] font-mono text-rose-300">Silk Board (Hosur Rd)</span>
+              </div>
+              <h5 className="font-bold text-sm text-white mt-1">Sudden Arterial Blockage</h5>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Sudden breakdown collapses road speed to 4 km/h while signal is green. Raises alert with countdown for automatic remediation.
+              </p>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+              <span className="text-[10px] font-mono text-slate-400">Duration: 30s</span>
+              <button
+                onClick={handleSuddenBlockage}
+                className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-colors flex items-center gap-1.5 shadow-md shadow-rose-500/30"
+              >
+                <Flame className="w-3.5 h-3.5" />
+                <span>Trigger Blockage</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Scenario 3: Rush Hour Volume Surge */}
+          <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-950/20 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">Zone-wide Surge</span>
+                <span className="text-[10px] font-mono text-amber-300">ORR IT Corridor</span>
+              </div>
+              <h5 className="font-bold text-sm text-white mt-1">Rush Hour Volume Surge</h5>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                2.2x vehicle inflow surge injected across Bellandur EcoSpace and Silk Board, simulating evening tech corridor commute.
+              </p>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+              <span className="text-[10px] font-mono text-slate-400">Duration: 35s</span>
+              <button
+                onClick={handleRushHourSurge}
+                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs transition-colors flex items-center gap-1.5 shadow-md shadow-amber-500/30"
+              >
+                <Car className="w-3.5 h-3.5" />
+                <span>Trigger Surge</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
