@@ -170,3 +170,4 @@ export function CitizenReportModal({ isOpen, onClose, defaultJunctionId = null }
     </div>
   );
 }
+

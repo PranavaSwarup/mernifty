@@ -212,3 +212,4 @@ export const INITIAL_DEVICES = [
     vehicleMix: { twoWheeler: 0.60, car: 0.25, bus: 0.09, truck: 0.06 },
   },
 ];
+

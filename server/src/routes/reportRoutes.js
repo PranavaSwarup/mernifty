@@ -274,3 +274,4 @@ router.patch('/:reportId/dismiss', authenticate, requireRole(['admin', 'officer'
 });
 
 export default router;
+

@@ -16,3 +16,4 @@ const BaselineSchema = new mongoose.Schema(
 BaselineSchema.index({ junctionId: 1, hour: 1 }, { unique: true });
 
 export const Baseline = mongoose.model('Baseline', BaselineSchema);
+

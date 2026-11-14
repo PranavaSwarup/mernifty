@@ -111,3 +111,4 @@ router.get('/corridor/:tripId', async (req, res) => {
 });
 
 export default router;
+

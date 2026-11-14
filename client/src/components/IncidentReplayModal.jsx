@@ -305,3 +305,4 @@ export function IncidentReplayModal({ alertId, tripId, onClose }) {
     </div>
   );
 }
+

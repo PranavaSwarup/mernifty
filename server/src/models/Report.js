@@ -71,3 +71,4 @@ const reportSchema = new mongoose.Schema(
 reportSchema.index({ nearestJunctionId: 1, category: 1, timestamp: -1 });
 
 export const Report = mongoose.models.Report || mongoose.model('Report', reportSchema);
+

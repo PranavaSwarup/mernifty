@@ -54,3 +54,4 @@ const actionLogSchema = new mongoose.Schema(
 actionLogSchema.index({ junctionId: 1, timestamp: -1 });
 
 export const ActionLog = mongoose.models.ActionLog || mongoose.model('ActionLog', actionLogSchema);
+

@@ -38,3 +38,4 @@ router.get('/city/deviations', (req, res) => {
 });
 
 export default router;
+
