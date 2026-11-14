@@ -1,0 +1,341 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-14T22:24:00+05:30",
+  "title": "Design System: MetroPulse BLR Control Console",
+  "extensions": {
+    "colorMeta": {
+      "ground-dark": {
+        "role": "neutral",
+        "displayName": "Charcoal Control Ground (Dark)",
+        "canonical": "oklch(17.8% 0.012 256)",
+        "tonalRamp": ["#0a0c10", "#0e1116", "#141922", "#1b222e", "#262f3f", "#364257", "#64748b", "#cbd5e1"]
+      },
+      "surface-dark": {
+        "role": "neutral",
+        "displayName": "Console Surface (Dark)",
+        "canonical": "oklch(21.4% 0.017 259)",
+        "tonalRamp": ["#0b0e13", "#141922", "#1b222e", "#242d3d", "#323e54", "#475569", "#7c8ba1", "#dbe2ec"]
+      },
+      "inset-dark": {
+        "role": "neutral",
+        "displayName": "Inset Tile Surface (Dark)",
+        "canonical": "oklch(25.1% 0.021 259)",
+        "tonalRamp": ["#10141c", "#1b222e", "#252f3f", "#313e54", "#42526e", "#5b6e8c", "#94a3b8", "#e2e8f0"]
+      },
+      "border-subtle-dark": {
+        "role": "neutral",
+        "displayName": "Hairline Border Subtle (Dark)",
+        "canonical": "oklch(30.6% 0.024 259)",
+        "tonalRamp": ["#151a24", "#262f3f", "#364257", "#475569", "#64748b", "#8a98ad", "#b4c0d1", "#edf1f7"]
+      },
+      "border-strong-dark": {
+        "role": "neutral",
+        "displayName": "Hairline Border Strong (Dark)",
+        "canonical": "oklch(37.9% 0.032 259)",
+        "tonalRamp": ["#1a212d", "#2c3648", "#364257", "#4b5a75", "#687a99", "#8d9db8", "#bcc8d9", "#edf1f7"]
+      },
+      "text-primary-dark": {
+        "role": "neutral",
+        "displayName": "Primary Ink (Dark)",
+        "canonical": "oklch(95.6% 0.009 258)",
+        "tonalRamp": ["#1e2430", "#3b465c", "#5d6b85", "#8a98ad", "#b4c0d1", "#d4dde9", "#edf1f7", "#f8fafc"]
+      },
+      "text-secondary-dark": {
+        "role": "neutral",
+        "displayName": "Secondary Ink (Dark)",
+        "canonical": "oklch(79.8% 0.025 256)",
+        "tonalRamp": ["#1b222e", "#323e54", "#4f5e78", "#6d7f9c", "#8e9eb8", "#b4c0d1", "#d4dde9", "#f1f5f9"]
+      },
+      "text-muted-dark": {
+        "role": "neutral",
+        "displayName": "Muted Metadata Ink (Dark)",
+        "canonical": "oklch(67.2% 0.031 256)",
+        "tonalRamp": ["#171c26", "#2b3446", "#424f68", "#61718c", "#8a98ad", "#a7b4c7", "#cdd6e3", "#edf1f7"]
+      },
+      "accent-action": {
+        "role": "primary",
+        "displayName": "Action Cobalt",
+        "canonical": "oklch(54.6% 0.215 262.8)",
+        "tonalRamp": ["#172554", "#1e3a8a", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#dbeafe"]
+      },
+      "accent-ink-dark": {
+        "role": "primary",
+        "displayName": "Accent Ink (Dark)",
+        "canonical": "oklch(70.7% 0.148 254.6)",
+        "tonalRamp": ["#172554", "#1e40af", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe", "#eff6ff"]
+      },
+      "accent-ink-light": {
+        "role": "primary",
+        "displayName": "Accent Ink (Light)",
+        "canonical": "oklch(48.8% 0.217 264.4)",
+        "tonalRamp": ["#172554", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe", "#eff6ff"]
+      },
+      "accent-contrast": {
+        "role": "primary",
+        "displayName": "Accent Contrast White",
+        "canonical": "oklch(100% 0 0)",
+        "tonalRamp": ["#1e293b", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#f1f5f9", "#ffffff"]
+      },
+      "state-flow": {
+        "role": "semantic",
+        "displayName": "Flow Signal (Dark)",
+        "canonical": "oklch(69.6% 0.149 162.5)",
+        "tonalRamp": ["#022c22", "#064e3b", "#047857", "#059669", "#10b981", "#34d399", "#6ee7b7", "#d1fae5"]
+      },
+      "state-heavy": {
+        "role": "semantic",
+        "displayName": "Heavy Queue Signal (Dark)",
+        "canonical": "oklch(76.9% 0.165 70.1)",
+        "tonalRamp": ["#451a03", "#78350f", "#92400e", "#d97706", "#f59e0b", "#fbbf24", "#fcd34d", "#fef3c7"]
+      },
+      "state-gridlock": {
+        "role": "semantic",
+        "displayName": "Gridlock Signal (Dark)",
+        "canonical": "oklch(70.5% 0.187 47.6)",
+        "tonalRamp": ["#431407", "#7c2d12", "#9a3412", "#ea580c", "#f97316", "#fb923c", "#fdba74", "#ffedd5"]
+      },
+      "state-emergency": {
+        "role": "semantic",
+        "displayName": "Emergency Corridor Signal (Dark)",
+        "canonical": "oklch(75.3% 0.139 232.7)",
+        "tonalRamp": ["#082f49", "#0c4a6e", "#0369a1", "#0284c7", "#38bdf8", "#7dd3fc", "#bae6fd", "#e0f2fe"]
+      },
+      "ground-light": {
+        "role": "neutral",
+        "displayName": "Control Paper Ground (Light)",
+        "canonical": "oklch(96.3% 0.005 258)",
+        "tonalRamp": ["#1e293b", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#dfe5ee", "#f2f4f7", "#ffffff"]
+      },
+      "surface-light": {
+        "role": "neutral",
+        "displayName": "Console Surface (Light)",
+        "canonical": "oklch(100% 0 0)",
+        "tonalRamp": ["#1e293b", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#e2e8f0", "#f8fafc", "#ffffff"]
+      },
+      "inset-light": {
+        "role": "neutral",
+        "displayName": "Inset Tile Surface (Light)",
+        "canonical": "oklch(94.1% 0.009 258)",
+        "tonalRamp": ["#1e293b", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#dce2ec", "#e8ecf2", "#f8fafc"]
+      },
+      "border-subtle-light": {
+        "role": "neutral",
+        "displayName": "Hairline Border Subtle (Light)",
+        "canonical": "oklch(87.9% 0.016 258)",
+        "tonalRamp": ["#1e293b", "#374357", "#526075", "#7a889e", "#aebacb", "#d1d8e3", "#e8ecf2", "#f8fafc"]
+      },
+      "border-strong-light": {
+        "role": "neutral",
+        "displayName": "Hairline Border Strong (Light)",
+        "canonical": "oklch(78.6% 0.024 258)",
+        "tonalRamp": ["#1e293b", "#374357", "#526075", "#7a889e", "#9aa8bc", "#aebacb", "#d1d8e3", "#f2f4f7"]
+      },
+      "text-primary-light": {
+        "role": "neutral",
+        "displayName": "Primary Ink (Light)",
+        "canonical": "oklch(20.9% 0.023 259)",
+        "tonalRamp": ["#0b0f17", "#111824", "#243044", "#374357", "#526075", "#7b899e", "#aebacb", "#e8ecf2"]
+      },
+      "text-secondary-light": {
+        "role": "neutral",
+        "displayName": "Secondary Ink (Light)",
+        "canonical": "oklch(38.1% 0.036 258)",
+        "tonalRamp": ["#111824", "#232e40", "#374357", "#4f5d73", "#6b7990", "#919eb2", "#c3cddb", "#e8ecf2"]
+      },
+      "text-muted-light": {
+        "role": "neutral",
+        "displayName": "Muted Metadata Ink (Light)",
+        "canonical": "oklch(48.6% 0.037 258)",
+        "tonalRamp": ["#111824", "#283345", "#3f4c61", "#526075", "#707e94", "#9aa7bb", "#ccd4e0", "#eef2f6"]
+      },
+      "state-flow-light": {
+        "role": "semantic",
+        "displayName": "Flow Signal (Light)",
+        "canonical": "oklch(50.8% 0.118 165.6)",
+        "tonalRamp": ["#022c22", "#064e3b", "#047857", "#059669", "#10b981", "#34d399", "#6ee7b7", "#d1fae5"]
+      },
+      "state-heavy-light": {
+        "role": "semantic",
+        "displayName": "Heavy Queue Signal (Light)",
+        "canonical": "oklch(47.3% 0.125 65.8)",
+        "tonalRamp": ["#451a03", "#78350f", "#92400e", "#b45309", "#d97706", "#f59e0b", "#fcd34d", "#fef3c7"]
+      },
+      "state-gridlock-light": {
+        "role": "semantic",
+        "displayName": "Gridlock Signal (Light)",
+        "canonical": "oklch(47.0% 0.145 45.4)",
+        "tonalRamp": ["#431407", "#7c2d12", "#9a3412", "#c2410c", "#ea580c", "#f97316", "#fdba74", "#ffedd5"]
+      },
+      "state-emergency-light": {
+        "role": "semantic",
+        "displayName": "Emergency Corridor Signal (Light)",
+        "canonical": "oklch(50.0% 0.134 242.7)",
+        "tonalRamp": ["#082f49", "#0c4a6e", "#0369a1", "#0284c7", "#0ea5e9", "#38bdf8", "#7dd3fc", "#e0f2fe"]
+      }
+    },
+    "typographyMeta": {
+      "workspace-title": {
+        "displayName": "Workspace Title",
+        "purpose": "Top-level workspace headings and junction detail drawer titles."
+      },
+      "section-title": {
+        "displayName": "Section Title",
+        "purpose": "Sub-workspace cards including independent Desk subscription panes."
+      },
+      "panel-heading": {
+        "displayName": "Panel Heading",
+        "purpose": "Compact 12px bold section titles inside console panels and tabs."
+      },
+      "body": {
+        "displayName": "Operator Body",
+        "purpose": "Diagnostic explanations, copilot evidence details, and input labels."
+      },
+      "telemetry-kpi": {
+        "displayName": "Telemetry KPI",
+        "purpose": "Tabular-numeral live rates, vehicle delays, and byte counters."
+      },
+      "telemetry-label": {
+        "displayName": "Telemetry Micro Label",
+        "purpose": "Wire tuple tags, axis units, trace ruler ticks, and status pills."
+      }
+    },
+    "shadows": [
+      {
+        "name": "leaflet-popup",
+        "value": "0 4px 16px rgba(0, 0, 0, 0.25)",
+        "purpose": "Floating Leaflet map click popups only; all resting cards are flat."
+      },
+      {
+        "name": "leaflet-tooltip",
+        "value": "0 4px 12px rgba(0, 0, 0, 0.2)",
+        "purpose": "Hover tooltips over Bengaluru junction markers and arterial links."
+      }
+    ],
+    "motion": [
+      {
+        "name": "color-transition",
+        "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Hover border and button state shifts; suppressed when prefers-reduced-motion: reduce."
+      },
+      {
+        "name": "reduced-motion-guard",
+        "value": "0.01ms",
+        "purpose": "Global animation/transition clamp active under @media (prefers-reduced-motion: reduce)."
+      }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "390px" },
+      { "name": "sm", "value": "640px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "max-shell", "value": "1920px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "High-emphasis action for applying MPC runbooks, launching benchmarks, or toggling simulation state.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Apply runbook</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 6px 12px; border-radius: 4px; border: 1px solid var(--accent, #2563eb); background: var(--accent, #2563eb); color: var(--accent-contrast, #ffffff); font-family: 'Public Sans', system-ui, sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 150ms ease; } .ds-btn-primary:hover { opacity: 0.92; } .ds-btn-primary:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Control Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Quiet inset button used in header controls, zone filters, and signal controller pickers.",
+      "html": "<button class=\"ds-btn-secondary\" type=\"button\">Re-center</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border-subtle, #262f3f); background: var(--bg-inset, #1b222e); color: var(--text-primary, #edf1f7); font-family: 'Public Sans', system-ui, sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; transition: border-color 150ms ease; } .ds-btn-secondary:hover { border-color: var(--border-strong, #364257); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }"
+    },
+    {
+      "name": "Telemetry Select / Input",
+      "kind": "input",
+      "refersTo": "input-control",
+      "description": "Compact bounded field or picker that avoids mobile 390px horizontal expansion.",
+      "html": "<select class=\"ds-select\" aria-label=\"Target junction\"><option>J04 Silk Board</option></select>",
+      "css": ".ds-select { max-width: 100%; min-width: 0; min-height: 32px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-subtle, #262f3f); background: var(--bg-inset, #1b222e); color: var(--text-primary, #edf1f7); font-family: 'Public Sans', system-ui, sans-serif; font-size: 12px; overflow: hidden; text-overflow: ellipsis; } .ds-select:hover { border-color: var(--border-strong, #364257); } .ds-select:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }"
+    },
+    {
+      "name": "Workspace Tab Navigation",
+      "kind": "nav",
+      "refersTo": "nav-bar",
+      "description": "Four-workspace top navigation tablist with keyboard arrow support and clear active hairline underline.",
+      "html": "<nav class=\"ds-nav\" role=\"tablist\" aria-label=\"Workspaces\"><button class=\"ds-tab ds-tab-active\" role=\"tab\" aria-selected=\"true\">Network</button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\">Junction</button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\">Desks</button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\">Engineering</button></nav>",
+      "css": ".ds-nav { display: inline-flex; align-items: center; gap: 4px; height: 52px; padding: 0 12px; background: var(--bg-surface, #141922); border-bottom: 1px solid var(--border-subtle, #262f3f); } .ds-tab { position: relative; height: 32px; padding: 0 10px; border-radius: 4px; border: 1px solid transparent; background: transparent; color: var(--text-secondary, #b4c0d1); font-family: 'Public Sans', system-ui, sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; } .ds-tab:hover { color: var(--text-primary, #edf1f7); background: var(--bg-inset, #1b222e); } .ds-tab-active { color: var(--text-primary, #edf1f7); background: var(--accent-tint, rgba(59,130,246,0.14)); border-color: var(--accent, #2563eb); font-weight: 600; } .ds-tab:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }"
+    },
+    {
+      "name": "Semantic Status Pill",
+      "kind": "chip",
+      "refersTo": "status-chip",
+      "description": "Dual-encoded traffic health chip pairing color state with glyph shape and explicit state word.",
+      "html": "<span class=\"ds-pill\"><svg width=\"8\" height=\"8\" viewBox=\"0 0 8 8\" aria-hidden=\"true\"><circle cx=\"4\" cy=\"4\" r=\"3.5\" fill=\"currentColor\"/></svg>Flow</span>",
+      "css": ".ds-pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 9999px; border: 1px solid rgba(16, 185, 129, 0.35); background: rgba(16, 185, 129, 0.12); color: var(--state-flow, #10b981); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; font-weight: 500; }"
+    },
+    {
+      "name": "Console Surface Panel",
+      "kind": "card",
+      "refersTo": "panel-surface",
+      "description": "Flat 1px hairline-bordered container for KPI groups, counterfactual charts, and benchmark reports.",
+      "html": "<section class=\"ds-panel\"><div class=\"ds-panel-title\">Counterfactual Twin</div><div class=\"ds-panel-metric\">14.8 veh·h</div></section>",
+      "css": ".ds-panel { padding: 14px; border-radius: 8px; border: 1px solid var(--border-subtle, #262f3f); background: var(--bg-surface, #141922); color: var(--text-primary, #edf1f7); } .ds-panel-title { font-family: 'Public Sans', system-ui, sans-serif; font-size: 12px; font-weight: 600; color: var(--text-primary, #edf1f7); } .ds-panel-metric { margin-top: 6px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600; color: var(--state-flow, #10b981); }"
+    },
+    {
+      "name": "Junction Signal Glyph Tile",
+      "kind": "custom",
+      "refersTo": "panel-inset",
+      "description": "Inset telemetry tile pairing an SVG phase ring glyph with monospace throughput and queue figures.",
+      "html": "<div class=\"ds-glyph-tile\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\" fill=\"none\" stroke=\"#f59e0b\" stroke-width=\"2.5\"/><circle cx=\"12\" cy=\"12\" r=\"4\" fill=\"#10b981\"/></svg><div><div class=\"ds-glyph-name\">Silk Board</div><div class=\"ds-glyph-meta\">MaxPressure · 11/12 rollouts</div></div></div>",
+      "css": ".ds-glyph-tile { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 6px; border: 1px solid var(--border-subtle, #262f3f); background: var(--bg-inset, #1b222e); } .ds-glyph-name { font-family: 'Public Sans', system-ui, sans-serif; font-size: 12px; font-weight: 600; color: var(--text-primary, #edf1f7); } .ds-glyph-meta { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 11px; color: var(--text-muted, #8a98ad); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Calibrated Municipal Dispatch Instrument",
+    "overview": "MetroPulse BLR is designed as a dense, quiet transport operations console and engineering telemetry instrument rather than a neon cyberpunk dashboard or marketing visualization. Every panel separates cleanly on a dark matte charcoal ground (with full light-theme parity for daylight control rooms) using 1px hairline borders, crisp sentence-case headings, and tabular monospace telemetry aligned for rapid scanning across twelve Bengaluru junctions.\n\nHierarchy comes from spatial grouping, disciplined weight steps, and restrained semantic state indicators rather than blur glass, gradient fills, drop shadows, or oversized vanity metrics. Visual direction choices and domain terminology (MetroPulse BLR, four-workspace segmentation, and physics/counterfactual framing) were synthesized directly from PRODUCT.md, T08-ui-redesign.md, and the codebase in an unattended session without an interactive interview step.",
+    "keyCharacteristics": [
+      "Dark charcoal control-room ground paired with high-contrast daylight paper parity via semantic CSS custom properties.",
+      "One functional cobalt interactive accent (accent-action / accent-ink-*) strictly reserved for selection, active workspaces, focus outlines, and direct operator controls.",
+      "Dual-coded traffic health semantics (state-flow, state-heavy, state-gridlock, state-emergency) paired with text labels and SVG glyphs so color is never the sole carrier of meaning.",
+      "Strict empirical restraint: persistent Simulated (physics model) context, discrete look-ahead rollout fractions (improvedRollouts/K), and zero decorative numerals."
+    ],
+    "rules": [
+      {
+        "name": "The Functional Chroma Rule",
+        "body": "Never apply saturated color fills to entire workspace backgrounds or card bodies; chromatic signal stays confined to thin strokes, status pills, map glyphs, and active controls.",
+        "section": "colors"
+      },
+      {
+        "name": "The Dual-Signal State Rule",
+        "body": "Every traffic severity color (state-flow, state-heavy, state-gridlock, state-emergency) must be accompanied by an explicit status word, glyph shape, or stroke dash pattern so color-blind operators perceive state identically.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Lock Rule",
+        "body": "All updating telemetry values, clock timestamps, countdown timers, byte sizes, and benchmark tables must use .tabular-nums (JetBrains Mono) so streaming updates never shift column widths.",
+        "section": "typography"
+      },
+      {
+        "name": "The Quiet Scale Rule",
+        "body": "Keep interface chrome compact (workspace-title maxes at 1rem); establish hierarchy through weight, surface inset, and alignment instead of oversized marketing headers.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "Resting cards, drawers, tables, and navigation bars carry zero box-shadow; structural separation comes solely from .console-panel and .console-inset 1px borders and surface luminance steps.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do enforce .tabular-nums (JetBrains Mono) on every dynamically updating rate, byte size, countdown, and latency percentile.",
+      "Do label simulation provenance (Simulated (physics model)), paired baseline attribution (vs Webster-tuned fixed-time plan, same simulated arrivals), and discrete K-rollout confidence ratios (improvedRollouts/K + 90% interval) directly adjacent to metrics.",
+      "Do honor prefers-reduced-motion: reduce globally and keep 10 Hz telemetry updates isolated behind useSyncExternalStore hooks (useSocketStats, useJunctionLive, useRecentFrames).",
+      "Do disable and explain role-restricted actions client-side using useAuth() zone/role checks matching backend JWT enforcement."
+    ],
+    "donts": [
+      "Don't invent literal numbers, fake accuracy percentages, or synthetic placeholder nodes anywhere in JSX.",
+      "Don't use frosted glassmorphism, neon glow shadows, animated pulse rings on idle UI, or multi-stop gradient card backgrounds.",
+      "Don't omit min-w-0 on grid/flex children wrapping <select> elements, tables, or long trace IDs at mobile widths.",
+      "Don't suppress focus indicators (outline: none / focus:outline-none) without restoring a compliant visible ring."
+    ]
+  }
+}

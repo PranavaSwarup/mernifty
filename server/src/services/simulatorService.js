@@ -658,6 +658,8 @@ class SimulatorService {
         controller: ctrl.name,
         emergencyMode: this.emergencyModeJunctions.has(jId),
         describe: typeof ctrl.describe === 'function' ? ctrl.describe() : { name: ctrl.name },
+        approaches: jSnap.approaches,
+        vehicleMix: jSnap.vehicleMix,
         control: jSnap.control,
         kpi: jSnap.kpi,
         congestionScore: jSnap.congestionScore,
@@ -692,6 +694,15 @@ class SimulatorService {
           waitingAtRedSec: e.waitingAtRedSec,
         })),
       junctions,
+      corridors: (this.network.links || []).map((l) => ({
+        id: l.id,
+        corridor: l.corridor,
+        fromJunction: l.fromJunction,
+        toJunction: l.toJunction,
+        fromApproachIdx: l.fromApproachIdx,
+        toApproachIdx: l.toApproachIdx,
+        lengthKm: Number((l.lengthKm || 0).toFixed(2)),
+      })),
       supervisoryPolicy: this.studyPolicy,
     };
   }

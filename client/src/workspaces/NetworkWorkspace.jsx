@@ -1,0 +1,865 @@
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import {
+  Crosshair,
+  CloudRain,
+  Sun,
+  Siren,
+  Clock,
+  CheckCircle2,
+  Trash2,
+  ChevronRight,
+} from 'lucide-react';
+import { useSocket } from '../context/SocketContext';
+import { api } from '../services/api';
+import {
+  ZONE_LIST,
+  zoneLabel,
+  controllerLabel,
+  classifyJunctionStatus,
+  useTheme,
+  fmtNum,
+  fmtInt,
+  fmtSigned,
+  fmtClockTime,
+} from '../utils/semantics';
+import { StatusGlyph, StatusPill } from '../components/StatusPill';
+import { JunctionDetailView } from '../components/JunctionDetailView';
+
+const BENGALURU_CENTER = [12.942, 77.630];
+const DEFAULT_ZOOM = 12;
+const BENGALURU_BOUNDS = [
+  [12.845, 77.565],
+  [13.020, 77.705],
+];
+
+const METRIC_KEY_LABELS = {
+  avgSpeedKmph: 'Avg Speed (km/h)',
+  maxQueueLengthM: 'Max Queue (m)',
+  degreeOfSaturation: 'Saturation (v/c)',
+  congestionScore: 'Congestion Score',
+  totalFlowVehiclesPerMin: 'Total Flow (veh/m)',
+  stalledVehicle: 'Stalled Vehicle',
+  ambulancePreemption: 'Emergency Responder',
+};
+
+function humanizeAlertText(text) {
+  if (!text) return '';
+  let out = String(text);
+  for (const [k, label] of Object.entries(METRIC_KEY_LABELS)) {
+    out = out.replace(new RegExp(`\\b${k}\\b`, 'g'), label);
+  }
+  return out;
+}
+
+function buildMarkerSvg(statusInfo, isSelected, isDark) {
+  const discFill = isDark ? '#0e1116' : '#ffffff';
+  const stroke = isSelected ? (isDark ? '#ffffff' : '#1d4ed8') : statusInfo.ringHex;
+  const strokeW = isSelected ? 2.5 : 1.75;
+  let innerGlyph = `<circle cx="14" cy="14" r="4" fill="${statusInfo.hex}" />`;
+  if (statusInfo.shape === 'triangle') {
+    innerGlyph = `<polygon points="14,9 19,18 9,18" fill="${statusInfo.hex}" />`;
+  } else if (statusInfo.shape === 'octagon') {
+    innerGlyph = `<polygon points="11.5,9 16.5,9 19,11.5 19,16.5 16.5,19 11.5,19 9,16.5 9,11.5" fill="${statusInfo.hex}" />`;
+  } else if (statusInfo.shape === 'cross') {
+    innerGlyph = `<path d="M12.5 9h3v3.5H19v3h-3.5V19h-3v-3.5H9v-3h3.5z" fill="${statusInfo.hex}" />`;
+  }
+
+  return `
+    <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="14" cy="14" r="11" fill="${discFill}" fill-opacity="0.92" stroke="${stroke}" stroke-width="${strokeW}" />
+      ${innerGlyph}
+    </svg>
+  `;
+}
+
+function DualLineSparkline({ series, isDark }) {
+  if (!series || series.length < 2) {
+    return (
+      <div className="h-16 flex items-center justify-center text-[11px] text-ink-muted console-inset">
+        Collecting twin samples for trajectory...
+      </div>
+    );
+  }
+
+  const width = 320;
+  const height = 64;
+  const padX = 4;
+  const padY = 6;
+  const vals = series.flatMap((p) => [p.liveAvg, p.baseAvg]);
+  const minV = Math.min(...vals);
+  const maxV = Math.max(...vals);
+  const span = Math.max(0.5, maxV - minV);
+
+  const toX = (idx) => padX + (idx / Math.max(1, series.length - 1)) * (width - padX * 2);
+  const toY = (v) => padY + (1 - (v - minV) / span) * (height - padY * 2);
+
+  const livePts = series.map((p, i) => `${toX(i).toFixed(1)},${toY(p.liveAvg).toFixed(1)}`).join(' ');
+  const basePts = series.map((p, i) => `${toX(i).toFixed(1)},${toY(p.baseAvg).toFixed(1)}`).join(' ');
+
+  const liveStroke = isDark ? '#60a5fa' : '#1d4ed8';
+  const baseStroke = isDark ? '#94a3b8' : '#475569';
+
+  return (
+    <div className="console-inset p-2">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full h-14 overflow-visible"
+        role="img"
+        aria-label="Counterfactual delay comparison trend: adaptive vs Webster fixed-time baseline"
+      >
+        <polyline
+          fill="none"
+          stroke={baseStroke}
+          strokeWidth="2"
+          strokeDasharray="5 3"
+          points={basePts}
+        />
+        <polyline
+          fill="none"
+          stroke={liveStroke}
+          strokeWidth="2"
+          points={livePts}
+        />
+      </svg>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-[10px] text-ink-muted">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-3 h-0.5 bg-accent inline-block" />
+            Adaptive live
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-3 h-0.5 border-t-2 border-dashed border-ink-secondary inline-block" />
+            Fixed-TOD base
+          </span>
+        </div>
+        <span className="font-mono tabular-nums text-[9.5px] text-ink-muted">
+          {fmtNum(minV, 1)}–{fmtNum(maxV, 1)} s/veh
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export function NetworkWorkspace({
+  devices,
+  selectedZone,
+  onZoneChange,
+  selectedJunctionId,
+  onOpenJunction,
+  onCloseJunction,
+}) {
+  const { latestByDevice, counterfactual, alerts, setAlerts, stats } = useSocket();
+  const { isDark } = useTheme();
+
+  const [simState, setSimState] = useState(null);
+  const [cfSnapshot, setCfSnapshot] = useState(null);
+  const [cfHistory, setCfHistory] = useState([]);
+  const [alertFilter, setAlertFilter] = useState('all');
+  const [alertError, setAlertError] = useState('');
+  const [resolvingId, setResolvingId] = useState(null);
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
+  const [isDesktopViewport, setIsDesktopViewport] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+  );
+
+  useEffect(() => {
+    const onResize = () => setIsDesktopViewport(window.innerWidth >= 1024);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const mapContainerRef = useRef(null);
+  const mapRef = useRef(null);
+  const tileLayerRef = useRef(null);
+  const refLayerRef = useRef(null);
+  const linkLayerRef = useRef(null);
+  const markerLayerRef = useRef(null);
+  const emergencyLayerRef = useRef(null);
+
+  // Sync /api/sim/state + initial /api/sim/counterfactual periodically
+  const fetchSimOverview = useCallback(async () => {
+    try {
+      const [sRes, cRes] = await Promise.all([
+        api.getSimState().catch(() => null),
+        api.getCounterfactual().catch(() => null),
+      ]);
+      if (sRes?.junctions) setSimState(sRes);
+      if (cRes && cRes.live && cRes.baseline) {
+        setCfSnapshot(cRes);
+      }
+    } catch {
+      // Transient polling errors are safe to ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSimOverview();
+    const t = setInterval(fetchSimOverview, 3000);
+    return () => clearInterval(t);
+  }, [fetchSimOverview]);
+
+  const activeCf = counterfactual?.live && counterfactual?.baseline ? counterfactual : cfSnapshot;
+
+  // Record sparkline history as new cf updates arrive (monotonically keyed by elapsedSec)
+  useEffect(() => {
+    if (!activeCf?.live || !activeCf?.baseline) return;
+    const elapsed = Number(activeCf.elapsedSec) || 0;
+    const liveAvg = Number(activeCf.live.avgDelayPerVehSec);
+    const baseAvg = Number(activeCf.baseline.avgDelayPerVehSec);
+    if (!Number.isFinite(liveAvg) || !Number.isFinite(baseAvg)) return;
+
+    setCfHistory((prev) => {
+      if (prev.length > 0 && prev[prev.length - 1].elapsed === elapsed) {
+        return prev;
+      }
+      return [...prev.slice(-39), { elapsed, liveAvg, baseAvg }];
+    });
+  }, [activeCf]);
+
+  // Unified junction list combining devices + /api/sim/state + real-time socket frames
+  const mergedJunctions = useMemo(() => {
+    const byId = new Map();
+    for (const d of devices || []) {
+      const jId = d.junctionId || d.deviceId;
+      if (jId) byId.set(jId, { ...d, junctionId: jId, deviceId: jId });
+    }
+    for (const sj of simState?.junctions || []) {
+      const prev = byId.get(sj.junctionId) || {};
+      byId.set(sj.junctionId, { ...prev, ...sj, deviceId: sj.junctionId });
+    }
+    for (const [jId, live] of Object.entries(latestByDevice || {})) {
+      const prev = byId.get(jId) || {};
+      byId.set(jId, {
+        ...prev,
+        ...live,
+        junctionId: jId,
+        deviceId: jId,
+        name: live.junctionName || prev.name || jId,
+        location: live.location || prev.location,
+        zoneId: live.zoneId || prev.zoneId,
+        metrics: live.metrics || prev.metrics,
+        data: { ...(prev.data || {}), ...(live.data || {}) },
+        describe: prev.describe,
+        controller: live.data?.control?.controller || prev.controller,
+      });
+    }
+    return Array.from(byId.values());
+  }, [devices, simState, latestByDevice]);
+
+  const visibleJunctions = useMemo(() => {
+    if (!selectedZone || selectedZone === 'all') return mergedJunctions;
+    return mergedJunctions.filter((j) => j.zoneId === selectedZone);
+  }, [mergedJunctions, selectedZone]);
+
+  // Initialize Leaflet map instance once
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+
+    const map = L.map(mapContainerRef.current, {
+      center: BENGALURU_CENTER,
+      zoom: DEFAULT_ZOOM,
+      zoomControl: true,
+      preferCanvas: false,
+    });
+    map.fitBounds(BENGALURU_BOUNDS, { padding: [18, 18], maxZoom: 13 });
+
+    linkLayerRef.current = L.layerGroup().addTo(map);
+    emergencyLayerRef.current = L.layerGroup().addTo(map);
+    markerLayerRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
+
+    const resizeObs = new ResizeObserver(() => {
+      map.invalidateSize({ animate: false });
+    });
+    resizeObs.observe(mapContainerRef.current);
+
+    return () => {
+      resizeObs.disconnect();
+      map.remove();
+      mapRef.current = null;
+      tileLayerRef.current = null;
+      refLayerRef.current = null;
+      linkLayerRef.current = null;
+      emergencyLayerRef.current = null;
+      markerLayerRef.current = null;
+    };
+  }, []);
+
+  // Switch ArcGIS World Dark / Light Gray Canvas tile layers cleanly when theme toggles
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const baseUrl = isDark
+      ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+      : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+
+    if (tileLayerRef.current) map.removeLayer(tileLayerRef.current);
+    if (refLayerRef.current) {
+      map.removeLayer(refLayerRef.current);
+      refLayerRef.current = null;
+    }
+
+    tileLayerRef.current = L.tileLayer(baseUrl, {
+      attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
+      maxNativeZoom: 16,
+      maxZoom: 19,
+    }).addTo(map);
+
+    tileLayerRef.current.bringToBack();
+  }, [isDark]);
+
+  // Render corridors, emergency paths, and signal-ring junction markers
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !linkLayerRef.current || !markerLayerRef.current || !emergencyLayerRef.current) {
+      return;
+    }
+
+    const posById = new Map();
+    const junctionById = new Map();
+    for (const j of mergedJunctions) {
+      junctionById.set(j.junctionId, j);
+      const lat = Number(j.location?.latitude ?? j.location?.lat);
+      const lng = Number(j.location?.longitude ?? j.location?.lng);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        posById.set(j.junctionId, [lat, lng]);
+      }
+    }
+
+    // 1. Corridor links colored by downstream/mean congestion state
+    linkLayerRef.current.clearLayers();
+    const seenPairs = new Set();
+    for (const lnk of simState?.corridors || []) {
+      const fromPos = posById.get(lnk.fromJunction);
+      const toPos = posById.get(lnk.toJunction);
+      if (!fromPos || !toPos) continue;
+      const pairKey = [lnk.fromJunction, lnk.toJunction].sort().join('::');
+      if (seenPairs.has(pairKey)) continue;
+      seenPairs.add(pairKey);
+
+      const jFrom = junctionById.get(lnk.fromJunction);
+      const jTo = junctionById.get(lnk.toJunction);
+      const showBoth =
+        !selectedZone ||
+        selectedZone === 'all' ||
+        jFrom?.zoneId === selectedZone ||
+        jTo?.zoneId === selectedZone;
+      if (!showBoth) continue;
+
+      const sTo = classifyJunctionStatus(jTo || jFrom, isDark);
+      const isGridlockLink = sTo.key === 'gridlock';
+      const isHeavyLink = sTo.key === 'heavy';
+      L.polyline([fromPos, toPos], {
+        color: sTo.hex,
+        weight: isGridlockLink ? 4 : isHeavyLink ? 3.2 : 2.2,
+        dashArray: isGridlockLink ? '8 4' : undefined,
+        opacity: isGridlockLink ? 0.8 : 0.6,
+      })
+        .bindTooltip(`${lnk.corridor}: ${jFrom?.name || lnk.fromJunction} <-> ${jTo?.name || lnk.toJunction}`, {
+          className: 'mp-tooltip',
+          sticky: true,
+        })
+        .addTo(linkLayerRef.current);
+    }
+
+    // 2. Active emergency responder routes
+    emergencyLayerRef.current.clearLayers();
+    for (const em of simState?.activeEmergencies || []) {
+      const pts = (em.path || []).map((id) => posById.get(id)).filter(Boolean);
+      if (pts.length >= 2) {
+        L.polyline(pts, {
+          color: isDark ? '#38bdf8' : '#0369a1',
+          weight: 4,
+          dashArray: '6 5',
+          opacity: 0.9,
+        }).addTo(emergencyLayerRef.current);
+      }
+      const legIdx = Math.max(0, Math.min(pts.length - 1, em.legIndex ?? 0));
+      const pos = pts[legIdx];
+      if (pos) {
+        L.circleMarker(pos, {
+          radius: 7,
+          color: '#ffffff',
+          weight: 2,
+          fillColor: isDark ? '#38bdf8' : '#0369a1',
+          fillOpacity: 1,
+        })
+          .bindTooltip(`Responder ${em.id || ''} (${em.preempt ? 'Preempt active' : 'Passive'})`, {
+            className: 'mp-tooltip',
+          })
+          .addTo(emergencyLayerRef.current);
+      }
+    }
+
+    // 3. Signal-ring junction glyphs
+    markerLayerRef.current.clearLayers();
+    for (const j of visibleJunctions) {
+      const pos = posById.get(j.junctionId);
+      if (!pos) continue;
+
+      const info = classifyJunctionStatus(j, isDark);
+      const isSelected = selectedJunctionId === j.junctionId;
+      const icon = L.divIcon({
+        className: '',
+        html: buildMarkerSvg(info, isSelected, isDark),
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+
+      const qM = j.metrics?.maxQueueLengthM ?? j.maxQueueLengthM;
+      const spd = j.metrics?.avgSpeedKmph ?? j.avgSpeedKmph;
+      const ctrl = j.describe?.activeController || j.data?.control?.activeController || j.controller;
+
+      const marker = L.marker(pos, { icon });
+      marker.bindTooltip(
+        `<div class="space-y-0.5">
+          <div style="font-weight:600">${j.name || j.junctionId}</div>
+          <div style="font-family:JetBrains Mono,monospace;font-size:10px">
+            ${info.label} · Q ${fmtInt(qM)}m · ${fmtNum(spd, 1)} km/h · ${controllerLabel(ctrl)}
+          </div>
+        </div>`,
+        { className: 'mp-tooltip', direction: 'top', offset: [0, -10] }
+      );
+      marker.on('click', () => {
+        onOpenJunction(j.junctionId);
+      });
+      marker.addTo(markerLayerRef.current);
+    }
+  }, [
+    mergedJunctions,
+    visibleJunctions,
+    simState,
+    selectedZone,
+    selectedJunctionId,
+    isDark,
+    onOpenJunction,
+  ]);
+
+  // Network-level live KPIs derived purely from stream/state
+  const networkKpis = useMemo(() => {
+    const speeds = visibleJunctions
+      .map((j) => Number(j.metrics?.avgSpeedKmph ?? j.avgSpeedKmph))
+      .filter((v) => Number.isFinite(v));
+    const queues = visibleJunctions
+      .map((j) => Number(j.metrics?.maxQueueLengthM ?? j.maxQueueLengthM))
+      .filter((v) => Number.isFinite(v));
+
+    const meanSpeed = speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) / speeds.length : null;
+    const maxQueue = queues.length > 0 ? Math.max(...queues) : null;
+    const gridlockCount = visibleJunctions.filter(
+      (j) => classifyJunctionStatus(j, isDark).key === 'gridlock'
+    ).length;
+
+    return { meanSpeed, maxQueue, gridlockCount };
+  }, [visibleJunctions, isDark]);
+
+  // Filtered live alerts
+  const visibleAlerts = useMemo(() => {
+    const list = (alerts || []).filter((a) => {
+      if (selectedZone && selectedZone !== 'all' && a.zoneId && a.zoneId !== selectedZone) {
+        return false;
+      }
+      if (alertFilter === 'all') return true;
+      return a.severity === alertFilter;
+    });
+    return list.slice(0, 40);
+  }, [alerts, selectedZone, alertFilter]);
+
+  const handleResolveAlert = async (e, alertId) => {
+    e.stopPropagation();
+    setResolvingId(alertId);
+    setAlertError('');
+    try {
+      await api.resolveAlert(alertId);
+      setAlerts((prev) => prev.map((a) => (a.alertId === alertId ? { ...a, resolved: true } : a)));
+    } catch (err) {
+      setAlertError(err?.message || 'Failed to resolve alert');
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
+  const handleClearResolved = async () => {
+    setAlertError('');
+    try {
+      await api.clearResolvedAlerts();
+      setAlerts((prev) => prev.filter((a) => !a.resolved));
+    } catch (err) {
+      setAlertError(err?.message || 'Failed to clear resolved alerts');
+    }
+  };
+
+  const selectedJunctionObj = useMemo(
+    () => mergedJunctions.find((j) => j.junctionId === selectedJunctionId) || null,
+    [mergedJunctions, selectedJunctionId]
+  );
+
+  // Close drawer on Escape key
+  useEffect(() => {
+    if (!selectedJunctionId) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') onCloseJunction();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedJunctionId, onCloseJunction]);
+
+  const weatherActive = Boolean(simState?.weather?.active);
+  const emergencyCount = simState?.activeEmergencies?.length || 0;
+
+  return (
+    <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-52px)] lg:overflow-hidden">
+      {/* Left/Primary Corridor Map Canvas */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-[420px] lg:min-h-0">
+        {/* Map Context Bar */}
+        <div className="px-3 py-2 border-b border-hairline bg-surface flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-full" role="group" aria-label="Zone filter">
+            <button
+              type="button"
+              onClick={() => onZoneChange('all')}
+              className={`px-2 py-1 rounded text-xs font-medium border whitespace-nowrap shrink-0 transition-colors ${
+                selectedZone === 'all'
+                  ? 'bg-accent text-accent-contrast border-accent'
+                  : 'bg-inset text-ink-secondary border-hairline hover:text-ink-primary'
+              }`}
+            >
+              All Zones ({mergedJunctions.length})
+            </button>
+            {ZONE_LIST.map((z) => {
+              const active = selectedZone === z;
+              return (
+                <button
+                  key={z}
+                  type="button"
+                  onClick={() => onZoneChange(z)}
+                  className={`px-2 py-1 rounded text-xs font-medium border whitespace-nowrap shrink-0 transition-colors ${
+                    active
+                      ? 'bg-accent text-accent-contrast border-accent'
+                      : 'bg-inset text-ink-secondary border-hairline hover:text-ink-primary'
+                  }`}
+                >
+                  {zoneLabel(z)}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Live Physics State Pills */}
+          <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono tabular-nums text-ink-secondary">
+            {simState?.todPeriod?.label && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-hairline bg-inset">
+                <Clock className="w-3 h-3 text-ink-muted" />
+                <span>{simState.todPeriod.label}</span>
+              </span>
+            )}
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border ${
+                weatherActive
+                  ? 'border-signal-emergency/40 bg-signal-emergency/15 text-signal-emergency'
+                  : 'border-hairline bg-inset'
+              }`}
+            >
+              {weatherActive ? <CloudRain className="w-3 h-3" /> : <Sun className="w-3 h-3 text-ink-muted" />}
+              <span>
+                {weatherActive
+                  ? simState?.weather?.capacityFactor !== undefined
+                    ? `Monsoon (${fmtNum(simState.weather.capacityFactor, 2)}x cap)`
+                    : 'Monsoon'
+                  : 'Dry'}
+              </span>
+            </span>
+            {emergencyCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-signal-emergency/40 bg-signal-emergency/15 text-signal-emergency">
+                <Siren className="w-3 h-3" />
+                <span>{emergencyCount} En-route</span>
+              </span>
+            )}
+            {simState?.simTime && (
+              <span className="text-ink-muted">{fmtClockTime(simState.simTime)}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Interactive Bengaluru Leaflet Canvas */}
+        <div className="relative h-[430px] lg:h-auto lg:flex-1 bg-ground">
+          <div ref={mapContainerRef} className="w-full h-full min-h-[420px] lg:min-h-0" />
+
+          {/* Accessible Map Legend (Shape + Color + Text) */}
+          <div className="absolute bottom-3 left-3 z-[400] console-panel px-2.5 py-2 flex flex-wrap items-center gap-3 text-[11px]">
+            {[
+              { shape: 'circle', label: 'Flow', hex: isDark ? '#10b981' : '#047857' },
+              { shape: 'triangle', label: 'Heavy', hex: isDark ? '#f59e0b' : '#92400e' },
+              { shape: 'octagon', label: 'Gridlock', hex: isDark ? '#f97316' : '#9a3412' },
+              { shape: 'cross', label: 'Emergency', hex: isDark ? '#38bdf8' : '#0369a1' },
+            ].map((item) => (
+              <span key={item.label} className="inline-flex items-center gap-1.5 text-ink-primary">
+                <StatusGlyph shape={item.shape} color={item.hex} size={10} />
+                <span>{item.label}</span>
+              </span>
+            ))}
+          </div>
+
+          {/* Recenter Control */}
+          <button
+            type="button"
+            onClick={() => mapRef.current?.fitBounds(BENGALURU_BOUNDS, { padding: [18, 18], maxZoom: 13 })}
+            title="Reset map bounds to Bengaluru corridors"
+            aria-label="Reset map view"
+            className="absolute top-3 right-3 z-[400] min-w-[36px] min-h-[36px] flex items-center justify-center console-panel p-2 text-ink-secondary hover:text-ink-primary transition-colors"
+          >
+            <Crosshair className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Right Rail: City KPIs, Counterfactual Panel, Live Alerts */}
+      <aside className="w-full lg:w-[390px] xl:w-[420px] shrink-0 border-t lg:border-t-0 lg:border-l border-hairline bg-surface flex flex-col lg:h-full overflow-y-auto">
+        {/* City KPIs (city room) */}
+        <section className="p-3.5 border-b border-hairline">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-xs font-semibold text-ink-primary">Network KPIs (City Room)</h2>
+            <span className="text-[11px] font-mono tabular-nums text-ink-muted">
+              {stats?.ingestRate ? `${fmtInt(stats.ingestRate)} ev/s` : 'Connected'}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="console-inset px-2.5 py-2">
+              <div className="text-[11px] text-ink-muted">Throughput</div>
+              <div className="font-mono tabular-nums text-sm font-semibold text-ink-primary mt-0.5">
+                {activeCf?.live?.throughputVeh !== undefined
+                  ? `${fmtInt(activeCf.live.throughputVeh)} veh`
+                  : '—'}
+              </div>
+            </div>
+            <div className="console-inset px-2.5 py-2">
+              <div className="text-[11px] text-ink-muted">Mean speed</div>
+              <div className="font-mono tabular-nums text-sm font-semibold text-ink-primary mt-0.5">
+                {networkKpis.meanSpeed !== null ? `${fmtNum(networkKpis.meanSpeed, 1)} km/h` : '—'}
+              </div>
+            </div>
+            <div className="console-inset px-2.5 py-2">
+              <div className="text-[11px] text-ink-muted">Peak queue</div>
+              <div className="font-mono tabular-nums text-sm font-semibold text-ink-primary mt-0.5">
+                {networkKpis.maxQueue !== null ? `${fmtInt(networkKpis.maxQueue)} m` : '—'}
+              </div>
+            </div>
+            <div className="console-inset px-2.5 py-2">
+              <div className="text-[11px] text-ink-muted">Gridlock / Alerts</div>
+              <div className="font-mono tabular-nums text-sm font-semibold text-ink-primary mt-0.5">
+                {fmtInt(networkKpis.gridlockCount)} / {fmtInt(visibleAlerts.filter((a) => !a.resolved).length)}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Counterfactual Panel (Honesty rule #2: Required fixed-time reference framing) */}
+        <section className="p-3.5 border-b border-hairline space-y-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h2 className="text-xs font-semibold text-ink-primary">Adaptive vs Fixed-Time</h2>
+              <p className="text-[11px] text-ink-muted">
+                vs Webster-tuned fixed-time plan, same simulated arrivals
+              </p>
+            </div>
+            {activeCf?.delayReductionPct !== undefined && (
+              <span
+                className={`px-2 py-0.5 rounded border font-mono tabular-nums text-[11px] font-semibold whitespace-nowrap shrink-0 ${
+                  activeCf.delayReductionPct >= 0
+                    ? 'border-signal-flow/40 bg-signal-flow/15 text-signal-flow'
+                    : 'border-signal-heavy/40 bg-signal-heavy/15 text-signal-heavy'
+                }`}
+              >
+                {fmtSigned(activeCf.delayReductionPct, 1, '%')} delay
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="console-inset px-2.5 py-2">
+              <div className="text-[10px] text-ink-muted">Cumulative saved</div>
+              <div className="font-mono tabular-nums text-sm font-semibold text-ink-primary mt-0.5">
+                {activeCf?.delaySavedVehHours !== undefined
+                  ? `${fmtSigned(activeCf.delaySavedVehHours, 2)} veh·h`
+                  : '—'}
+              </div>
+            </div>
+            <div className="console-inset px-2.5 py-2">
+              <div className="text-[10px] text-ink-muted">Avg delay (Live / Base)</div>
+              <div className="font-mono tabular-nums text-xs font-semibold text-ink-primary mt-1">
+                {activeCf?.live
+                  ? `${fmtNum(activeCf.live.avgDelayPerVehSec, 1)} / ${fmtNum(activeCf.baseline.avgDelayPerVehSec, 1)} s`
+                  : '—'}
+              </div>
+            </div>
+          </div>
+
+          <DualLineSparkline series={cfHistory} isDark={isDark} />
+
+          {activeCf?.emergency?.trips > 0 && (
+            <div className="text-[11px] font-mono tabular-nums text-signal-emergency flex items-center justify-between px-2 py-1 rounded border border-signal-emergency/30 bg-signal-emergency/10">
+              <span>Emergency transit saved</span>
+              <span>{fmtSigned(activeCf.emergency.timeSavedSec, 1, 's')}</span>
+            </div>
+          )}
+        </section>
+
+        {/* Live Alerts List */}
+        <section className="p-3.5 flex-1 flex flex-col min-h-[260px]">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <h2 className="text-xs font-semibold text-ink-primary">
+              Alerts ({visibleAlerts.filter((a) => !a.resolved).length} open)
+            </h2>
+            <div className="flex items-center gap-1">
+              {['all', 'critical', 'warning'].map((sev) => (
+                <button
+                  key={sev}
+                  type="button"
+                  onClick={() => setAlertFilter(sev)}
+                  className={`px-2 py-0.5 rounded text-[10px] capitalize border ${
+                    alertFilter === sev
+                      ? 'bg-accent text-accent-contrast border-accent'
+                      : 'bg-inset text-ink-secondary border-hairline hover:text-ink-primary'
+                  }`}
+                >
+                  {sev}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={handleClearResolved}
+                title="Clear resolved alerts"
+                aria-label="Clear resolved alerts"
+                className="p-1 rounded border border-hairline bg-inset text-ink-muted hover:text-ink-primary"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+
+          {alertError && (
+            <div role="alert" className="mb-2 px-2 py-1 rounded border border-signal-gridlock/40 bg-signal-gridlock/10 text-[11px] text-signal-gridlock">
+              {alertError}
+            </div>
+          )}
+
+          <div className="space-y-1.5 overflow-y-auto flex-1 pr-0.5">
+            {visibleAlerts.length === 0 ? (
+              <div className="py-8 text-center text-xs text-ink-muted console-inset">
+                No active anomalies in selected scope.
+              </div>
+            ) : (
+              (isDesktopViewport || showAllAlerts ? visibleAlerts : visibleAlerts.slice(0, 5)).map((item) => {
+                const jId = item.junctionId || item.deviceId;
+                const sev = item.severity || 'info';
+                const sevShape = sev === 'critical' ? 'octagon' : sev === 'warning' ? 'triangle' : 'cross';
+                const sevHex =
+                  sev === 'critical'
+                    ? isDark ? '#f97316' : '#9a3412'
+                    : sev === 'warning'
+                      ? isDark ? '#f59e0b' : '#92400e'
+                      : isDark ? '#38bdf8' : '#0369a1';
+                return (
+                  <div
+                    key={item.alertId || item._id}
+                    onClick={() => jId && onOpenJunction(jId)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if ((e.key === 'Enter' || e.key === ' ') && jId) {
+                        e.preventDefault();
+                        onOpenJunction(jId);
+                      }
+                    }}
+                    className={`p-2.5 rounded border transition-colors cursor-pointer ${
+                      item.resolved
+                        ? 'border-hairline bg-inset/50 opacity-60'
+                        : 'border-hairline bg-inset hover:border-hairlineStrong'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 text-[10px]">
+                      <span
+                        className={`inline-flex items-center gap-1.5 font-mono uppercase font-semibold ${
+                          sev === 'critical'
+                            ? 'text-signal-gridlock'
+                            : sev === 'warning'
+                              ? 'text-signal-heavy'
+                              : 'text-signal-emergency'
+                        }`}
+                      >
+                        <StatusGlyph shape={sevShape} color={sevHex} size={8} />
+                        <span>{sev}</span>
+                      </span>
+                      <span className="font-mono tabular-nums text-ink-muted">
+                        {fmtClockTime(item.timestamp)}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs font-medium text-ink-primary flex items-center justify-between gap-1">
+                      <span className="truncate">{humanizeAlertText(item.title)}</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-ink-muted shrink-0" />
+                    </div>
+                    <p className="text-[11px] text-ink-secondary line-clamp-2 mt-0.5">
+                      {humanizeAlertText(item.message)}
+                    </p>
+                    <div className="mt-2 pt-1.5 border-t border-hairline flex items-center justify-between text-[10px]">
+                      <span className="font-mono text-ink-muted">{jId}</span>
+                      {item.resolved ? (
+                        <span className="inline-flex items-center gap-1 text-signal-flow">
+                          <CheckCircle2 className="w-3 h-3" /> Resolved
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={resolvingId === item.alertId}
+                          onClick={(e) => handleResolveAlert(e, item.alertId)}
+                          className="px-2 py-0.5 rounded border border-hairline bg-surface hover:border-hairlineStrong text-ink-secondary hover:text-ink-primary"
+                        >
+                          {resolvingId === item.alertId ? 'Resolving...' : 'Resolve'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            {!isDesktopViewport && visibleAlerts.length > 5 && (
+              <button
+                type="button"
+                onClick={() => setShowAllAlerts((prev) => !prev)}
+                className="w-full py-1.5 rounded border border-hairline bg-inset text-xs font-medium text-accent-ink hover:border-hairlineStrong"
+              >
+                {showAllAlerts ? 'Show top 5 alerts' : `Show all ${visibleAlerts.length} alerts`}
+              </button>
+            )}
+          </div>
+        </section>
+      </aside>
+
+      {/* Slide-over Junction Detail Drawer */}
+      {selectedJunctionId && (
+        <div
+          className="fixed inset-0 z-[1100] flex justify-end bg-black/45"
+          onClick={onCloseJunction}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Junction detail drawer for ${selectedJunctionId}`}
+        >
+          <div
+            className="w-full max-w-4xl h-full bg-ground border-l border-hairline overflow-y-auto p-4 sm:p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <JunctionDetailView
+              junctionId={selectedJunctionId}
+              initialSimJunction={selectedJunctionObj}
+              isDrawer
+              onClose={onCloseJunction}
+              onControllerUpdated={fetchSimOverview}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

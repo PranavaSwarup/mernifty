@@ -437,6 +437,7 @@ class SocketService {
       'unsubscribe:device',
       'subscribe:alerts',
       'telemetry:ping',
+      'client:latency',
     ]);
     socket.onAny?.((eventName) => {
       if (!allowedClientEvents.has(eventName) && (user.role === 'viewer' || user.anonymous)) {

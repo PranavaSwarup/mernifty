@@ -246,12 +246,14 @@ export function interpolateHistogramPercentile(buckets, q, minVal = 0, maxVal = 
       const lower =
         i === 0 ? Math.max(0, Number.isFinite(minVal) ? minVal : 0) : boundaries[i - 1];
       const lastBoundary = boundaries[boundaries.length - 1] ?? lower;
-      const upper =
+      const rawUpper =
         i < boundaries.length
           ? boundaries[i]
           : Math.max(lastBoundary, Number.isFinite(maxVal) ? maxVal : lastBoundary);
+      const upper = Number.isFinite(maxVal) ? Math.max(lower, Math.min(rawUpper, maxVal)) : rawUpper;
       const fraction = Math.max(0, Math.min(1, (target - prevCumulative) / bucketCount));
-      const est = lower + fraction * Math.max(0, upper - lower);
+      const rawEst = lower + fraction * Math.max(0, upper - lower);
+      const est = Number.isFinite(maxVal) ? Math.min(maxVal, rawEst) : rawEst;
       return Number(est.toFixed(2));
     }
   }

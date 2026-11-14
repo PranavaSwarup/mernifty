@@ -81,6 +81,7 @@ export const api = {
   // Simulator & Twin Control
   getSimulatorStatus: () => fetchJson('/api/simulator/status'),
   getSimState: () => fetchJson('/api/sim/state'),
+  getCounterfactual: () => fetchJson('/api/sim/counterfactual'),
   startSimulator: (rate = 24) =>
     fetchJson('/api/simulator/start', { method: 'POST', body: JSON.stringify({ rate }) }),
   stopSimulator: () => fetchJson('/api/simulator/stop', { method: 'POST' }),
@@ -97,12 +98,18 @@ export const api = {
       body: JSON.stringify({ junctionId, deviceId: junctionId, metric, multiplier, durationSec, flags }),
     }),
 
-  // Copilot
+  // Copilot & Actions
   diagnose: (deviceId) => fetchJson(`/api/copilot/diagnose/${deviceId}`),
   remediate: (payload) =>
     fetchJson('/api/copilot/remediate', { method: 'POST', body: JSON.stringify(payload) }),
+  getActions: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return fetchJson(`/api/actions${q ? `?${q}` : ''}`);
+  },
 
-  // Benchmarks
+  // Observability & Benchmarks
+  getTraces: (limit = 50) => fetchJson(`/api/observability/traces?limit=${limit}`),
+  getObservabilityMetrics: () => fetchJson('/api/observability/metrics'),
   getBenchmarks: () => fetchJson('/api/benchmarks'),
   runLiveBenchmark: (payload = { durationSec: 10 }) =>
     fetchJson('/api/benchmarks/live', { method: 'POST', body: JSON.stringify(payload) }),

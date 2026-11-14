@@ -1,205 +1,271 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  Activity,
-  MapPin,
-  Database,
-  Zap,
-  BookOpen,
-  Users,
-  Terminal,
-  Globe,
+  Pause,
+  Play,
+  Sun,
+  Moon,
   Volume2,
   VolumeX,
-  Gauge,
-  Navigation,
-  Shield,
+  UserCheck,
+  AlertCircle,
 } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
+import {
+  WORKSPACES,
+  PERSONA_OPTIONS,
+  useTheme,
+  zoneLabel,
+} from '../utils/semantics';
 
-export function Navbar({ activeTab, setActiveTab }) {
-  const { isConnected, isPaused, togglePause, clientLatency, soundEnabled, setSoundEnabled, socketError } =
-    useSocket();
-  const { user, switchPersona, isLoading, authError, clearAuthError } = useAuth();
-  const [localError, setLocalError] = useState(null);
+export function Navbar({ activeWorkspace, onChangeWorkspace }) {
+  const {
+    isConnected,
+    isPaused,
+    togglePause,
+    clientLatency,
+    soundEnabled,
+    setSoundEnabled,
+    socketError,
+  } = useSocket();
+  const { user, switchPersona, isLoading: authLoading, authError } = useAuth();
+  const { theme, toggleTheme } = useTheme();
 
-  const tabs = [
-    { id: 'dashboard', label: 'Junction Operations', icon: Activity },
-    { id: 'map', label: 'Bengaluru Traffic Map', icon: MapPin },
-    { id: 'topology', label: 'Central DC Topology', icon: Globe },
-    { id: 'multiclient', label: 'Zonal Multi-Desk', icon: Users },
-    { id: 'inspector', label: 'Camera Stream Tap', icon: Terminal },
-    { id: 'historical', label: 'Congestion Analytics', icon: Database },
-    { id: 'simulator', label: 'Camera & Chaos Lab', icon: Zap },
-    { id: 'benchmarks', label: 'Throughput Engine', icon: Gauge },
-    { id: 'architecture', label: 'Architecture & Design', icon: BookOpen },
-  ];
+  const currentPersona = !user
+    ? 'anonymous'
+    : user.role === 'admin'
+      ? 'admin'
+      : user.role === 'viewer'
+        ? 'viewer'
+        : Array.isArray(user.zones) &&
+            user.zones.includes('east-bangalore') &&
+            !user.zones.includes('south-bangalore')
+          ? 'east-operator'
+          : 'south-operator';
 
   const handlePersonaChange = async (e) => {
-    const val = e.target.value;
-    setLocalError(null);
-    clearAuthError();
+    const next = e.target.value;
     try {
-      await switchPersona(val);
-    } catch (err) {
-      setLocalError(err.message);
+      await switchPersona(next);
+    } catch {
+      // AuthContext surfaces authError cleanly
     }
   };
 
-  const activePersonaValue = user?.anonymous ? 'anonymous' : user?.persona || user?.role || 'viewer';
-  const bannerError = localError || authError || socketError;
+  const connLabel = !isConnected ? 'Offline' : isPaused ? 'Paused' : 'Live';
+  const connDotColor = !isConnected
+    ? 'bg-signal-gridlock'
+    : isPaused
+      ? 'bg-signal-heavy'
+      : 'bg-signal-flow';
+
+  const handleTabKeyDown = (e) => {
+    const idx = WORKSPACES.findIndex((ws) => ws.id === activeWorkspace);
+    if (idx < 0) return;
+    let nextIdx = null;
+    if (e.key === 'ArrowRight') nextIdx = (idx + 1) % WORKSPACES.length;
+    else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + WORKSPACES.length) % WORKSPACES.length;
+    else if (e.key === 'Home') nextIdx = 0;
+    else if (e.key === 'End') nextIdx = WORKSPACES.length - 1;
+    if (nextIdx === null) return;
+    e.preventDefault();
+    const nextId = WORKSPACES[nextIdx].id;
+    onChangeWorkspace(nextId);
+    const parent = e.currentTarget.parentElement;
+    parent?.querySelector(`[data-workspace="${nextId}"]`)?.focus();
+  };
 
   return (
-    <header className="sticky top-0 z-50 bg-[#0B101D]/90 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-6 py-2.5">
-      <div className="flex items-center justify-between gap-4">
-        {/* Brand & Connection Status */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-            <Navigation className="w-5 h-5 animate-pulse" />
-            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-4 ring-[#0B101D] animate-ping-slow" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
-                MetroPulse BLR
-              </span>
-              <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                SMART TRAFFIC
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block">
-              Bengaluru Centralized Camera Telemetry & Adaptive Control
-            </p>
-          </div>
+    <header className="sticky top-0 z-40 border-b border-hairline bg-surface">
+      <div className="min-h-[52px] max-w-[1920px] mx-auto px-2 sm:px-4 py-1 sm:py-0 flex flex-wrap sm:flex-nowrap items-center justify-between gap-1.5 sm:gap-3">
+        {/* Left: Brand & Required Model Honesty Badge */}
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 shrink-0">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+            className="shrink-0"
+          >
+            <rect x="2" y="2" width="20" height="20" rx="4" stroke="currentColor" strokeWidth="1.5" className="text-hairlineStrong" />
+            <circle cx="12" cy="7.5" r="2.2" className="fill-signal-gridlock" />
+            <circle cx="12" cy="12" r="2.2" className="fill-signal-heavy" />
+            <circle cx="12" cy="16.5" r="2.2" className="fill-signal-flow" />
+          </svg>
+          <span className="font-semibold text-xs sm:text-sm tracking-tight text-ink-primary whitespace-nowrap">
+            MetroPulse BLR
+          </span>
+          <span
+            className="hidden min-[380px]:inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded border border-hairline bg-inset text-[10px] sm:text-[11px] font-mono text-ink-secondary whitespace-nowrap"
+            title="All corridor physics, queues, delays, and responder trajectories run inside a discrete-time traffic model paired against a fixed-time baseline."
+          >
+            <span className="hidden md:inline">Simulated (physics model)</span>
+            <span className="md:hidden">Sim</span>
+          </span>
         </div>
 
-        {/* Navigation Tabs */}
-        <nav className="hidden xl:flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
+        {/* Center: 4 Primary Workspaces */}
+        <nav
+          aria-label="Workspaces"
+          role="tablist"
+          className="hidden sm:flex items-stretch h-full gap-1 sm:gap-2 overflow-x-auto no-scrollbar"
+        >
+          {WORKSPACES.map((ws) => {
+            const active = activeWorkspace === ws.id;
             return (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
-                  isActive
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm shadow-emerald-500/20'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                key={ws.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                tabIndex={active ? 0 : -1}
+                data-workspace={ws.id}
+                onKeyDown={handleTabKeyDown}
+                onClick={() => onChangeWorkspace(ws.id)}
+                className={`px-2.5 sm:px-3.5 h-full flex items-center text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  active
+                    ? 'border-accent text-ink-primary'
+                    : 'border-transparent text-ink-secondary hover:text-ink-primary'
                 }`}
               >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
-                {tab.label}
+                {ws.label}
               </button>
             );
           })}
         </nav>
 
-        {/* Persona Switcher, Live Metrics & Controls */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Functional Role Persona Switcher */}
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1">
-            <Shield className="w-3.5 h-3.5 text-cyan-400" />
-            <select
-              aria-label="Active Persona"
-              disabled={isLoading}
-              value={activePersonaValue}
-              onChange={handlePersonaChange}
-              className="bg-transparent text-[11px] font-semibold text-slate-200 focus:outline-none cursor-pointer"
+        {/* Right: Demo Personas, Live Status/Pause, Sound, Theme */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {(authError || socketError) && (
+            <span
+              role="alert"
+              className="hidden md:inline-flex items-center gap-1 px-2 py-1 rounded border border-signal-gridlock/40 bg-signal-gridlock/10 text-[11px] text-signal-gridlock max-w-[200px] truncate"
+              title={authError || socketError}
             >
-              <option value="anonymous" className="bg-slate-900">
-                Viewer (Anon Read-Only)
-              </option>
-              <option value="viewer" className="bg-slate-900">
-                Viewer (Signed JWT)
-              </option>
-              <option value="south-operator" className="bg-slate-900">
-                South Operator (south-bangalore)
-              </option>
-              <option value="east-operator" className="bg-slate-900">
-                East Operator (east-bangalore)
-              </option>
-              <option value="admin" className="bg-slate-900">
-                Admin (All Zones)
-              </option>
-            </select>
-          </div>
+              <AlertCircle className="w-3 h-3 shrink-0" />
+              <span className="truncate">{authError || socketError}</span>
+            </span>
+          )}
 
-          {/* Audio Chime Toggle */}
+          {/* Demo Personas Switcher */}
+          <label className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded border border-hairline bg-inset text-xs">
+            <UserCheck className="w-3.5 h-3.5 text-ink-muted shrink-0" aria-hidden="true" />
+            <span className="text-[11px] text-ink-muted">Demo personas</span>
+            <select
+              aria-label="Demo personas"
+              value={currentPersona}
+              disabled={authLoading}
+              onChange={handlePersonaChange}
+              className="bg-transparent text-xs font-medium text-ink-primary cursor-pointer rounded"
+            >
+              {PERSONA_OPTIONS.map((p) => (
+                <option key={p.id} value={p.id} className="bg-surface text-ink-primary">
+                  {p.label} ({p.roleLabel})
+                </option>
+              ))}
+            </select>
+            {user?.zones?.length > 0 && user.role === 'operator' && (
+              <span className="text-[10px] font-mono text-ink-muted pl-1 border-l border-hairline">
+                {user.zones.map(zoneLabel).join(',')}
+              </span>
+            )}
+          </label>
+
+          {/* Compact persona selector on smaller viewports */}
+          <label className="lg:hidden flex items-center gap-1 px-1.5 py-1 rounded border border-hairline bg-inset text-xs">
+            <UserCheck className="w-3 h-3 text-ink-muted shrink-0" aria-hidden="true" />
+            <select
+              aria-label="Demo personas"
+              value={currentPersona}
+              disabled={authLoading}
+              onChange={handlePersonaChange}
+              className="max-w-[66px] sm:max-w-[112px] bg-transparent text-[11px] sm:text-xs font-medium text-ink-primary truncate rounded"
+            >
+              {PERSONA_OPTIONS.map((p) => (
+                <option key={p.id} value={p.id} className="bg-surface text-ink-primary">
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {/* Connection + Pause/Resume + RTT */}
           <button
+            type="button"
+            onClick={togglePause}
+            title={isPaused ? 'Resume live stream' : 'Pause UI stream'}
+            aria-label={isPaused ? 'Resume stream' : 'Pause stream'}
+            className="inline-flex items-center gap-1 sm:gap-1.5 min-h-[30px] sm:min-h-[34px] px-1.5 sm:px-2 py-1 rounded border border-hairline bg-inset hover:border-hairlineStrong text-[11px] sm:text-xs text-ink-primary transition-colors"
+          >
+            <span className={`w-2 h-2 rounded-full ${connDotColor}`} aria-hidden="true" />
+            <span className="font-medium">{connLabel}</span>
+            {isConnected && (
+              <span className="hidden sm:inline font-mono tabular-nums text-[11px] text-ink-muted">
+                {clientLatency} ms
+              </span>
+            )}
+            {isPaused ? (
+              <Play className="w-3 h-3 text-ink-secondary" aria-hidden="true" />
+            ) : (
+              <Pause className="w-3 h-3 text-ink-secondary" aria-hidden="true" />
+            )}
+          </button>
+
+          {/* Alert Audio Mute */}
+          <button
+            type="button"
             onClick={() => setSoundEnabled((prev) => !prev)}
-            title={soundEnabled ? 'Mute anomaly alarms' : 'Enable audio alarms'}
-            className={`p-1.5 rounded-lg border text-xs transition-colors ${
-              soundEnabled
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                : 'bg-slate-800/60 border-slate-700/60 text-slate-500'
-            }`}
+            title={soundEnabled ? 'Mute alert audio' : 'Enable alert audio'}
+            aria-label={soundEnabled ? 'Mute alert audio' : 'Enable alert audio'}
+            className="min-w-[30px] min-h-[30px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center rounded border border-hairline bg-inset hover:border-hairlineStrong text-ink-secondary hover:text-ink-primary transition-colors"
           >
             {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
           </button>
 
-          {/* Pause / Resume Live Stream */}
+          {/* Dark / Light Theme Toggle */}
           <button
-            onClick={togglePause}
-            title={isPaused ? 'Resume live frame processing' : 'Pause live frame processing'}
-            className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-colors ${
-              isPaused
-                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
-                : 'bg-slate-800/60 border-slate-700/60 text-slate-300 hover:bg-slate-800'
-            }`}
+            type="button"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            data-theme-toggle="true"
+            className="min-w-[30px] min-h-[30px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center rounded border border-hairline bg-inset hover:border-hairlineStrong text-ink-secondary hover:text-ink-primary transition-colors"
           >
-            {isPaused ? 'PAUSED' : 'LIVE'}
+            {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
-
-          {/* WebSocket Latency Pill */}
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'
-              }`}
-            />
-            <span className="text-slate-400">RTT:</span>
-            <span className="text-emerald-400 font-bold">{clientLatency || 2}ms</span>
-          </div>
         </div>
       </div>
 
-      {bannerError && (
-        <div className="mt-2 px-3 py-1.5 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs flex items-center justify-between">
-          <span>{bannerError}</span>
-          <button
-            onClick={() => {
-              setLocalError(null);
-              clearAuthError();
-            }}
-            className="text-[11px] underline ml-3"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      {/* Mobile Nav Scroller */}
-      <div className="xl:hidden flex items-center gap-1 overflow-x-auto pt-2 pb-1 border-t border-slate-800/60 mt-2">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
+      {/* Mobile workspace tabs bar (<640px) */}
+      <nav
+        aria-label="Mobile workspaces"
+        role="tablist"
+        className="sm:hidden flex items-center border-t border-hairline bg-surface px-2 gap-1 overflow-x-auto no-scrollbar"
+      >
+        {WORKSPACES.map((ws) => {
+          const active = activeWorkspace === ws.id;
           return (
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-                isActive
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                  : 'text-slate-400 hover:text-slate-200'
+              key={`mob-${ws.id}`}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              tabIndex={active ? 0 : -1}
+              data-workspace={ws.id}
+              onKeyDown={handleTabKeyDown}
+              onClick={() => onChangeWorkspace(ws.id)}
+              className={`flex-1 py-2 text-center text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+                active
+                  ? 'border-accent text-ink-primary'
+                  : 'border-transparent text-ink-secondary hover:text-ink-primary'
               }`}
             >
-              <Icon className="w-3 h-3" />
-              {tab.label}
+              {ws.label}
             </button>
           );
         })}
-      </div>
+      </nav>
     </header>
   );
 }

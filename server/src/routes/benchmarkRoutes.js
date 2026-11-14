@@ -49,9 +49,14 @@ function listBenchmarkRuns() {
         runs.push({
           filename,
           kind: parsed.kind || 'control-study',
+          study: parsed.study || null,
           generatedAt: parsed.generatedAt || null,
+          runtimeSec: parsed.runtimeSec || null,
+          networkSummary: parsed.networkSummary || null,
+          config: parsed.config || null,
           metadata: parsed.metadata || null,
           summary: parsed.summary || null,
+          cells: Array.isArray(parsed.cells) ? parsed.cells : [],
         });
       }
     } catch {
