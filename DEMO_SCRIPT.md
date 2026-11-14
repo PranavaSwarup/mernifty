@@ -1,83 +1,126 @@
-# MetroPulse BLR Telemetry Platform — Demo Video Script (3–5 Minutes)
+# MetroPulse BLR: Demo Video Script (about 4 minutes 30 seconds)
 
-> **Official Walkthrough & Presentation Guide for Hackathon Evaluators**  
-> **Topic**: High-Throughput Streams & Telemetry Monitoring (MERN + Socket.IO)
+The problem statement says the video must show three things: data being ingested continuously with a live dashboard, several clients receiving the updates relevant to each of them, and historical data combined with live data. Scenes 2, 3 and 5 cover those. Scene 4 is the ambulance corridor, our main feature.
 
----
-
-## 🎬 Video Overview & Timeline
-
-| Segment | Duration | Title | Key Demo Highlights |
-| :---: | :---: | :--- | :--- |
-| **1** | 0:00 – 0:45 | **System Architecture & Problem Context** | Problem statement, high-throughput bottlenecks, MERN + Socket.IO solution |
-| **2** | 0:45 – 1:30 | **Live Dashboard & Multi-Source Streams** | KPI cards (e/s, latency), Recharts waveforms, hardware device matrix |
-| **3** | 1:30 – 2:15 | **Geospatial Fleet Tracking & Edge Mesh** | Leaflet GPS movement, vehicle telematics, global edge network topology |
-| **4** | 2:15 – 3:00 | **Multi-Client Selective Socket.IO Sync** | Side-by-side client rooms (`category:server` vs `category:fleet`), 75% bandwidth reduction |
-| **5** | 3:00 – 3:45 | **Historical Reconciliation & Analytics** | Deep-dive modal, blending MongoDB history + live Socket.IO with deduplication, CSV export |
-| **6** | 3:45 – 4:30 | **Chaos Injection & AI Copilot Remediation** | Z-score anomaly alarm, sound chime, automated runbook 1-click execution |
-| **7** | 4:30 – 5:00 | **High-Throughput Benchmark & Conclusion** | 7,320 events/sec stress test, 60 FPS client rendering, wrap-up |
+| # | Time | Scene | What it proves |
+| :--- | :--- | :--- | :--- |
+| 1 | 0:00 – 0:30 | The problem and the app | Context |
+| 2 | 0:30 – 1:15 | Live city map | Continuous ingestion, live dashboard |
+| 3 | 1:15 – 2:00 | Two desks, two zones | Selective rooms: different clients get different updates |
+| 4 | 2:00 – 3:00 | Ambulance green corridor | Real-time coordination across zones |
+| 5 | 3:00 – 3:40 | One junction: history plus live, reconnect | History and live merged with no gaps or duplicates |
+| 6 | 3:40 – 4:20 | Engineering workbench | Throughput, latency, measured results |
+| 7 | 4:20 – 4:30 | Close | Live link |
 
 ---
 
-## 🎙️ Step-by-Step Script & Narration
+## Before you record
 
-### Segment 1: Introduction (0:00 – 0:45)
-- **On Screen**: Show the MetroPulse BLR Operations Dashboard at `http://localhost:5173` with live indicators ticking.
-- **Narrator**:
-  > *"Hello judges! Welcome to MetroPulse BLR, an enterprise real-time telemetry and observability platform engineered for the MERNIFY Hackathon. In modern distributed systems, whether it is high-density cloud data centers, autonomous transport logistics, or renewable energy grids, telemetry data arrives at frequencies exceeding thousands of events per second. Direct database writes lock up storage, while broadcasting full states saturates network links.*  
-  > *MetroPulse BLR solves this using a write-behind buffering pipeline in Node.js, selective Socket.IO room distribution, in-memory deduplication, and an online statistical anomaly detection engine."*
-
----
-
-### Segment 2: Live Operations & Multi-Domain Ingestion (0:45 – 1:30)
-- **Action**: Hover over the KPI cards at the top and the live telemetry charts.
-- **Narrator**:
-  > *"Here on the Live Operations Command Center, our ingestion pipeline is actively processing and persisting data from 12 edge devices across three critical domains:*
-  > *1. Edge Servers tracking CPU, Memory, Latency, and Error rates.*
-  > *2. Autonomous Logistics Trucks tracking GPS coordinates, ground speed, battery charge, and motor temperatures.*
-  > *3. Renewable Energy Turbines tracking power output in megawatts, rotor RPM, and bearing vibration.*
-  > *Notice our live Recharts waveform: it streams with sub-second sliding windows, zero jitter, and zero DOM freezing because our client decouples socket frame arrival from rendering through a 100ms micro-window throttle."*
+- Open **https://metropulse-blr.onrender.com** a few minutes early so the free server is awake.
+- Use a 1920 x 1080 browser window, dark theme, browser zoom 100%.
+- Close other tabs and turn off notifications.
+- Open the site in a **second window** too, for scene 5.
+- In the header persona switcher, start as **Admin**.
+- Do one full practice run. The ambulance trip takes about a minute, so start it on cue.
+- Record the screen and voice together, or record the voice afterwards over the screen recording.
 
 ---
 
-### Segment 3: Fleet Geo-Tracker & Global Edge Mesh (1:30 – 2:15)
-- **Action**: Click the **"Fleet Geo-Tracker"** tab. Click on `Freightliner eCascadia #101`.
-- **Narrator**:
-  > *"Under the Fleet Geo-Tracker tab, we utilize an interactive dark-mode Leaflet map. As GPS transponder coordinates stream in via Socket.IO, autonomous carrier trucks glide along their transit corridors in real time. Clicking on any transponder reveals live ground speed, battery state of charge, and motor temperatures.*  
-  > *Switching to the **Global Edge Mesh** tab, we visualize our distributed cloud regions across Ashburn, Dublin, Mumbai, and São Paulo with live ingress and egress bandwidth telemetry."*
+## Scene 1 (0:00 – 0:30): The problem
+
+**On screen:** the Network tab, whole city visible.
+
+**Say:**
+> "This is MetroPulse BLR, a live traffic monitoring platform for Bengaluru. Twelve major junctions, from Silk Board to Hebbal, send traffic readings every half second: queue length, speed and signal state for every road coming in. That's 24 events a second, all day. The system takes them in, stores them in MongoDB, spots jams, and pushes live updates to the people who need them, using Socket.IO."
 
 ---
 
-### Segment 4: Multi-Client Selective Socket.IO Sync (2:15 – 3:00)
-- **Action**: Click the **"Multi-Client Sync"** tab. Show Client A and Client B receiving data simultaneously.
-- **Narrator**:
-  > *"One of the core requirements of this hackathon is proving that multiple connected clients receive relevant updates efficiently. In our Multi-Client Sync view, we demonstrate this live. On the left, Client A is an SRE engineer subscribed only to `category:server`. On the right, Client B is a Fleet Dispatcher subscribed only to `category:fleet`.*  
-  > *By leveraging Socket.IO room segmentation, neither client receives the other's heavy traffic. This delivers over 75% bandwidth reduction compared to naive state re-broadcasting."*
+## Scene 2 (0:30 – 1:15): Live city map
+
+**On screen:** stay on **Network**. Hover over Silk Board to show its tooltip, then click the **South** zone filter and back to **All Zones**.
+
+**Say:**
+> "Each junction's marker shows its state: flowing, heavy, or gridlock. The roads between them are coloured by measured speed: green is flowing, yellow is moderate, red is congested. None of this is random. Our simulator models vehicles queueing at each signal and moving on to the next junction, so congestion builds and spreads the way it does on real roads.
+>
+> Behind this map, events arrive over HTTP or from the simulator, get validated, and are written to MongoDB in batches instead of one by one. That's how the server keeps up with a constant stream."
+
+**Point at:** the events-per-second figure in the Network KPIs panel at the bottom.
 
 ---
 
-### Segment 5: Historical Retrieval & Gapless Reconciliation (3:00 – 3:45)
-- **Action**: Return to the **"Live Operations"** tab, scroll down to the Device Grid, and click **"Inspect Stream"** on any device to open the Deep-Dive Modal.
-- **Narrator**:
-  > *"A common pitfall in real-time dashboards is data duplication when switching from historical storage to live streaming. When opening our Deep-Dive Waveform modal, MetroPulse BLR fetches the last 50 records from MongoDB, and immediately hooks into the live Socket.IO stream.*  
-  > *Notice the badges: our client-side reconciliation engine uses eventId deduplication to blend `[HISTORICAL_MONGODB]` records with `[LIVE_SOCKET_IO]` packets into one continuous, gapless waveform.*  
-  > *Furthermore, under the **Historical Analytics** tab, operators can aggregate millions of data points into 5-second or 1-minute time buckets and export audit reports directly as CSV or JSON."*
+## Scene 3 (1:15 – 2:00): Two desks, two zones
+
+**On screen:** click the **Desks** tab.
+
+**Say:**
+> "In a real city, an officer in South Bengaluru doesn't need East Bengaluru's data. This screen opens two separate connections, a South desk and an East desk, each logged in as that zone's operator.
+>
+> Each one subscribes only to its own zone's Socket.IO room. Watch the counters: each desk receives only its own zone's frames, not the whole city. That's what keeps the network light, and the server enforces it: an operator who tries to subscribe to another zone is refused."
+
+**On screen:** on the South desk, click **Attempt forbidden 'central-bangalore'**.
+
+> "And if the South operator tries to join Central's room, the server refuses it."
+
+**Point at:** each desk's own frames-per-second and bytes-per-second counters, the different junctions on each, and the refusal message.
 
 ---
 
-### Segment 6: Chaos Engine & AI Telemetry Copilot (3:45 – 4:30)
-- **Action**: Go to the **"Chaos & Stress Lab"** tab. Click **"Inject Server CPU Spike"**.
-- **Narrator**:
-  > *"To test resilience, we built a Chaos & Anomaly Injection Lab. Let's trigger a severe CPU spike on our European Database cluster.*  
-  > *(Alert chime sounds in browser, red toast appears)*  
-  > *Our backend sliding window instantly computes a Z-score outlier (|Z| >= 3.2), creates an alert, and dispatches a critical notification.*  
-  > *Now, let's open our **AI Diagnostics Copilot** on this device. The Copilot correlates the CPU spike with thread pool backlog, identifies the root cause with 96% confidence, and provides an actionable runbook. Let's click **'Execute Runbook'** — the backend sheds background load, normalizes the simulated device, and resolves the incident in real time across all clients."*
+## Scene 4 (2:00 – 3:00): Ambulance green corridor
+
+**On screen:** back to **Network**, **All Zones**. Click **Dispatch Corridor** (Hebbal to Jayadeva).
+
+**Say as it starts:**
+> "Now our main feature. An ambulance leaves Hebbal for Jayadeva, the cardiac hospital. The system finds its route through the junction network: Mekhri Circle, Town Hall, Richmond Circle, Dairy Circle."
+
+**On screen:** the green Priority Corridor banner, the moving **AMB-BLR-01** marker, junctions ahead turning to the blue cross.
+
+**Say:**
+> "The ambulance streams its GPS position twice a second through the same pipeline as the cameras. Just before it reaches each junction, the system turns the signal on its road green, so the queue ahead drains before it arrives. That's the realistic part: we don't rely on drivers seeing an alert and moving aside, we clear the road with the signal. Officers at each junction on the route get a notice; officers elsewhere get nothing.
+>
+> Bengaluru's own adaptive signal system already gives emergency vehicles priority. What we've built is the live monitoring layer, where you can watch it happen."
+
+**On screen:** let it reach Jayadeva. The banner disappears and the junctions return to normal.
+
+> "Once it passes, each junction goes back to normal, and the trip is saved to the database."
 
 ---
 
-### Segment 7: High-Throughput Benchmark & Conclusion (4:30 – 5:00)
-- **Action**: Switch to the **"Engine Telemetry"** tab. Click **"2,000 Burst Test"**.
-- **Narrator**:
-  > *"Finally, let's verify system throughput under load. We fire a 2,000-event burst through our HTTP batch endpoint. Our write-behind buffer flushes via MongoDB bulkWrite, achieving **over 7,000 events per second** with **zero packet drops**, while the client maintains a locked **60 FPS**.*  
-  > *MetroPulse BLR provides a full automated test suite with `npm test`, Docker containerization with `docker-compose`, and full architectural documentation.*  
-  > *Thank you for reviewing MetroPulse BLR!"*
+## Scene 5 (3:00 – 3:40): History plus live, and a reconnect
+
+**On screen:** open the **Junction** tab for **Silk Board**.
+
+**Say:**
+> "Here's one junction in detail. When this view opens, it loads recent history from MongoDB and then continues with live updates on the same chart. Every event carries a sequence number, so the browser knows exactly where history ends and live begins: nothing is shown twice and nothing is missed."
+
+**On screen:** in the second window, turn the network off for about 10 seconds (browser DevTools, Network tab, set to Offline), then back on.
+
+> "If the connection drops, the browser tells the server the last sequence number it saw. The server replays everything missed, from memory or from MongoDB, then resumes the live stream. No gap, no duplicates."
+
+---
+
+## Scene 6 (3:40 – 4:20): Engineering workbench
+
+**On screen:** click the **Engineering** tab. Scroll through the panels.
+
+**Say:**
+> "For the technical side: the stream tap shows the compact wire format, where frames are sent as small arrays instead of full JSON, roughly ninety percent smaller. OpenTelemetry traces show where time goes for each event, from arrival through validation, the database write and the broadcast. Sequence integrity tracks gaps and late events.
+>
+> We benchmarked it: about 1,900 events a second accepted over HTTP, and 500 connected clients receiving live frames with a 95th-percentile delay of a few milliseconds. The numbers and how to reproduce them are in the repo."
+
+---
+
+## Scene 7 (4:20 – 4:30): Close
+
+**On screen:** the Network map.
+
+**Say:**
+> "MetroPulse BLR: MongoDB, Express, React, Node and Socket.IO, handling a constant stream of city traffic data live. It's running now at metropulse-blr.onrender.com, and the code is on GitHub. Thanks for watching."
+
+---
+
+## If something goes wrong while recording
+
+- **The page shows "Application loading":** the server was asleep. Wait a minute, reload, and start again.
+- **A button is greyed out:** you're on a read-only persona. Use **Switch to Admin** in the header.
+- **The ambulance doesn't appear:** check you're on **All Zones**, then click **Dispatch Corridor** again.
+- **A mistake mid-scene:** keep recording, pause a second, and repeat the sentence. Cut it in editing.
