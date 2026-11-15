@@ -184,11 +184,12 @@ test('1. Regular Telemetry collection + unique eventId + TTL indexes (no timeser
 
   const indexes = await Telemetry.collection.indexes();
   const eventIdIdx = indexes.find((idx) => idx.key?.eventId === 1);
-  const ttlIdx = indexes.find((idx) => idx.key?.timestamp === 1 && typeof idx.expireAfterSeconds === 'number');
+  // Expiry is by storage time (createdAt): simulated readings carry the simulated clock
+  const ttlIdx = indexes.find((idx) => idx.key?.createdAt === 1 && typeof idx.expireAfterSeconds === 'number');
   const seqIdx = indexes.find((idx) => idx.key?.junctionId === 1 && idx.key?.sequence === -1);
 
   assert.ok(eventIdIdx && eventIdIdx.unique === true, 'Expected unique index on { eventId: 1 }');
-  assert.ok(ttlIdx && ttlIdx.expireAfterSeconds > 0, 'Expected TTL index on { timestamp: 1 }');
+  assert.ok(ttlIdx && ttlIdx.expireAfterSeconds > 0, 'Expected TTL index on { createdAt: 1 }');
   assert.ok(seqIdx, 'Expected compound index { junctionId: 1, sequence: -1 }');
 });
 
