@@ -208,7 +208,9 @@ function DeskSocketCard({ spec }) {
         setState((prev) => ({
           ...prev,
           subscribedRooms: rooms,
-          lastError: null,
+          // A refused request is acknowledged with rejected: true right after the
+          // FORBIDDEN_ZONE error; keep that error on screen instead of clearing it.
+          lastError: info?.rejected ? prev.lastError : null,
         }));
       });
 

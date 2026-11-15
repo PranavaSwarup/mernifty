@@ -611,3 +611,52 @@ test('5. E2E selective room delivery, /history cursor, copilot rollouts ratio & 
   assert.equal(eastEvents[0].junctionId, 'JNC-BLR-005');
   assert.equal(eastEvents[0].zoneId, 'east-bangalore');
 });
+
+// ---------------------------------------------------------------------------
+// A refused subscription must not strip rooms the operator is entitled to.
+// ---------------------------------------------------------------------------
+test('Forbidden zone request is refused without dropping the operator\'s own zone', async () => {
+  const { socketService } = await import('../src/services/socketService.js');
+  const rooms = new Set(['fake-socket-id']);
+  const emitted = [];
+  const fakeSocket = {
+    id: 'fake-socket-id',
+    rooms,
+    data: { user: { id: 'op-south', role: 'operator', zones: ['south-bangalore'], anonymous: false } },
+    join(room) {
+      rooms.add(room);
+    },
+    leave(room) {
+      rooms.delete(room);
+    },
+    emit(event, payload) {
+      emitted.push({ event, payload });
+    },
+  };
+
+  socketService._applySubscriptions(fakeSocket, {
+    city: true,
+    zones: ['south-bangalore'],
+    junctions: [],
+    alerts: ['south-bangalore'],
+  });
+  assert.ok(rooms.has('zone:south-bangalore'), 'operator joins its own zone');
+
+  emitted.length = 0;
+  socketService._applySubscriptions(fakeSocket, {
+    city: true,
+    zones: ['central-bangalore'],
+    junctions: [],
+    alerts: ['south-bangalore'],
+  });
+
+  assert.ok(rooms.has('zone:south-bangalore'), 'own zone must survive a refused request');
+  assert.ok(!rooms.has('zone:central-bangalore'), 'forbidden zone must not be joined');
+
+  const err = emitted.find((e) => e.event === 'error');
+  assert.ok(err && err.payload.code === 'FORBIDDEN_ZONE', 'a FORBIDDEN_ZONE error is sent');
+  const ack = emitted.find((e) => e.event === 'subscribed');
+  assert.ok(ack && ack.payload.rejected === true, 'the acknowledgement marks the request as rejected');
+  assert.ok(ack.payload.rooms.includes('zone:south-bangalore'), 'the acknowledgement lists the rooms kept');
+  assert.ok(emitted.indexOf(err) < emitted.indexOf(ack), 'the error is sent before the acknowledgement');
+});
