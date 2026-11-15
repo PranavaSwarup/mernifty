@@ -1,186 +1,436 @@
 /**
- * Canonical Bengaluru Arterial Road Waypoints.
- * Snaps corridor polyline links to actual physical highway curves
- * (Outer Ring Road, Hosur Road, Bannerghatta Road, Bellary Road, Central Arterials).
+ * Road geometry for the corridor links drawn on the city map.
+ *
+ * Each link is the actual driving path between two junctions, taken from OpenStreetMap
+ * road data through the OSRM routing service (router.project-osrm.org, data (c)
+ * OpenStreetMap contributors, ODbL). For every link the shorter of the two driving
+ * directions was kept, short U-turn loops at flyovers were cut out, and the line was
+ * simplified to within about 6 m of the road. Generated once and stored here, so the
+ * app makes no routing requests at runtime.
  */
 
 export const BENGALURU_ROAD_WAYPOINTS = {
-  // 1. ORR East: Silk Board <-> Bellandur EcoSpace (traces Agara Lake & Iblur Flyover curve)
+  // ORR East: Silk Board <-> Bellandur EcoSpace (traces Agara Lake & Iblur Flyover curve)
   'JNC-BLR-001::JNC-BLR-005': [
-    [12.9172, 77.6228], // Silk Board
-    [12.9176, 77.6330], // HSR BDA Complex / 14th Main
-    [12.9185, 77.6430], // HSR 19th Main
-    [12.9200, 77.6505], // HSR 24th Main
-    [12.9238, 77.6538], // Agara Lake Jn / Flyover
-    [12.9248, 77.6620], // Agara-Iblur stretch
-    [12.9252, 77.6685], // Iblur Junction (Sarjapur-ORR)
-    [12.9256, 77.6730], // Bellandur Central Mall
-    [12.9260, 77.6762], // Bellandur EcoSpace
+    [12.91722, 77.62284],
+    [12.91263, 77.62554],
+    [12.91058, 77.62681],
+    [12.91064, 77.6269],
+    [12.91033, 77.62709],
+    [12.91052, 77.62796],
+    [12.91094, 77.62879],
+    [12.91191, 77.63244],
+    [12.91659, 77.63229],
+    [12.91604, 77.63785],
+    [12.9161, 77.63863],
+    [12.91653, 77.63975],
+    [12.91753, 77.64108],
+    [12.91825, 77.64179],
+    [12.91988, 77.64303],
+    [12.92208, 77.64491],
+    [12.92365, 77.64666],
+    [12.92429, 77.64788],
+    [12.92454, 77.65018],
+    [12.9243, 77.65198],
+    [12.92353, 77.65565],
+    [12.92195, 77.66024],
+    [12.92081, 77.66485],
+    [12.92093, 77.66556],
+    [12.92205, 77.66805],
+    [12.92472, 77.67383],
+    [12.92506, 77.67429],
+    [12.926, 77.6762],
   ],
 
-  // 2. ORR East: Bellandur EcoSpace <-> Marathahalli Bridge
+  // ORR East: Bellandur EcoSpace <-> Marathahalli Bridge
   'JNC-BLR-005::JNC-BLR-007': [
-    [12.9260, 77.6762], // Bellandur EcoSpace
-    [12.9285, 77.6815], // RMZ Ecoworld entrance
-    [12.9340, 77.6880], // Devarabisanahalli Flyover
-    [12.9430, 77.6970], // Kadubeesanahalli / JP Morgan
-    [12.9485, 77.7000], // Innovative Multiplex
-    [12.9562, 77.7011], // Marathahalli Bridge
+    [12.926, 77.6762],
+    [12.92776, 77.67983],
+    [12.92819, 77.68076],
+    [12.92811, 77.68079],
+    [12.92977, 77.68433],
+    [12.9303, 77.68524],
+    [12.93446, 77.68996],
+    [12.93914, 77.69488],
+    [12.94139, 77.69634],
+    [12.94344, 77.69748],
+    [12.94464, 77.6979],
+    [12.94469, 77.69771],
+    [12.94481, 77.69772],
+    [12.94569, 77.69801],
+    [12.94583, 77.69821],
+    [12.94829, 77.699],
+    [12.95155, 77.69956],
+    [12.95617, 77.70077],
   ],
 
-  // 3. ORR East: Marathahalli Bridge <-> Tin Factory / KR Puram
+  // ORR East: Marathahalli Bridge <-> Tin Factory / KR Puram
   'JNC-BLR-006::JNC-BLR-007': [
-    [12.9562, 77.7011], // Marathahalli Bridge
-    [12.9640, 77.6995], // Kalamandir
-    [12.9715, 77.6975], // Doddanekundi Junction
-    [12.9790, 77.6950], // Rainbow Children's Hospital
-    [12.9860, 77.6915], // Bagmane Tech Park
-    [12.9915, 77.6830], // Mahadevapura Flyover
-    [12.9950, 77.6750], // Lowry Memorial
-    [12.9982, 77.6695], // Tin Factory / KR Puram
+    [12.99825, 77.67003],
+    [12.99747, 77.67011],
+    [13.00042, 77.67651],
+    [13.00035, 77.6782],
+    [13.00045, 77.68076],
+    [13.00034, 77.68114],
+    [12.99998, 77.68153],
+    [12.99641, 77.68371],
+    [12.98991, 77.68862],
+    [12.9751, 77.69765],
+    [12.97479, 77.69769],
+    [12.97253, 77.69901],
+    [12.96795, 77.7018],
+    [12.96793, 77.70199],
+    [12.96767, 77.70212],
+    [12.96683, 77.70238],
+    [12.96635, 77.70239],
+    [12.96316, 77.70205],
+    [12.95975, 77.70147],
+    [12.95941, 77.70166],
+    [12.95874, 77.70155],
+    [12.95726, 77.70156],
+    [12.95619, 77.70114],
   ],
 
-  // 4. ORR North: Tin Factory <-> Hebbal Flyover (Nagavara & Manyata)
+  // ORR North: Tin Factory <-> Hebbal Flyover (Nagavara & Manyata)
   'JNC-BLR-006::JNC-BLR-008': [
-    [12.9982, 77.6695], // Tin Factory / KR Puram
-    [13.0040, 77.6640], // B Channasandra
-    [13.0110, 77.6580], // Ramamurthy Nagar Underpass
-    [13.0180, 77.6510], // Kasturi Nagar
-    [13.0235, 77.6430], // Babusapalya
-    [13.0300, 77.6340], // Kalyan Nagar / HRBR Layout
-    [13.0350, 77.6250], // Hennur Cross / Flyover
-    [13.0390, 77.6160], // HBR Layout 4th Block
-    [13.0420, 77.6120], // Nagavara Junction / Thanisandra
-    [13.0410, 77.6060], // Manyata Tech Park Main Gate
-    [13.0385, 77.6015], // Anand Nagar / Kempapura
-    [13.0358, 77.5970], // Hebbal Flyover Rotary
+    [12.99825, 77.67003],
+    [12.99747, 77.67011],
+    [12.99701, 77.66939],
+    [12.99623, 77.66756],
+    [12.9957, 77.66589],
+    [12.99577, 77.66543],
+    [12.99606, 77.66502],
+    [12.99823, 77.66374],
+    [13.00476, 77.66322],
+    [13.00821, 77.66265],
+    [13.01572, 77.66214],
+    [13.01636, 77.6619],
+    [13.01657, 77.66162],
+    [13.02032, 77.6527],
+    [13.02586, 77.64004],
+    [13.02645, 77.63712],
+    [13.02668, 77.63695],
+    [13.02723, 77.63499],
+    [13.02805, 77.6328],
+    [13.02761, 77.63247],
+    [13.02761, 77.63223],
+    [13.02676, 77.63125],
+    [13.02608, 77.63076],
+    [13.02546, 77.63049],
+    [13.02698, 77.62032],
+    [13.02844, 77.62065],
+    [13.02836, 77.6196],
+    [13.02784, 77.61895],
+    [13.02769, 77.61757],
+    [13.02792, 77.61689],
+    [13.02847, 77.61632],
+    [13.02807, 77.61611],
+    [13.02777, 77.61607],
+    [13.02649, 77.61443],
+    [13.02792, 77.61194],
+    [13.02935, 77.61],
+    [13.02985, 77.60843],
+    [13.03005, 77.60849],
+    [13.03015, 77.60805],
+    [13.02926, 77.60753],
+    [13.02966, 77.60618],
+    [13.0299, 77.60472],
+    [13.03176, 77.60481],
+    [13.03486, 77.60465],
+    [13.03513, 77.6021],
+    [13.03503, 77.60066],
+    [13.0358, 77.59701],
   ],
 
-  // 5. ORR West: Hebbal Flyover <-> Goraguntepalya / Yeshwantpur
+  // ORR West: Hebbal Flyover <-> Goraguntepalya / Yeshwantpur
   'JNC-BLR-008::JNC-BLR-009': [
-    [13.0358, 77.5970], // Hebbal Flyover
-    [13.0375, 77.5880], // Hebbal Lake North Bund
-    [13.0400, 77.5800], // Bhadrappa Layout
-    [13.0410, 77.5710], // Kuvempu Circle
-    [13.0380, 77.5580], // BEL Circle
-    [13.0335, 77.5480], // Jalahalli Cross link
-    [13.0285, 77.5408], // Goraguntepalya
+    [13.0358, 77.59701],
+    [13.03672, 77.59747],
+    [13.03699, 77.59741],
+    [13.03721, 77.59692],
+    [13.03921, 77.59623],
+    [13.03983, 77.59428],
+    [13.04018, 77.592],
+    [13.04111, 77.59093],
+    [13.04192, 77.58411],
+    [13.04248, 77.5808],
+    [13.04267, 77.57722],
+    [13.04243, 77.57469],
+    [13.04255, 77.57326],
+    [13.04332, 77.57357],
+    [13.04404, 77.5741],
+    [13.04428, 77.57416],
+    [13.0454, 77.57364],
+    [13.04617, 77.57269],
+    [13.04671, 77.57251],
+    [13.0467, 77.57189],
+    [13.04695, 77.57182],
+    [13.04689, 77.57121],
+    [13.04709, 77.57097],
+    [13.04663, 77.56616],
+    [13.04622, 77.56507],
+    [13.04396, 77.56189],
+    [13.04365, 77.56124],
+    [13.04359, 77.55825],
+    [13.04403, 77.55527],
+    [13.04402, 77.55464],
+    [13.04229, 77.549],
+    [13.04095, 77.54517],
+    [13.04062, 77.54454],
+    [13.03852, 77.5421],
+    [13.0382, 77.54193],
+    [13.02896, 77.54008],
+    [13.02854, 77.54082],
   ],
 
-  // 6. ORR South: Jayadeva Underpass <-> Silk Board Junction
+  // ORR South: Jayadeva Underpass <-> Silk Board Junction
   'JNC-BLR-001::JNC-BLR-004': [
-    [12.9180, 77.5970], // Jayadeva Underpass
-    [12.9175, 77.6050], // BTM 7th Main
-    [12.9172, 77.6110], // BTM 16th Main / Udupi Garden
-    [12.9170, 77.6170], // BTM 29th Main Water Tank
-    [12.9172, 77.6228], // Silk Board Junction
+    [12.91722, 77.62284],
+    [12.9174, 77.62272],
+    [12.91717, 77.62223],
+    [12.91647, 77.61988],
+    [12.91632, 77.61669],
+    [12.9166, 77.61242],
+    [12.91686, 77.5969],
+    [12.918, 77.59693],
   ],
 
-  // 7. Bannerghatta Road: Jayadeva Underpass <-> Dairy Circle
+  // Bannerghatta Road: Jayadeva Underpass <-> Dairy Circle
   'JNC-BLR-003::JNC-BLR-004': [
-    [12.9180, 77.5970], // Jayadeva Underpass
-    [12.9230, 77.5975], // Shoppers Stop / BTM 2nd Stage
-    [12.9290, 77.5980], // Sagar Apollo Hospital
-    [12.9340, 77.5982], // Christ University
-    [12.9372, 77.5985], // Dairy Circle
+    [12.93775, 77.59902],
+    [12.93734, 77.59986],
+    [12.93706, 77.60122],
+    [12.93675, 77.60147],
+    [12.935, 77.60125],
+    [12.93457, 77.60107],
+    [12.9323, 77.6006],
+    [12.91682, 77.59987],
+    [12.91686, 77.5969],
+    [12.918, 77.59693],
   ],
 
-  // 8. Hosur Road: Silk Board <-> Dairy Circle (via Madiwala)
+  // Hosur Road: Silk Board <-> Dairy Circle (via Madiwala)
   'JNC-BLR-001::JNC-BLR-003': [
-    [12.9172, 77.6228], // Silk Board
-    [12.9215, 77.6185], // Madiwala Police Station
-    [12.9265, 77.6130], // St. John's Medical College
-    [12.9315, 77.6070], // Total Mall / Madivala
-    [12.9345, 77.6030], // Forum Mall
-    [12.9372, 77.5985], // Dairy Circle
+    [12.91722, 77.62284],
+    [12.924, 77.6185],
+    [12.93165, 77.61387],
+    [12.93485, 77.60967],
+    [12.93607, 77.60767],
+    [12.9365, 77.6064],
+    [12.93739, 77.60023],
+    [12.9378, 77.59928],
   ],
 
-  // 9. Koramangala 80ft Road: Silk Board <-> Sony World Signal
+  // Koramangala 80ft Road: Silk Board <-> Sony World Signal
   'JNC-BLR-001::JNC-BLR-002': [
-    [12.9172, 77.6228], // Silk Board
-    [12.9220, 77.6235], // Madiwala Checkpost
-    [12.9265, 77.6250], // Koramangala 4th Block / 80ft Rd
-    [12.9310, 77.6260], // Maharaja Signal
-    [12.9345, 77.6265], // Sony World Signal
+    [12.91722, 77.62284],
+    [12.92045, 77.62072],
+    [12.9246, 77.61825],
+    [12.92528, 77.61985],
+    [12.92575, 77.62034],
+    [12.93342, 77.62339],
+    [12.93493, 77.62417],
+    [12.93517, 77.62446],
+    [12.93423, 77.62602],
+    [12.93459, 77.62642],
   ],
 
-  // 10. Koramangala 100ft Road: Dairy Circle <-> Sony World Signal
+  // Koramangala 100ft Road: Dairy Circle <-> Sony World Signal
   'JNC-BLR-002::JNC-BLR-003': [
-    [12.9372, 77.5985], // Dairy Circle
-    [12.9365, 77.6070], // Adugodi Police Quarters
-    [12.9360, 77.6120], // Koramangala 8th Block
-    [12.9355, 77.6190], // Koramangala 5th Block / Jyoti Nivas
-    [12.9345, 77.6265], // Sony World Signal
+    [12.93459, 77.62642],
+    [12.93423, 77.62602],
+    [12.93517, 77.62446],
+    [12.93493, 77.62417],
+    [12.93342, 77.62339],
+    [12.92746, 77.62099],
+    [12.92952, 77.61556],
+    [12.92958, 77.61406],
+    [12.93087, 77.61172],
+    [12.9311, 77.60986],
+    [12.93245, 77.61009],
+    [12.93323, 77.60985],
+    [12.93435, 77.60968],
+    [12.93469, 77.60974],
+    [12.93605, 77.60751],
+    [12.93644, 77.60632],
+    [12.93721, 77.60037],
+    [12.93741, 77.59965],
+    [12.93775, 77.59902],
   ],
 
-  // 11. Hosur Road Central: Dairy Circle <-> Richmond Circle
+  // Hosur Road Central: Dairy Circle <-> Richmond Circle
   'JNC-BLR-003::JNC-BLR-011': [
-    [12.9372, 77.5985], // Dairy Circle
-    [12.9430, 77.5988], // Wilson Garden 12th Cross
-    [12.9490, 77.5992], // Wilson Garden Police Station
-    [12.9550, 77.5996], // Lalbagh Main Gate / Double Rd
-    [12.9615, 77.6002], // Subbaiah Circle
-    [12.9667, 77.6006], // Richmond Circle
+    [12.93775, 77.59902],
+    [12.93851, 77.59843],
+    [12.93993, 77.59762],
+    [12.94302, 77.59726],
+    [12.94494, 77.59687],
+    [12.94532, 77.59649],
+    [12.94591, 77.59553],
+    [12.94708, 77.59435],
+    [12.95002, 77.59284],
+    [12.95099, 77.59181],
+    [12.95146, 77.59067],
+    [12.95138, 77.5905],
+    [12.95156, 77.59035],
+    [12.95171, 77.59053],
+    [12.96234, 77.59451],
+    [12.96249, 77.59486],
+    [12.96211, 77.59722],
+    [12.96176, 77.59849],
+    [12.96193, 77.5988],
+    [12.96285, 77.59967],
+    [12.96363, 77.60112],
+    [12.96315, 77.60129],
+    [12.96282, 77.60319],
+    [12.964, 77.60363],
+    [12.96575, 77.60374],
+    [12.96545, 77.60149],
+    [12.96621, 77.60158],
+    [12.96655, 77.60137],
+    [12.96701, 77.60105],
+    [12.96662, 77.60069],
   ],
 
-  // 12. Central Arterial: Richmond Circle <-> Town Hall
+  // Central Arterial: Richmond Circle <-> Town Hall
   'JNC-BLR-011::JNC-BLR-012': [
-    [12.9667, 77.6006], // Richmond Circle
-    [12.9675, 77.5940], // Hudson Circle / Corporation
-    [12.9660, 77.5895], // NR Road / Silver Jubilee Park
-    [12.9634, 77.5855], // Town Hall
+    [12.96662, 77.60069],
+    [12.96701, 77.60105],
+    [12.968, 77.60034],
+    [12.96862, 77.60137],
+    [12.96942, 77.6024],
+    [12.96667, 77.60361],
+    [12.96576, 77.60388],
+    [12.96495, 77.59702],
+    [12.96483, 77.59697],
+    [12.96508, 77.59595],
+    [12.96678, 77.59484],
+    [12.96753, 77.59416],
+    [12.968, 77.59275],
+    [12.96812, 77.59189],
+    [12.96806, 77.59131],
+    [12.96779, 77.59036],
+    [12.96755, 77.58887],
+    [12.96733, 77.58842],
+    [12.96388, 77.58529],
+    [12.96362, 77.58552],
   ],
 
-  // 13. Palace / Bellary Road: Town Hall <-> Mekhri Circle
+  // Palace / Bellary Road: Town Hall <-> Mekhri Circle
   'JNC-BLR-010::JNC-BLR-012': [
-    [12.9634, 77.5855], // Town Hall
-    [12.9710, 77.5840], // Mysore Bank Circle
-    [12.9775, 77.5855], // Maharani College / Palace Rd
-    [12.9850, 77.5868], // Chalukya Circle (Basaveshwara Circle)
-    [12.9930, 77.5862], // Windsor Manor Bridge
-    [13.0005, 77.5848], // Cauvery Theatre Jn
-    [13.0076, 77.5835], // Mekhri Circle
+    [13.00762, 77.5839],
+    [13.00449, 77.58409],
+    [13.0004, 77.58408],
+    [12.99865, 77.5842],
+    [12.9945, 77.58504],
+    [12.994, 77.58511],
+    [12.99353, 77.58499],
+    [12.99286, 77.58529],
+    [12.98935, 77.58585],
+    [12.98872, 77.58629],
+    [12.98682, 77.58858],
+    [12.9865, 77.58879],
+    [12.98488, 77.58823],
+    [12.9818, 77.58672],
+    [12.97888, 77.58486],
+    [12.97713, 77.58392],
+    [12.97328, 77.58115],
+    [12.97294, 77.58131],
+    [12.97209, 77.58262],
+    [12.96843, 77.58666],
+    [12.96748, 77.58737],
+    [12.96667, 77.58734],
+    [12.96579, 77.58667],
+    [12.96545, 77.58665],
+    [12.96397, 77.58526],
+    [12.96362, 77.58552],
   ],
 
-  // 14. Bellary Road Airport Expressway: Mekhri Circle <-> Hebbal Flyover (NH 44 / AH 43)
+  // Bellary Road Airport Expressway: Mekhri Circle <-> Hebbal Flyover (NH 44 / AH 43)
   'JNC-BLR-008::JNC-BLR-010': [
-    [13.0076, 77.5835], // Mekhri Circle
-    [13.0130, 77.5836], // Palace Grounds North Gate
-    [13.0195, 77.5840], // Ganganagar / CBI Junction on Bellary Rd
-    [13.0250, 77.5850], // Bangalore Baptist Hospital
-    [13.0300, 77.5865], // Veterinary College / Hebbal Police Station
-    [13.0335, 77.5900], // Esteem Mall / Hebbal Lake South
-    [13.0358, 77.5970], // Hebbal Flyover Underpass
+    [13.0358, 77.59701],
+    [13.03672, 77.59747],
+    [13.03699, 77.59741],
+    [13.03721, 77.59692],
+    [13.03921, 77.59623],
+    [13.03983, 77.59428],
+    [13.04018, 77.592],
+    [13.04111, 77.59093],
+    [13.04125, 77.58968],
+    [13.0386, 77.58916],
+    [13.03637, 77.58903],
+    [13.03483, 77.58841],
+    [13.03336, 77.58807],
+    [13.03079, 77.58688],
+    [13.02741, 77.58551],
+    [13.02301, 77.58438],
+    [13.02292, 77.58449],
+    [13.02222, 77.58436],
+    [13.02058, 77.58388],
+    [13.01612, 77.58393],
+    [13.01074, 77.58379],
+    [13.00762, 77.5839],
   ],
 
-  // 15. Bellary Connector: Richmond Circle <-> Mekhri Circle (via Queen's Rd & Jayamahal Rd)
+  // Bellary Connector: Richmond Circle <-> Mekhri Circle (via Queen's Rd & Jayamahal Rd)
   'JNC-BLR-010::JNC-BLR-011': [
-    [12.9667, 77.6006], // Richmond Circle
-    [12.9740, 77.5975], // Kasturba Road / MG Road
-    [12.9815, 77.5930], // GPO / Raj Bhavan
-    [12.9900, 77.5938], // Cantonment / High Grounds
-    [12.9995, 77.5895], // Jayamahal Road
-    [13.0076, 77.5835], // Mekhri Circle
+    [13.00762, 77.5839],
+    [13.00449, 77.58409],
+    [13.0004, 77.58408],
+    [12.99865, 77.5842],
+    [12.9945, 77.58504],
+    [12.994, 77.58511],
+    [12.99353, 77.58499],
+    [12.99286, 77.58529],
+    [12.98911, 77.58594],
+    [12.98658, 77.58878],
+    [12.98636, 77.58879],
+    [12.98477, 77.58823],
+    [12.98304, 77.59221],
+    [12.98255, 77.59261],
+    [12.98112, 77.59696],
+    [12.98038, 77.59753],
+    [12.97657, 77.59923],
+    [12.97652, 77.60186],
+    [12.97638, 77.60254],
+    [12.97558, 77.60256],
+    [12.97417, 77.60305],
+    [12.97285, 77.60326],
+    [12.9724, 77.60409],
+    [12.97189, 77.60441],
+    [12.9709, 77.60481],
+    [12.97037, 77.60371],
+    [12.96862, 77.60137],
+    [12.968, 77.60034],
+    [12.96701, 77.60105],
+    [12.96662, 77.60069],
   ],
 };
 
+const sameSpot = (p, q) => Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6;
+
 /**
- * Returns the exact road-following GPS coordinates between two junctions.
- * Distance matching guarantees polyline always flows from posA to posB.
+ * Returns the road-following coordinates between two junctions, oriented from posA to posB.
+ * The junction marker positions are added at both ends so the line always meets the markers,
+ * even where a marker sits slightly off the carriageway.
  */
 export function getCorridorRoadWaypoints(jIdA, jIdB, posA, posB) {
   const key = [jIdA, jIdB].sort().join('::');
   const waypoints = BENGALURU_ROAD_WAYPOINTS[key];
   if (!waypoints || waypoints.length < 2) {
-    return [posA, posB];
+    return posA && posB ? [posA, posB] : [];
   }
+
+  let path = waypoints;
   if (posA) {
     const dStart = Math.hypot(waypoints[0][0] - posA[0], waypoints[0][1] - posA[1]);
-    const dEnd = Math.hypot(waypoints[waypoints.length - 1][0] - posA[0], waypoints[waypoints.length - 1][1] - posA[1]);
-    if (dEnd < dStart) {
-      return [...waypoints].reverse();
-    }
-    return waypoints;
+    const last = waypoints[waypoints.length - 1];
+    const dEnd = Math.hypot(last[0] - posA[0], last[1] - posA[1]);
+    if (dEnd < dStart) path = [...waypoints].reverse();
   }
-  return waypoints;
+
+  const out = [...path];
+  if (posA && !sameSpot(out[0], posA)) out.unshift(posA);
+  if (posB && !sameSpot(out[out.length - 1], posB)) out.push(posB);
+  return out;
 }
