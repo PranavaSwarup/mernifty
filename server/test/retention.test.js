@@ -10,8 +10,8 @@ let Model;
 test.before(async () => {
   mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri());
-  // A throwaway model with no indexes of its own, so the test controls the TTL index fully
-  const schema = new mongoose.Schema({ timestamp: Date }, { autoIndex: false });
+  // A throwaway model with no indexes of its own, so the test controls the TTL indexes fully
+  const schema = new mongoose.Schema({ timestamp: Date }, { autoIndex: false, timestamps: true });
   Model = mongoose.model('RetentionProbe', schema, 'retention_probe');
 });
 
@@ -20,29 +20,45 @@ test.after(async () => {
   await mongod.stop();
 });
 
-async function ttlSeconds() {
-  const idx = (await Model.collection.indexes()).find((i) => i.expireAfterSeconds !== undefined);
-  return idx ? idx.expireAfterSeconds : null;
+async function ttlIndexes() {
+  return (await Model.collection.indexes())
+    .filter((i) => i.expireAfterSeconds !== undefined)
+    .map((i) => [Object.keys(i.key)[0], i.expireAfterSeconds]);
 }
 
-test('creates the TTL index when the collection is new', async () => {
+test('creates the TTL index on createdAt when the collection is new', async () => {
   const res = await ensureTelemetryRetention(Model, 3600);
   assert.equal(res.action, 'created');
-  assert.equal(await ttlSeconds(), 3600);
+  assert.deepEqual(await ttlIndexes(), [['createdAt', 3600]]);
 });
 
-test('updates an existing TTL index in place when the setting changes', async () => {
+test('replaces an old TTL on timestamp with one on createdAt', async () => {
   await Model.collection.dropIndexes();
   await Model.collection.createIndex({ timestamp: 1 }, { expireAfterSeconds: 7200 });
   const res = await ensureTelemetryRetention(Model, 3600);
+  assert.deepEqual(res.removed, ['timestamp_1']);
+  assert.deepEqual(await ttlIndexes(), [['createdAt', 3600]]);
+});
+
+test('updates an existing createdAt TTL in place when the setting changes', async () => {
+  const res = await ensureTelemetryRetention(Model, 2700);
   assert.equal(res.action, 'updated');
-  assert.equal(res.previousSec, 7200);
-  assert.equal(await ttlSeconds(), 3600);
+  assert.equal(res.previousSec, 3600);
+  assert.deepEqual(await ttlIndexes(), [['createdAt', 2700]]);
 });
 
 test('leaves a matching TTL index alone', async () => {
-  const res = await ensureTelemetryRetention(Model, 3600);
+  const res = await ensureTelemetryRetention(Model, 2700);
   assert.equal(res.action, 'unchanged');
+  assert.deepEqual(res.removed, []);
+});
+
+test('a reading stamped hours in the future still expires by its storage time', async () => {
+  // Simulated clock far ahead of real time: storage time decides expiry, not the event time
+  await Model.create({ timestamp: new Date(Date.now() + 12 * 3600 * 1000) });
+  const doc = await Model.findOne().lean();
+  assert.ok(doc.createdAt instanceof Date);
+  assert.ok(Math.abs(doc.createdAt.getTime() - Date.now()) < 60_000, 'createdAt is the real storage time');
 });
 
 test('rejects an invalid retention value', async () => {

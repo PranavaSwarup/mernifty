@@ -247,7 +247,7 @@ Set `DEMO_PERSONAS=true` to show the persona switcher on the hosted app (the pro
 - The ambulance trip is simulated and time-compressed so it completes in about a minute.
 - Anomaly detection is statistical (robust baselines and thresholds). The "copilot" compares candidate actions by running the traffic model forward; it is not a machine-learning model.
 - "Stalled vehicle" and "ambulance detected" flags come from scenarios injected into the simulator, standing in for what a camera-analytics system would report.
-- Telemetry is kept for a limited time (`TELEMETRY_TTL_SEC`, 1 hour by default). Each stored reading is about 2.6 KB and the simulator stores 24 per second, so one hour levels off near 230 MB, which fits the 512 MB MongoDB Atlas free tier. The server applies a changed value to the existing database at startup.
+- Telemetry is kept for a limited time after it is stored (`TELEMETRY_TTL_SEC`, 1 hour by default; expiry uses the storage time, because simulated readings carry the simulated clock). Each stored reading is about 2.6 KB and the simulator stores 24 per second, so one hour levels off near 230 MB, which fits the 512 MB MongoDB Atlas free tier. The server applies a changed value to the existing database at startup.
 
 ---
 

@@ -116,7 +116,8 @@ async function startServer() {
           : retention.action === 'created'
             ? ' (index created)'
             : '';
-      console.log(`[DB] Telemetry retention: ${retention.ttlSec}s${note}`);
+      const removedNote = retention.removed.length > 0 ? `; removed old expiry index ${retention.removed.join(', ')}` : '';
+      console.log(`[DB] Telemetry retention: ${retention.ttlSec}s after storage${note}${removedNote}`);
     } catch (err) {
       console.error(`[DB] Could not apply telemetry retention: ${err.message}`);
     }
