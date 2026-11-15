@@ -738,6 +738,17 @@ class SocketService {
         code: 'FORBIDDEN_ZONE',
         message: `Operator cannot subscribe to out-of-scope targets: ${authSubs.denied.join(', ')}`,
       });
+      // Refuse the whole request and keep the socket's current rooms. Applying the allowed
+      // remainder would replace (and so drop) rooms the operator is entitled to: a South
+      // operator asking for Central used to lose its own South zone feed.
+      const currentRooms = Array.from(socket.rooms || []).filter((room) => room !== socket.id);
+      socket.emit('subscribed', {
+        rooms: currentRooms,
+        subscriptions: socket.data.targetSubscriptions,
+        rejected: true,
+        denied: authSubs.denied,
+      });
+      return currentRooms;
     }
 
     socket.data.targetSubscriptions = authSubs;
